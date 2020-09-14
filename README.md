@@ -1,4 +1,4 @@
-# BOM Decomposer
+# Quarkus Platform BOM Tools
 
 The project includes various utilities that help analyze managed dependencies of a project
 and suggest version changes to avoid potential conflicts among the dependencies.
