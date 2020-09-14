@@ -31,7 +31,7 @@
     <maven-plugin-annotations.version>3.6.0</maven-plugin-annotations.version>
     <maven-source-plugin.version>3.2.0</maven-source-plugin.version>
     <nexus-staging-maven-plugin.version>1.6.8</nexus-staging-maven-plugin.version>
-    <quarkus.version>999-SNAPSHOT</quarkus.version>
+    <quarkus.version>1.8.0.Final</quarkus.version>
   </properties>
   <modules>
     <module>bom-decomposer</module>
