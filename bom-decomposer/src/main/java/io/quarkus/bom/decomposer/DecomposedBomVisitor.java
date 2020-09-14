@@ -20,10 +20,11 @@ public interface DecomposedBomVisitor {
 	/**
 	 * Called for every new detected release origin.
 	 * This callback method will be followed up by one or more
-	 * {@link #enterReleaseVersion(ReleaseVersion, Collection)} invocations for the detected
-	 * release versions from this origin.
+	 * {@link #visitProjectRelease(ProjectRelease)} invocations for each detected
+	 * project release from this origin.
 	 *
 	 * @param releaseOrigin  new detected release origin
+	 * @return  whether to the detected project releases from this origin should be visited or not
 	 */
 	boolean enterReleaseOrigin(ReleaseOrigin releaseOrigin, int versions);
 
@@ -32,15 +33,14 @@ public interface DecomposedBomVisitor {
 	/**
 	 * Called for every new release version.
 	 *
-	 * @param releaseVersion  release version
-	 * @param artifacts  artifacts included in the release version
-	 * @throws BomDecomposerException
+	 * @param release  project release
+	 * @throws BomDecomposerException  in case of failure
 	 */
 	void visitProjectRelease(ProjectRelease release) throws BomDecomposerException;
 
 	/**
 	 * Called after the last processed release version in the BOM.
-	 * @throws BomDecomposerException
+	 * @throws BomDecomposerException  in case of a failure
 	 */
 	void leaveBom() throws BomDecomposerException;
 }
