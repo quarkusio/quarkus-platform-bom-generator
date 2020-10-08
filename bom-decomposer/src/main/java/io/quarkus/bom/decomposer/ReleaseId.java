@@ -2,7 +2,7 @@ package io.quarkus.bom.decomposer;
 
 public interface ReleaseId {
 
-	ReleaseOrigin origin();
+    ReleaseOrigin origin();
 
-	ReleaseVersion version();
+    ReleaseVersion version();
 }
