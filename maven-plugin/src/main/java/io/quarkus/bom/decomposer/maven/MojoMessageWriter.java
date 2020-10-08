@@ -1,45 +1,43 @@
 package io.quarkus.bom.decomposer.maven;
 
-import java.util.Objects;
-
-import org.apache.maven.plugin.logging.Log;
-
 import io.quarkus.bom.decomposer.MessageWriter;
+import java.util.Objects;
+import org.apache.maven.plugin.logging.Log;
 
 public class MojoMessageWriter implements MessageWriter {
 
-	private final Log log;
-	
-	public MojoMessageWriter(Log log) {
-		this.log = Objects.requireNonNull(log);
-	}
-	
-	@Override
-	public void info(Object msg) {
-		log.info(toStr(msg));
-	}
+    private final Log log;
 
-	@Override
-	public void error(Object msg) {
-		log.error(toStr(msg));
-	}
+    public MojoMessageWriter(Log log) {
+        this.log = Objects.requireNonNull(log);
+    }
 
-	@Override
-	public boolean debugEnabled() {
-		return log.isDebugEnabled();
-	}
+    @Override
+    public void info(Object msg) {
+        log.info(toStr(msg));
+    }
 
-	@Override
-	public void debug(Object msg) {
-		log.debug(toStr(msg));
-	}
+    @Override
+    public void error(Object msg) {
+        log.error(toStr(msg));
+    }
 
-	@Override
-	public void warn(Object msg) {
-		log.warn(toStr(msg));
-	}
+    @Override
+    public boolean debugEnabled() {
+        return log.isDebugEnabled();
+    }
 
-	private CharSequence toStr(Object msg) {
-		return msg == null ? "null" : msg.toString();
-	}
+    @Override
+    public void debug(Object msg) {
+        log.debug(toStr(msg));
+    }
+
+    @Override
+    public void warn(Object msg) {
+        log.warn(toStr(msg));
+    }
+
+    private CharSequence toStr(Object msg) {
+        return msg == null ? "null" : msg.toString();
+    }
 }
