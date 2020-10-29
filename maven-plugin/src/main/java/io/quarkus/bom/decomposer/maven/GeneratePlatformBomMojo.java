@@ -36,6 +36,7 @@ import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
+import org.eclipse.aether.impl.RemoteRepositoryManager;
 import org.eclipse.aether.repository.RemoteRepository;
 
 @Mojo(name = "generate-platform-bom", defaultPhase = LifecyclePhase.INITIALIZE, requiresDependencyCollection = ResolutionScope.NONE)
@@ -43,6 +44,9 @@ public class GeneratePlatformBomMojo extends AbstractMojo {
 
     @Component
     private RepositorySystem repoSystem;
+
+    @Component
+    private RemoteRepositoryManager remoteRepoManager;
 
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
     private List<RemoteRepository> repos;
@@ -180,6 +184,7 @@ public class GeneratePlatformBomMojo extends AbstractMojo {
                     .setRepositorySystem(repoSystem)
                     .setRepositorySystemSession(repoSession)
                     .setRemoteRepositories(repos)
+                    .setRemoteRepositoryManager(remoteRepoManager)
                     .build() : artifactResolver;
         } catch (BootstrapMavenException e) {
             throw new MojoExecutionException("Failed to initialize Maven artifact resolver", e);
