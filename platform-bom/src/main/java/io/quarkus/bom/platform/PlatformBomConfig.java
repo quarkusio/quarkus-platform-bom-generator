@@ -95,21 +95,16 @@ public class PlatformBomConfig {
                     parent = parentModel.getParent();
                     pom = parentPom;
                 }
+                allProps.setProperty("project.version", ModelUtils.getVersion(model));
+
                 final PlatformBomConfig config = new PlatformBomConfig();
                 config.bomResolver = pomResolver;
                 config.bomArtifact = Objects.requireNonNull(new DefaultArtifact(ModelUtils.getGroupId(model),
                         model.getArtifactId(), null, "pom", ModelUtils.getVersion(model)));
                 for (Dependency dep : dm.getDependencies()) {
-                    String version = dep.getVersion();
-                    if (version.startsWith("${") && version.endsWith("}")) {
-                        String prop = version.substring(2, version.length() - 1);
-                        String value = allProps.getProperty(prop);
-                        if (value != null) {
-                            version = value;
-                        }
-                    }
-                    final Artifact artifact = new DefaultArtifact(dep.getGroupId(), dep.getArtifactId(), dep.getClassifier(),
-                            dep.getType(), version);
+                    final Artifact artifact = new DefaultArtifact(dep.getGroupId(), dep.getArtifactId(),
+                            resolveExpr(allProps, dep.getClassifier()),
+                            dep.getType(), resolveExpr(allProps, dep.getVersion()));
                     if (config.quarkusBom == null && artifact.getArtifactId().equals("quarkus-bom")
                             && artifact.getGroupId().equals("io.quarkus")) {
                         config.quarkusBom = artifact;
@@ -128,6 +123,17 @@ public class PlatformBomConfig {
             } catch (Exception e) {
                 throw new RuntimeException("Failed to initialize platform BOM config", e);
             }
+        }
+
+        private static String resolveExpr(Properties allProps, String expr) {
+            if (expr != null && expr.startsWith("${") && expr.endsWith("}")) {
+                final String prop = expr.substring(2, expr.length() - 1);
+                final String value = allProps.getProperty(prop);
+                if (value != null) {
+                    return value;
+                }
+            }
+            return expr;
         }
     }
 
