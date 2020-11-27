@@ -20,6 +20,7 @@ import io.quarkus.bom.diff.HtmlBomDiffReportGenerator;
 import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -398,11 +399,21 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                 }
             }
         }
+
         if (quarkusCoreDeployment != null) {
-            substructQuarkusBom(result,
-                    new DefaultArtifact("io.quarkus", "quarkus-bom-deployment", null, "pom", quarkusCore.getVersion()));
-        } else if (quarkusCore != null) {
-            substructQuarkusBom(result,
+            try {
+                subtractQuarkusBom(result, new DefaultArtifact("io.quarkus", "quarkus-bom-deployment", null, "pom",
+                        quarkusCoreDeployment.getVersion()));
+                return result;
+            } catch (BomDecomposerException e) {
+                if (quarkusCore == null) {
+                    throw e;
+                }
+            }
+        }
+
+        if (quarkusCore != null) {
+            subtractQuarkusBom(result,
                     new DefaultArtifact("io.quarkus", "quarkus-bom", null, "pom", quarkusCore.getVersion()));
         } else {
             bomsNotImportingQuarkusBom.add(bom);
@@ -410,23 +421,32 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         return result;
     }
 
-    private void substructQuarkusBom(final Set<Artifact> result, Artifact quarkusCoreBom) throws BomDecomposerException {
+    private void subtractQuarkusBom(Set<Artifact> result, Artifact quarkusCoreBom) throws BomDecomposerException {
         try {
             final ArtifactDescriptorResult quarkusBomDescr = describe(quarkusCoreBom);
             for (Dependency quarkusBomDep : quarkusBomDescr.getManagedDependencies()) {
                 result.remove(quarkusBomDep.getArtifact());
             }
         } catch (BomDecomposerException e) {
-            logger.debug("Failed to describe %s", quarkusCoreBom);
+            logger.debug("Failed to subtract %s: %s", quarkusCoreBom, e.getLocalizedMessage());
+            throw e;
         }
     }
 
     private ArtifactDescriptorResult describe(Artifact artifact) throws BomDecomposerException {
+        final ArtifactDescriptorResult descr;
         try {
-            return resolver().resolveDescriptor(artifact);
+            descr = resolver().resolveDescriptor(artifact);
         } catch (BootstrapMavenException e) {
             throw new BomDecomposerException("Failed to describe " + artifact, e);
         }
+        // if it didn't throw an exception it still might not exist in the local repo
+        final File file = new File(resolver().getSession().getLocalRepository().getBasedir(),
+                resolver().getSession().getLocalRepositoryManager().getPathForLocalArtifact(artifact));
+        if (!file.exists()) {
+            throw new BomDecomposerException(artifact + " was not found in the local repository at " + file);
+        }
+        return descr;
     }
 
     private MavenArtifactResolver resolver() {
