@@ -11,7 +11,6 @@ import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.ServiceLoader;
 import org.apache.maven.model.Model;
@@ -90,7 +89,7 @@ public class BomDecomposer {
             return this;
         }
 
-        public BomDecomposerConfig artifacts(Iterable<Artifact> iterator) {
+        public BomDecomposerConfig dependencies(Iterable<Dependency> iterator) {
             artifacts = iterator;
             return this;
         }
@@ -119,7 +118,7 @@ public class BomDecomposer {
     private boolean debug;
     private Artifact bomArtifact;
     private PomResolver bomSource;
-    private Iterable<Artifact> artifacts;
+    private Iterable<Dependency> artifacts;
     private MavenArtifactResolver mvnResolver;
     private List<ReleaseIdDetector> releaseDetectors = new ArrayList<>();
     private DecomposedBomBuilder decomposedBuilder;
@@ -139,10 +138,10 @@ public class BomDecomposer {
         final DecomposedBomBuilder bomBuilder = decomposedBuilder == null ? new DefaultDecomposedBomBuilder()
                 : decomposedBuilder;
         bomBuilder.bomArtifact(bomArtifact);
-        final Iterable<Artifact> artifacts = this.artifacts == null ? bomArtifacts() : this.artifacts;
-        for (Artifact dep : artifacts) {
+        final Iterable<Dependency> artifacts = this.artifacts == null ? bomManagedDeps() : this.artifacts;
+        for (Dependency dep : artifacts) {
             try {
-                bomBuilder.bomDependency(releaseId(dep), dep);
+                bomBuilder.bomDependency(releaseId(dep.getArtifact()), dep);
             } catch (BomDecomposerException e) {
                 if (e.getCause() instanceof AppModelResolverException) {
                     // there are plenty of BOMs that include artifacts that don't exist
@@ -157,25 +156,8 @@ public class BomDecomposer {
         return transformer == null ? bomBuilder.build() : transformer.transform(this, bomBuilder.build());
     }
 
-    private Iterable<Artifact> bomArtifacts() throws BomDecomposerException {
-        final Iterator<Dependency> managedDeps = describe(bomArtifact).getManagedDependencies().iterator();
-        return new Iterable<Artifact>() {
-            @Override
-            public Iterator<Artifact> iterator() {
-                return new Iterator<Artifact>() {
-
-                    @Override
-                    public boolean hasNext() {
-                        return managedDeps.hasNext();
-                    }
-
-                    @Override
-                    public Artifact next() {
-                        return managedDeps.next().getArtifact();
-                    }
-                };
-            }
-        };
+    private Iterable<Dependency> bomManagedDeps() throws BomDecomposerException {
+        return describe(bomArtifact).getManagedDependencies();
     }
 
     private ReleaseId releaseId(Artifact artifact) throws BomDecomposerException {

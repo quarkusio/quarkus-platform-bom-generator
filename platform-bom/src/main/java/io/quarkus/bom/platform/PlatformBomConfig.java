@@ -15,6 +15,7 @@ import java.util.Properties;
 import java.util.Set;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.model.DependencyManagement;
+import org.apache.maven.model.Exclusion;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Parent;
 import org.eclipse.aether.artifact.Artifact;
@@ -103,13 +104,24 @@ public class PlatformBomConfig {
                         model.getArtifactId(), null, "pom", ModelUtils.getVersion(model)));
                 for (Dependency dep : dm.getDependencies()) {
                     final Artifact artifact = new DefaultArtifact(dep.getGroupId(), dep.getArtifactId(),
-                            resolveExpr(allProps, dep.getClassifier()),
-                            dep.getType(), resolveExpr(allProps, dep.getVersion()));
-                    if (config.quarkusBom == null && artifact.getArtifactId().equals("quarkus-bom")
-                            && artifact.getGroupId().equals("io.quarkus")) {
+                            resolveExpr(allProps, dep.getClassifier()), dep.getType(), resolveExpr(allProps, dep.getVersion()));
+                    if (config.quarkusBom == null && dep.getArtifactId().equals("quarkus-bom")
+                            && dep.getGroupId().equals("io.quarkus")) {
                         config.quarkusBom = artifact;
                     } else {
-                        config.directDeps.add(artifact);
+                        List<org.eclipse.aether.graph.Exclusion> aetherExclusions = null;
+                        if (!dep.getExclusions().isEmpty()) {
+                            aetherExclusions = new ArrayList<>(dep.getExclusions().size());
+                            for (Exclusion e : dep.getExclusions()) {
+                                aetherExclusions.add(
+                                        new org.eclipse.aether.graph.Exclusion(e.getGroupId(), e.getArtifactId(), null, null));
+                            }
+                        }
+                        org.eclipse.aether.graph.Dependency aetherDep = new org.eclipse.aether.graph.Dependency(
+                                artifact, dep.getScope(),
+                                dep.getOptional() != null && Boolean.parseBoolean(dep.getOptional()),
+                                aetherExclusions);
+                        config.directDeps.add(aetherDep);
                     }
                 }
                 if (config.quarkusBom == null) {
@@ -148,7 +160,7 @@ public class PlatformBomConfig {
     private PomResolver bomResolver;
     private Artifact bomArtifact;
     private Artifact quarkusBom;
-    private List<Artifact> directDeps = new ArrayList<>();
+    private List<org.eclipse.aether.graph.Dependency> directDeps = new ArrayList<>();
     private Map<AppArtifactKey, Artifact> enforced;
     private Set<AppArtifactKey> excluded;
     private Set<String> excludedGroups;
@@ -169,7 +181,7 @@ public class PlatformBomConfig {
         return quarkusBom;
     }
 
-    public List<Artifact> directDeps() {
+    public List<org.eclipse.aether.graph.Dependency> directDeps() {
         return directDeps;
     }
 

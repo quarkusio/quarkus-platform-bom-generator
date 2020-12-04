@@ -92,29 +92,29 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             r.dependencies().forEach(d -> quarkusBomDeps.put(d.key(), d));
         });
 
-        for (Artifact directDep : config.directDeps()) {
-            final Iterable<Artifact> artifacts;
-            transformingBom = directDep.getExtension().equals("pom");
+        for (Dependency directDep : config.directDeps()) {
+            final Iterable<Dependency> bomDeps;
+            transformingBom = "import".equals(directDep.getScope());
             if (transformingBom) {
-                artifacts = managedDepsExcludingQuarkusBom(directDep);
+                bomDeps = managedDepsExcludingQuarkusBom(directDep.getArtifact());
                 final DecomposedBom originalBom = BomDecomposer.config()
                         .mavenArtifactResolver(resolver())
                         // .debug()
                         .logger(logger)
-                        .bomArtifact(directDep)
+                        .bomArtifact(directDep.getArtifact())
                         .checkForUpdates()
                         .decompose();
                 originalImportedBoms.put(originalBom.bomArtifact(), originalBom);
             } else {
-                artifacts = Collections.singleton(directDep);
+                bomDeps = Collections.singleton(directDep);
             }
             BomDecomposer.config()
                     .mavenArtifactResolver(resolver())
                     //.debug()
                     .logger(logger)
-                    .bomArtifact(directDep)
+                    .bomArtifact(directDep.getArtifact())
                     .checkForUpdates()
-                    .artifacts(artifacts)
+                    .dependencies(bomDeps)
                     .transform(this)
                     .decompose();
         }
@@ -223,7 +223,8 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                                 try {
                                     resolver().resolve(artifact);
                                     // logger.info(" EXISTS IN " + preferredVersion);
-                                    dep = ProjectDependency.create(preferredVersion.getValue(), artifact);
+                                    dep = ProjectDependency.create(preferredVersion.getValue(),
+                                            dep.dependency().setArtifact(artifact));
                                     break;
                                 } catch (BootstrapMavenException e) {
                                 }
@@ -254,7 +255,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         if (enforced == null) {
             return dep;
         }
-        return ProjectDependency.create(dep.releaseId(), enforced);
+        return ProjectDependency.create(dep.releaseId(), dep.dependency().setArtifact(enforced));
     }
 
     private void mergeExtensionDeps(ProjectRelease release, Map<AppArtifactKey, ProjectDependency> extensionDeps) {
@@ -347,7 +348,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                     try {
                         resolver().resolve(artifact);
                         //logger.info("  EXISTS IN " + preferredVersion);
-                        dep = ProjectDependency.create(preferredVersion.getValue(), artifact);
+                        dep = ProjectDependency.create(preferredVersion.getValue(), dep.dependency().setArtifact(artifact));
                         break;
                     } catch (BootstrapMavenException e) {
                     }
@@ -382,14 +383,15 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         return result;
     }
 
-    private Set<Artifact> managedDepsExcludingQuarkusBom(Artifact bom) throws BomDecomposerException {
-        final Set<Artifact> result = new HashSet<>();
+    private Collection<Dependency> managedDepsExcludingQuarkusBom(Artifact bom) throws BomDecomposerException {
         final ArtifactDescriptorResult bomDescr = describe(bom);
         Artifact quarkusCore = null;
         Artifact quarkusCoreDeployment = null;
-        for (Dependency dep : bomDescr.getManagedDependencies()) {
+        final List<Dependency> allDeps = bomDescr.getManagedDependencies();
+        final Map<AppArtifactKey, Dependency> result = new HashMap<>(allDeps.size());
+        for (Dependency dep : allDeps) {
             final Artifact artifact = dep.getArtifact();
-            result.add(artifact);
+            result.put(key(artifact), dep);
             if (quarkusCoreDeployment == null) {
                 if (artifact.getArtifactId().equals("quarkus-core-deployment") && artifact.getGroupId().equals("io.quarkus")) {
                     quarkusCoreDeployment = artifact;
@@ -404,7 +406,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             try {
                 subtractQuarkusBom(result, new DefaultArtifact("io.quarkus", "quarkus-bom-deployment", null, "pom",
                         quarkusCoreDeployment.getVersion()));
-                return result;
+                return result.values();
             } catch (BomDecomposerException e) {
                 if (quarkusCore == null) {
                     throw e;
@@ -418,14 +420,20 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         } else {
             bomsNotImportingQuarkusBom.add(bom);
         }
-        return result;
+        return result.values();
     }
 
-    private void subtractQuarkusBom(Set<Artifact> result, Artifact quarkusCoreBom) throws BomDecomposerException {
+    private static AppArtifactKey key(Artifact artifact) {
+        return new AppArtifactKey(artifact.getGroupId(), artifact.getArtifactId(), artifact.getClassifier(),
+                artifact.getExtension());
+    }
+
+    private void subtractQuarkusBom(Map<AppArtifactKey, Dependency> result, Artifact quarkusCoreBom)
+            throws BomDecomposerException {
         try {
             final ArtifactDescriptorResult quarkusBomDescr = describe(quarkusCoreBom);
             for (Dependency quarkusBomDep : quarkusBomDescr.getManagedDependencies()) {
-                result.remove(quarkusBomDep.getArtifact());
+                result.remove(key(quarkusBomDep.getArtifact()));
             }
         } catch (BomDecomposerException e) {
             logger.debug("Failed to subtract %s: %s", quarkusCoreBom, e.getLocalizedMessage());

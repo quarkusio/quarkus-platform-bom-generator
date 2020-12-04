@@ -60,7 +60,8 @@ public class UpdateAvailabilityTransformer implements DecomposedBomTransformer {
                             }
                             final Artifact updatedArtifact = dep.artifact().setVersion(version.toString());
                             if (isAvailable(decomposer, updatedArtifact)) {
-                                dep.setAvailableUpdate(ProjectDependency.create(releaseId, updatedArtifact));
+                                dep.setAvailableUpdate(
+                                        ProjectDependency.create(releaseId, dep.dependency().setArtifact(updatedArtifact)));
                                 break;
                             }
                         }
