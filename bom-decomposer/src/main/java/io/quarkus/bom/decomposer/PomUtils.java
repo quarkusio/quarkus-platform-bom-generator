@@ -14,6 +14,7 @@ import org.apache.maven.model.Dependency;
 import org.apache.maven.model.DependencyManagement;
 import org.apache.maven.model.Developer;
 import org.apache.maven.model.DistributionManagement;
+import org.apache.maven.model.Exclusion;
 import org.apache.maven.model.IssueManagement;
 import org.apache.maven.model.License;
 import org.apache.maven.model.Model;
@@ -44,27 +45,16 @@ public class PomUtils {
 
         final DependencyManagement dm = new DependencyManagement();
 
-        final Map<String, Artifact> artifacts = new HashMap<>();
+        final Map<String, Dependency> artifacts = new HashMap<>();
         for (ProjectRelease release : decomposed.releases()) {
             for (ProjectDependency dep : release.dependencies()) {
-                artifacts.put(dep.key().toString(), dep.artifact);
+                artifacts.put(dep.key().toString(), toModelDep(dep));
             }
         }
         final List<String> keys = new ArrayList<>(artifacts.keySet());
         Collections.sort(keys);
         for (String key : keys) {
-            final Artifact a = artifacts.get(key);
-            final Dependency dep = new Dependency();
-            dep.setGroupId(a.getGroupId());
-            dep.setArtifactId(a.getArtifactId());
-            if (!a.getClassifier().isEmpty()) {
-                dep.setClassifier(a.getClassifier());
-            }
-            if (!"jar".equals(a.getExtension())) {
-                dep.setType(a.getExtension());
-            }
-            dep.setVersion(a.getVersion());
-            dm.addDependency(dep);
+            dm.addDependency(artifacts.get(key));
         }
 
         final Model model = new Model();
@@ -84,6 +74,42 @@ public class PomUtils {
         model.setIssueManagement(issueManagement(baseModel));
         model.setDistributionManagement(distributionManagement(baseModel));
         return model;
+    }
+
+    private static Dependency toModelDep(ProjectDependency dep) {
+        final org.eclipse.aether.graph.Dependency aetherDep = dep.dependency();
+        final Artifact a = dep.artifact();
+
+        final Dependency modelDep = new Dependency();
+        modelDep.setGroupId(a.getGroupId());
+        modelDep.setArtifactId(a.getArtifactId());
+        if (!a.getClassifier().isEmpty()) {
+            modelDep.setClassifier(a.getClassifier());
+        }
+        if (!"jar".equals(a.getExtension())) {
+            modelDep.setType(a.getExtension());
+        }
+        modelDep.setVersion(a.getVersion());
+
+        final String scope = aetherDep.getScope();
+        if (!scope.isBlank() && !"compile".equals(scope)) {
+            modelDep.setScope(scope);
+        }
+
+        final Boolean optional = aetherDep.getOptional();
+        if (optional != null && optional) {
+            modelDep.setOptional(true);
+        }
+
+        if (!aetherDep.getExclusions().isEmpty()) {
+            for (org.eclipse.aether.graph.Exclusion aetherExcl : aetherDep.getExclusions()) {
+                final Exclusion modelExcl = new Exclusion();
+                modelExcl.setGroupId(aetherExcl.getGroupId());
+                modelExcl.setArtifactId(aetherExcl.getArtifactId());
+                modelDep.addExclusion(modelExcl);
+            }
+        }
+        return modelDep;
     }
 
     /**

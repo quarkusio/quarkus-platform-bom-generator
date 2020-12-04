@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.eclipse.aether.artifact.Artifact;
+import org.eclipse.aether.graph.Dependency;
 
 public class DefaultDecomposedBomBuilder implements DecomposedBomBuilder {
 
@@ -24,7 +25,7 @@ public class DefaultDecomposedBomBuilder implements DecomposedBomBuilder {
     }
 
     @Override
-    public void bomDependency(ReleaseId releaseId, Artifact artifact) throws BomDecomposerException {
+    public void bomDependency(ReleaseId releaseId, Dependency artifact) throws BomDecomposerException {
         releases.computeIfAbsent(releaseId, t -> new ArrayList<>()).add(ProjectDependency.create(releaseId, artifact));
     }
 

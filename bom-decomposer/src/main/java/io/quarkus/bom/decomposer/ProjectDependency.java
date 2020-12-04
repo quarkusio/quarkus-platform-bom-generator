@@ -3,6 +3,7 @@ package io.quarkus.bom.decomposer;
 import io.quarkus.bootstrap.model.AppArtifactKey;
 import java.util.Objects;
 import org.eclipse.aether.artifact.Artifact;
+import org.eclipse.aether.graph.Dependency;
 
 public class ProjectDependency {
 
@@ -13,23 +14,33 @@ public class ProjectDependency {
     }
 
     public static ProjectDependency create(ReleaseId releaseId, Artifact artifact) {
-        return new ProjectDependency(releaseId, artifact);
+        return create(releaseId, new Dependency(artifact, null));
+    }
+
+    public static ProjectDependency create(ReleaseId releaseId, Dependency dep) {
+        return new ProjectDependency(releaseId, dep);
     }
 
     protected final ReleaseId releaseId;
     protected final Artifact artifact;
+    protected Dependency bomDependency;
     protected UpdateStatus updateStatus = UpdateStatus.UNKNOWN;
     protected ProjectDependency availableUpdate;
     protected boolean preferredVersion;
     private AppArtifactKey key;
 
-    private ProjectDependency(ReleaseId releaseId, Artifact artifact) {
+    private ProjectDependency(ReleaseId releaseId, Dependency dep) {
         this.releaseId = Objects.requireNonNull(releaseId);
-        this.artifact = Objects.requireNonNull(artifact);
+        this.bomDependency = Objects.requireNonNull(dep);
+        this.artifact = Objects.requireNonNull(dep.getArtifact());
     }
 
     public ReleaseId releaseId() {
         return releaseId;
+    }
+
+    public Dependency dependency() {
+        return bomDependency;
     }
 
     public Artifact artifact() {
