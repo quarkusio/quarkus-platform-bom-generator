@@ -92,7 +92,7 @@ public class PomUtils {
         modelDep.setVersion(a.getVersion());
 
         final String scope = aetherDep.getScope();
-        if (!scope.isBlank() && !"compile".equals(scope)) {
+        if (scope != null && !scope.isEmpty() && !"compile".equals(scope)) {
             modelDep.setScope(scope);
         }
 
