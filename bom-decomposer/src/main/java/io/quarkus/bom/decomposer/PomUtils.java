@@ -57,18 +57,26 @@ public class PomUtils {
             dm.addDependency(artifacts.get(key));
         }
 
-        final Model model = new Model();
-        model.setModelVersion(modelVersion(baseModel));
+        final Model model = initModel(baseModel);
         model.setGroupId(decomposed.bomArtifact().getGroupId());
         model.setArtifactId(decomposed.bomArtifact().getArtifactId());
         model.setVersion(decomposed.bomArtifact().getVersion());
-        model.setPackaging("pom");
+        model.setDependencyManagement(dm);
+        return model;
+    }
+
+    public static Model initModel(Model baseModel) {
+        final Model model = new Model();
+        model.setGroupId(baseModel == null ? null : baseModel.getGroupId());
+        model.setArtifactId(baseModel == null ? null : baseModel.getArtifactId());
+        model.setVersion(baseModel == null ? null : baseModel.getVersion());
+        model.setModelVersion(modelVersion(baseModel));
+        model.setPackaging(baseModel == null ? "pom" : baseModel.getPackaging());
         model.setName(name(baseModel));
         model.setDescription(description(baseModel));
         model.setUrl(url(baseModel));
         model.setDevelopers(developers(baseModel));
         model.setLicenses(licenses(baseModel));
-        model.setDependencyManagement(dm);
         model.setScm(scm(baseModel));
         model.setCiManagement(ciManagement(baseModel));
         model.setIssueManagement(issueManagement(baseModel));
