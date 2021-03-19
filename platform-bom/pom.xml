@@ -14,5 +14,9 @@
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-platform-bom-decomposer</artifactId>
     </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-devtools-registry-client</artifactId>
+    </dependency>
   </dependencies>
 </project>
