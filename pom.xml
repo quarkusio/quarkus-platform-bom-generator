@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.quarkus</groupId>
   <artifactId>quarkus-platform-bom-tools-parent</artifactId>
-  <version>0.0.8-SNAPSHOT</version>
+  <version>0.0.7-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Quarkus - Platform BOM Tools - Parent</name>
 
