@@ -4,11 +4,12 @@ import io.quarkus.bom.PomSource;
 import io.quarkus.bom.decomposer.BomDecomposerException;
 import io.quarkus.bom.decomposer.DecomposedBom;
 import io.quarkus.bom.decomposer.DecomposedBomHtmlReportGenerator;
-import io.quarkus.bom.decomposer.PomUtils;
 import io.quarkus.bom.diff.BomDiff;
 import io.quarkus.bom.diff.HtmlBomDiffReportGenerator;
 import io.quarkus.bom.platform.PlatformBomComposer;
 import io.quarkus.bom.platform.PlatformBomConfig;
+import io.quarkus.bom.platform.PlatformBomUtils;
+import io.quarkus.bom.platform.PlatformCatalogResolver;
 import io.quarkus.bom.platform.ReportIndexPageGenerator;
 import io.quarkus.bootstrap.model.AppArtifact;
 import io.quarkus.bootstrap.model.AppArtifactCoords;
@@ -70,6 +71,8 @@ public class GeneratePlatformBomMojo extends AbstractMojo {
     protected Set<String> excludedGroups = new HashSet<>(0);
 
     MavenArtifactResolver artifactResolver;
+
+    PlatformCatalogResolver catalogs;
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
@@ -142,13 +145,14 @@ public class GeneratePlatformBomMojo extends AbstractMojo {
      * @return generated BOM's pom.xml
      * @throws IOException in case of FS IO failure
      * @throws BomDecomposerException in case of BOM processing failure
+     * @throws MojoExecutionException in case of maven resolver initialization failure
      */
-    private static Path generateBomReports(DecomposedBom originalBom, DecomposedBom generatedBom, Model baseModel,
+    private Path generateBomReports(DecomposedBom originalBom, DecomposedBom generatedBom, Model baseModel,
             Path outputDir, ReportIndexPageGenerator index)
-            throws IOException, BomDecomposerException {
+            throws IOException, BomDecomposerException, MojoExecutionException {
         outputDir = outputDir.resolve(bomDirName(generatedBom.bomArtifact()));
         final Path platformBomXml = outputDir.resolve("pom.xml");
-        PomUtils.toPom(generatedBom, platformBomXml, baseModel);
+        PlatformBomUtils.toPom(generatedBom, platformBomXml, baseModel, catalogResolver());
 
         final BomDiff.Config config = BomDiff.config();
         if (generatedBom.bomResolver().isResolved()) {
@@ -176,6 +180,10 @@ public class GeneratePlatformBomMojo extends AbstractMojo {
 
     private static String bomDirName(Artifact a) {
         return a.getGroupId() + "." + a.getArtifactId() + "-" + a.getVersion();
+    }
+
+    private PlatformCatalogResolver catalogResolver() throws MojoExecutionException {
+        return catalogs == null ? catalogs = new PlatformCatalogResolver(artifactResolver()) : catalogs;
     }
 
     private MavenArtifactResolver artifactResolver() throws MojoExecutionException {

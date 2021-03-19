@@ -53,6 +53,11 @@
     <dependencies>
       <dependency>
         <groupId>io.quarkus</groupId>
+        <artifactId>quarkus-devtools-registry-client</artifactId>
+        <version>${quarkus.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.quarkus</groupId>
         <artifactId>quarkus-platform-bom-decomposer</artifactId>
         <version>${project.version}</version>
       </dependency>

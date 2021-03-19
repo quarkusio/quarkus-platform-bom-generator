@@ -65,12 +65,18 @@ public class PomUtils {
         return model;
     }
 
+    /**
+     * Creates a new POM model initializing its base elements from the argument.
+     * 
+     * @param baseModel base model
+     * @return new model initialized from the base model
+     */
     public static Model initModel(Model baseModel) {
         final Model model = new Model();
+        model.setModelVersion(modelVersion(baseModel));
         model.setGroupId(baseModel == null ? null : baseModel.getGroupId());
         model.setArtifactId(baseModel == null ? null : baseModel.getArtifactId());
         model.setVersion(baseModel == null ? null : baseModel.getVersion());
-        model.setModelVersion(modelVersion(baseModel));
         model.setPackaging(baseModel == null ? "pom" : baseModel.getPackaging());
         model.setName(name(baseModel));
         model.setDescription(description(baseModel));
@@ -84,7 +90,13 @@ public class PomUtils {
         return model;
     }
 
-    private static Dependency toModelDep(ProjectDependency dep) {
+    /**
+     * Creates a managed dependency that can be added to a BOM for a project dependency
+     * 
+     * @param dep project dependency
+     * @return managed dependency
+     */
+    public static Dependency toModelDep(ProjectDependency dep) {
         final org.eclipse.aether.graph.Dependency aetherDep = dep.dependency();
         final Artifact a = dep.artifact();
 
