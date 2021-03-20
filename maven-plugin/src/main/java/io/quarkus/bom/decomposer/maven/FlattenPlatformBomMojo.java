@@ -112,8 +112,9 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
                 : null;
         for (Dependency d : managedDeps) {
             final org.eclipse.aether.artifact.Artifact a = d.getArtifact();
+            final String type = a.getProperties().getOrDefault("type", a.getExtension());
             final AppArtifactKey key = new AppArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(),
-                    a.getExtension());
+                    type);
             if (excludedKeys.contains(key)) {
                 continue;
             }
@@ -128,6 +129,20 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
                 modelDeps.put(key.toString(), modelDep);
             } else {
                 dm.addDependency(modelDep);
+            }
+
+            if ("tests".equals(modelDep.getClassifier()) && "test-jar".equals(modelDep.getType())) {
+                // Often in BOMs the classifier 'tests' is omitted for artifacts with type 'test-jar'
+                // in which case it will be filled in by the descriptor resolver.
+                // To not break the actual dependencies relying on what was exactly configured in the BOMs,
+                // we also include the 'test-jar' constraint but w/o the classifier, just in case 
+                org.apache.maven.model.Dependency noClassifier = modelDep.clone();
+                noClassifier.setClassifier(null);
+                if (modelDeps != null) {
+                    modelDeps.put(new AppArtifactKey(a.getGroupId(), a.getArtifactId(), null, type).toString(), noClassifier);
+                } else {
+                    dm.addDependency(noClassifier);
+                }
             }
         }
 
@@ -159,7 +174,9 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
         if (!a.getClassifier().isEmpty()) {
             modelDep.setClassifier(a.getClassifier());
         }
-        modelDep.setType(a.getExtension());
+
+        modelDep.setType(a.getProperties().getOrDefault("type", a.getExtension()));
+
         modelDep.setVersion(a.getVersion());
         if (d.getScope() != null && !d.getScope().isEmpty() && !"compile".equals(d.getScope())) {
             modelDep.setScope(d.getScope());
@@ -175,6 +192,7 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
                 modelDep.addExclusion(modelExcl);
             }
         }
+
         return modelDep;
     }
 }
