@@ -147,15 +147,15 @@ public class HtmlBomDiffReportGenerator extends FileReportWriter implements BomD
         if (!bomDiff.toBom().equals(bomDiff.mainBom())) {
             openTag("tr");
             writeTag("td", "text-align:left;font-weight:bold;color:gray", "groupId:");
-            writeTag("td", "font-weight:bold", bomDiff.mainBom().getGroupId());
+            writeTag("td", "font-weight:bold", bomDiff.toBom().getGroupId());
             closeTag("tr");
             openTag("tr");
             writeTag("td", "text-align:left;font-weight:bold;color:gray", "artifactId:");
-            writeTag("td", "font-weight:bold", bomDiff.mainBom().getArtifactId());
+            writeTag("td", "font-weight:bold", bomDiff.toBom().getArtifactId());
             closeTag("tr");
             openTag("tr");
             writeTag("td", "text-align:left;font-weight:bold;color:gray", "version:");
-            writeTag("td", "font-weight:bold", bomDiff.mainBom().getVersion());
+            writeTag("td", "font-weight:bold", bomDiff.toBom().getVersion());
             closeTag("tr");
         }
         if (!bomDiff.toBom().toString().equals(bomDiff.toSource())) {

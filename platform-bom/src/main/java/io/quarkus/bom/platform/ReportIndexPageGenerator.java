@@ -13,6 +13,10 @@ public class ReportIndexPageGenerator extends FileReportWriter implements AutoCl
     private static final String[] listBackground = new String[] { "background-color:#EBF4FA",
             "background-color:#FFFFFF" };
 
+    private URL mainBomUrl;
+    private DecomposedBom mainBom;
+    private Path mainBomReleasesHtml;
+
     private List<URL> mainUrl = new ArrayList<>();
     private List<URL> toUrl = new ArrayList<>();
     private List<DecomposedBom> toBoms = new ArrayList<>();
@@ -59,24 +63,23 @@ public class ReportIndexPageGenerator extends FileReportWriter implements AutoCl
 
         writeTag("h2", "Platform BOM");
 
-        int i = 0;
         int backgroundIndex = 1;
-        openTag("table");
-        openTag("tr", listBackground[backgroundIndex]);
-        writeTag("td", "text-align:left;font-weight:bold;color:gray", toBoms.get(i).bomArtifact());
-        writeTag("td", "text-align:left", generateAnchor(mainUrl.get(i).toExternalForm(), "original"));
-        writeTag("td", "text-align:left",
-                generateAnchor(mainReleasesHtml.get(i).toUri().toURL().toExternalForm(), "decomposed"));
-        writeTag("td", "text-align:left", generateAnchor(toUrl.get(i).toExternalForm(), "generated"));
-        writeTag("td", "text-align:left", generateAnchor(toReleasesHtml.get(i).toUri().toURL().toExternalForm(), "decomposed"));
-        writeTag("td", "text-align:left", generateAnchor(diffHtml.get(i).toUri().toURL().toExternalForm(), "diff"));
-        closeTag("tr");
-        closeTag("table");
+        if (mainBomUrl != null) {
+            openTag("table");
+            openTag("tr", listBackground[backgroundIndex]);
+            writeTag("td", "text-align:left;font-weight:bold;color:gray", mainBom.bomArtifact());
+            writeTag("td", "text-align:left", generateAnchor(mainBomUrl.toExternalForm(), "generated"));
+            writeTag("td", "text-align:left",
+                    generateAnchor(mainBomReleasesHtml.toUri().toURL().toExternalForm(), "decomposed"));
+            closeTag("tr");
+            closeTag("table");
+        }
 
         writeTag("p", "");
         openTag("table");
         writeTag("caption", "text-align:left;font-weight:bold", "Extension BOMs");
-        while (++i < toBoms.size()) {
+        int i = 0;
+        while (i < toBoms.size()) {
             openTag("tr", listBackground[backgroundIndex ^= 1]);
             writeTag("td", "text-align:left;font-weight:bold;color:gray", toBoms.get(i).bomArtifact());
             writeTag("td", "text-align:left", generateAnchor(mainUrl.get(i).toExternalForm(), "original"));
@@ -87,8 +90,15 @@ public class ReportIndexPageGenerator extends FileReportWriter implements AutoCl
                     generateAnchor(toReleasesHtml.get(i).toUri().toURL().toExternalForm(), "decomposed"));
             writeTag("td", "text-align:left", generateAnchor(diffHtml.get(i).toUri().toURL().toExternalForm(), "diff"));
             closeTag("tr");
+            ++i;
         }
         closeTag("table");
+    }
+
+    public void mainBom(URL mainUrl, DecomposedBom decomposed, Path releasesHtml) {
+        this.mainBomUrl = mainUrl;
+        this.mainBom = decomposed;
+        this.mainBomReleasesHtml = releasesHtml;
     }
 
     public void bomReport(URL mainUrl, URL toUrl, DecomposedBom toBom, Path mainReleasesHtml, Path toReleasesHtml,

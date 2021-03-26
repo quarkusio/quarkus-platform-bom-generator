@@ -4,6 +4,7 @@ import io.quarkus.bom.PomResolver;
 import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
+import io.quarkus.registry.util.PlatformArtifacts;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -25,17 +26,28 @@ public class PlatformBomConfig {
 
     public static class Builder {
 
-        private PomResolver pomResolver;
-        private Map<AppArtifactKey, Artifact> enforced = new HashMap<>(0);
-        private Set<AppArtifactKey> excluded = new HashSet<>(0);
-        private Set<String> excludedGroups = new HashSet<>(0);
-        private MavenArtifactResolver artifactResolver;
+        final PlatformBomConfig config = new PlatformBomConfig();
 
         private Builder() {
         }
 
+        public Builder platformBom(Artifact platformBom) {
+            config.bomArtifact = platformBom;
+            return this;
+        }
+
+        public Builder importBom(PlatformBomMemberConfig member) {
+            if (member.originalBomArtifact().getArtifactId().equals("quarkus-bom")
+                    && member.originalBomArtifact().getGroupId().equals("io.quarkus")) {
+                config.quarkusBom = member;
+            } else {
+                config.directDeps().add(member);
+            }
+            return this;
+        }
+
         public Builder pomResolver(PomResolver pomResolver) {
-            this.pomResolver = pomResolver;
+            config.bomResolver = pomResolver;
             return this;
         }
 
@@ -44,13 +56,13 @@ public class PlatformBomConfig {
         }
 
         public Builder enforce(Artifact artifact) {
-            enforced.put(new AppArtifactKey(artifact.getGroupId(), artifact.getArtifactId(), artifact.getClassifier(),
+            config.enforced.put(new AppArtifactKey(artifact.getGroupId(), artifact.getArtifactId(), artifact.getClassifier(),
                     artifact.getExtension()), artifact);
             return this;
         }
 
         public Builder excludeGroupId(String groupId) {
-            excludedGroups.add(groupId);
+            config.excludedGroups.add(groupId);
             return this;
         }
 
@@ -59,21 +71,24 @@ public class PlatformBomConfig {
         }
 
         public Builder exclude(AppArtifactKey key) {
-            excluded.add(key);
+            config.excluded.add(key);
             return this;
         }
 
         public Builder artifactResolver(MavenArtifactResolver resolver) {
-            this.artifactResolver = resolver;
+            config.artifactResolver = resolver;
             return this;
         }
 
         public PlatformBomConfig build() {
-            Objects.requireNonNull(pomResolver);
+            Objects.requireNonNull(config.bomResolver);
+            if (config.bomArtifact != null && config.quarkusBom != null && !config.directDeps.isEmpty()) {
+                return config;
+            }
 
-            Path pom = pomResolver.pomPath();
+            Path pom = config.bomResolver.pomPath();
             try {
-                final Model model = pomResolver.readLocalModel(pom);
+                final Model model = config.bomResolver.readLocalModel(pom);
                 final DependencyManagement dm = model.getDependencyManagement();
                 if (dm == null) {
                     throw new Exception(pom + " does not include managed dependencies");
@@ -88,7 +103,7 @@ public class PlatformBomConfig {
                         break;
                     }
                     Path parentPom = pom.getParent().resolve(relativePath).normalize().toAbsolutePath();
-                    final Model parentModel = pomResolver.readLocalModel(parentPom);
+                    final Model parentModel = config.bomResolver.readLocalModel(parentPom);
                     if (parentModel == null) {
                         break;
                     }
@@ -98,39 +113,39 @@ public class PlatformBomConfig {
                 }
                 allProps.setProperty("project.version", ModelUtils.getVersion(model));
 
-                final PlatformBomConfig config = new PlatformBomConfig();
-                config.bomResolver = pomResolver;
                 config.bomArtifact = Objects.requireNonNull(new DefaultArtifact(ModelUtils.getGroupId(model),
                         model.getArtifactId(), null, "pom", ModelUtils.getVersion(model)));
                 for (Dependency dep : dm.getDependencies()) {
+                    if (dep.getArtifactId().startsWith(config.bomArtifact.getArtifactId())
+                            && PlatformArtifacts.isCatalogArtifactId(dep.getArtifactId())) {
+                        // the platform descriptor artifact will be added by the BOM generator
+                        continue;
+                    }
                     final Artifact artifact = new DefaultArtifact(dep.getGroupId(), dep.getArtifactId(),
                             resolveExpr(allProps, dep.getClassifier()), dep.getType(), resolveExpr(allProps, dep.getVersion()));
+                    List<org.eclipse.aether.graph.Exclusion> aetherExclusions = null;
+                    if (!dep.getExclusions().isEmpty()) {
+                        aetherExclusions = new ArrayList<>(dep.getExclusions().size());
+                        for (Exclusion e : dep.getExclusions()) {
+                            aetherExclusions.add(
+                                    new org.eclipse.aether.graph.Exclusion(e.getGroupId(), e.getArtifactId(), null, null));
+                        }
+                    }
+                    org.eclipse.aether.graph.Dependency aetherDep = new org.eclipse.aether.graph.Dependency(
+                            artifact, dep.getScope(),
+                            dep.getOptional() != null && Boolean.parseBoolean(dep.getOptional()),
+                            aetherExclusions);
+
                     if (config.quarkusBom == null && dep.getArtifactId().equals("quarkus-bom")
                             && dep.getGroupId().equals("io.quarkus")) {
-                        config.quarkusBom = artifact;
+                        config.quarkusBom = new PlatformBomMemberConfig(aetherDep);
                     } else {
-                        List<org.eclipse.aether.graph.Exclusion> aetherExclusions = null;
-                        if (!dep.getExclusions().isEmpty()) {
-                            aetherExclusions = new ArrayList<>(dep.getExclusions().size());
-                            for (Exclusion e : dep.getExclusions()) {
-                                aetherExclusions.add(
-                                        new org.eclipse.aether.graph.Exclusion(e.getGroupId(), e.getArtifactId(), null, null));
-                            }
-                        }
-                        org.eclipse.aether.graph.Dependency aetherDep = new org.eclipse.aether.graph.Dependency(
-                                artifact, dep.getScope(),
-                                dep.getOptional() != null && Boolean.parseBoolean(dep.getOptional()),
-                                aetherExclusions);
-                        config.directDeps.add(aetherDep);
+                        config.directDeps.add(new PlatformBomMemberConfig(aetherDep));
                     }
                 }
                 if (config.quarkusBom == null) {
                     throw new RuntimeException("Failed to locate io.quarkus:quarkus-bom among the dependencies");
                 }
-                config.enforced = enforced;
-                config.excluded = excluded;
-                config.excludedGroups = excludedGroups;
-                config.artifactResolver = artifactResolver;
                 return config;
             } catch (Exception e) {
                 throw new RuntimeException("Failed to initialize platform BOM config", e);
@@ -159,11 +174,11 @@ public class PlatformBomConfig {
 
     private PomResolver bomResolver;
     private Artifact bomArtifact;
-    private Artifact quarkusBom;
-    private List<org.eclipse.aether.graph.Dependency> directDeps = new ArrayList<>();
-    private Map<AppArtifactKey, Artifact> enforced;
-    private Set<AppArtifactKey> excluded;
-    private Set<String> excludedGroups;
+    private PlatformBomMemberConfig quarkusBom;
+    private List<PlatformBomMemberConfig> directDeps = new ArrayList<>();
+    private Map<AppArtifactKey, Artifact> enforced = new HashMap<>(0);
+    private Set<AppArtifactKey> excluded = new HashSet<>(0);
+    private Set<String> excludedGroups = new HashSet<>(0);
     private MavenArtifactResolver artifactResolver;
 
     private PlatformBomConfig() {
@@ -177,11 +192,11 @@ public class PlatformBomConfig {
         return bomArtifact;
     }
 
-    public Artifact quarkusBom() {
+    public PlatformBomMemberConfig quarkusBom() {
         return quarkusBom;
     }
 
-    public List<org.eclipse.aether.graph.Dependency> directDeps() {
+    public List<PlatformBomMemberConfig> directDeps() {
         return directDeps;
     }
 

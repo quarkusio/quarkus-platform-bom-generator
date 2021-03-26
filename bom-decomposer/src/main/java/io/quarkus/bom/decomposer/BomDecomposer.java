@@ -138,6 +138,7 @@ public class BomDecomposer {
         final DecomposedBomBuilder bomBuilder = decomposedBuilder == null ? new DefaultDecomposedBomBuilder()
                 : decomposedBuilder;
         bomBuilder.bomArtifact(bomArtifact);
+        //bomBuilder.bomSource(PomSource.of(resolve(bomArtifact).getFile().toPath()));
         final Iterable<Dependency> artifacts = this.artifacts == null ? bomManagedDeps() : this.artifacts;
         for (Dependency dep : artifacts) {
             try {
@@ -231,21 +232,5 @@ public class BomDecomposer {
         } catch (Exception e) {
             throw new BomDecomposerException("Failed to resolve artifact " + artifact, e);
         }
-    }
-
-    public static void main(String[] args) throws Exception {
-
-        final Path pomDir = Paths.get(System.getProperty("user.home")).resolve("git")
-                .resolve("quarkus-platform").resolve("bom").resolve("runtime");
-
-        BomDecomposer.config()
-                .debug()
-                .bomArtifact("io.quarkus", "quarkus-universe-bom", "1.5.2.Final")
-                //.bomFile(pomDir.resolve("pom.xml"))
-                .checkForUpdates()
-                .decompose()
-                .visit(DecomposedBomHtmlReportGenerator.builder("target/releases.html")
-                        .skipOriginsWithSingleRelease()
-                        .build());
     }
 }
