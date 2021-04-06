@@ -16,7 +16,6 @@ import io.quarkus.bootstrap.model.AppArtifactCoords;
 import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -122,12 +121,10 @@ public class GeneratePlatformBomMojo extends AbstractMojo {
             final PlatformBomComposer bomComposer = new PlatformBomComposer(config);
             final DecomposedBom generatedBom = bomComposer.platformBom();
 
-            final File generatedPom = generateBomReports(bomComposer.originalPlatformBom(), generatedBom, project.getModel(),
-                    outputDir, index).toFile();
-            if (!generatedPom.exists()) {
-                throw new MojoExecutionException("Failed to locate the generated platform pom.xml at " + generatedPom);
-            }
-            project.setPomFile(generatedPom);
+            final Path platformBomXml = outputDir.resolve(bomDirName(generatedBom.bomArtifact())).resolve("pom.xml");
+            PlatformBomUtils.toPom(generatedBom, platformBomXml, project.getModel(), catalogResolver());
+            index.mainBom(platformBomXml.toUri().toURL(), generatedBom, platformBomXml);
+            project.setPomFile(platformBomXml.toFile());
 
             for (DecomposedBom importedBom : bomComposer.upgradedImportedBoms()) {
                 generateBomReports(bomComposer.originalImportedBom(importedBom.bomArtifact()), importedBom, null, outputDir,
@@ -153,12 +150,19 @@ public class GeneratePlatformBomMojo extends AbstractMojo {
         outputDir = outputDir.resolve(bomDirName(generatedBom.bomArtifact()));
         final Path platformBomXml = outputDir.resolve("pom.xml");
         PlatformBomUtils.toPom(generatedBom, platformBomXml, baseModel, catalogResolver());
+        generateBomReports(originalBom, generatedBom, outputDir, index, platformBomXml, artifactResolver());
+        return platformBomXml;
+    }
 
+    public static void generateBomReports(DecomposedBom originalBom, DecomposedBom generatedBom, Path outputDir,
+            ReportIndexPageGenerator index, final Path platformBomXml, MavenArtifactResolver resolver)
+            throws BomDecomposerException {
         final BomDiff.Config config = BomDiff.config();
-        if (generatedBom.bomResolver().isResolved()) {
-            config.compare(generatedBom.bomResolver().pomPath());
+        config.resolver(resolver);
+        if (originalBom.bomResolver() != null && originalBom.bomResolver().isResolved()) {
+            config.compare(originalBom.bomResolver().pomPath());
         } else {
-            config.compare(generatedBom.bomArtifact());
+            config.compare(originalBom.bomArtifact());
         }
         final BomDiff bomDiff = config.to(platformBomXml);
 
@@ -166,16 +170,19 @@ public class GeneratePlatformBomMojo extends AbstractMojo {
         HtmlBomDiffReportGenerator.config(diffFile).report(bomDiff);
 
         final Path generatedReleasesFile = outputDir.resolve("generated-releases.html");
-        generatedBom.visit(DecomposedBomHtmlReportGenerator.builder(generatedReleasesFile)
-                .skipOriginsWithSingleRelease().build());
+        generateReleasesReport(generatedBom, generatedReleasesFile);
 
         final Path originalReleasesFile = outputDir.resolve("original-releases.html");
-        originalBom.visit(DecomposedBomHtmlReportGenerator.builder(originalReleasesFile)
-                .skipOriginsWithSingleRelease().build());
+        generateReleasesReport(originalBom, originalReleasesFile);
 
         index.bomReport(bomDiff.mainUrl(), bomDiff.toUrl(), generatedBom, originalReleasesFile, generatedReleasesFile,
                 diffFile);
-        return platformBomXml;
+    }
+
+    public static void generateReleasesReport(DecomposedBom originalBom, Path outputFile)
+            throws BomDecomposerException {
+        originalBom.visit(DecomposedBomHtmlReportGenerator.builder(outputFile)
+                .skipOriginsWithSingleRelease().build());
     }
 
     private static String bomDirName(Artifact a) {

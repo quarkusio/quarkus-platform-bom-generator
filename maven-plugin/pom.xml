@@ -22,7 +22,6 @@
                     <goalPrefix>quarkus-platform-bom</goalPrefix>
                     <skipErrorNoDescriptorsFound>true</skipErrorNoDescriptorsFound>
                 </configuration>
-                <!--
                 <executions>
                     <execution>
                         <id>help-goal</id>
@@ -30,12 +29,22 @@
                             <goal>helpmojo</goal>
                         </goals>
                     </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.plexus</groupId>
+                <artifactId>plexus-component-metadata</artifactId>
+                <version>1.7.1</version>
+                <configuration>
+                    <staticMetadataDirectory>${basedir}/target/filtered-resources/META-INF/plexus</staticMetadataDirectory>
+                </configuration>
+                <executions>
                     <execution>
-                        <id>default-descriptor</id>
-                        <phase>process-classes</phase>
+                        <goals>
+                            <goal>generate-metadata</goal>
+                        </goals>
                     </execution>
                 </executions>
-                -->
             </plugin>
         </plugins>
     </build>
@@ -61,6 +70,11 @@
                     <artifactId>jsr305</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.maven.shared</groupId>
+            <artifactId>maven-invoker</artifactId>
+            <version>3.0.1</version>
         </dependency>
     </dependencies>
 </project>
