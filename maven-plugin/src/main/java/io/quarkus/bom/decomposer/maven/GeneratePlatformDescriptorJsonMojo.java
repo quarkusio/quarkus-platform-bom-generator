@@ -64,7 +64,7 @@ import org.eclipse.aether.resolution.ArtifactResult;
 /**
  * This goal generates a platform JSON descriptor for a given platform BOM.
  */
-@Mojo(name = "generate-platform-descriptor-json")
+@Mojo(name = "generate-platform-descriptor", threadSafe = true)
 public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
 
     @Parameter(property = "quarkusCoreGroupId", defaultValue = "io.quarkus")

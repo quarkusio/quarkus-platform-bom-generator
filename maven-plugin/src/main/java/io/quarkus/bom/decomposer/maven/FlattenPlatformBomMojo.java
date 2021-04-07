@@ -45,7 +45,7 @@ import org.eclipse.aether.resolution.ArtifactDescriptorResult;
  * of the dependency constraint list and their ordering is preserved (i.e. they are excluded from the
  * alphabetic ordering).
  */
-@Mojo(name = "flatten-platform-bom", defaultPhase = LifecyclePhase.INITIALIZE, requiresDependencyCollection = ResolutionScope.NONE)
+@Mojo(name = "flatten-platform-bom", defaultPhase = LifecyclePhase.INITIALIZE, requiresDependencyCollection = ResolutionScope.NONE, threadSafe = true)
 public class FlattenPlatformBomMojo extends AbstractMojo {
 
     @Component
