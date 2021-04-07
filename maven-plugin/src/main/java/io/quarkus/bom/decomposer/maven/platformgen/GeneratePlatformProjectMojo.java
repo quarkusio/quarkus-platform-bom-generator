@@ -685,7 +685,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final PluginExecution exec = new PluginExecution();
         plugin.addExecution(exec);
         exec.setPhase("process-resources");
-        exec.addGoal("generate-platform-descriptor-json");
+        exec.addGoal("generate-platform-descriptor");
 
         final Xpp3Dom config = new Xpp3Dom("configuration");
         final Xpp3Dom bomArtifactId = new Xpp3Dom("bomArtifactId");
