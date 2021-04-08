@@ -7,8 +7,6 @@ import io.quarkus.bom.decomposer.DecomposedBom;
 import io.quarkus.bom.decomposer.DecomposedBomHtmlReportGenerator;
 import io.quarkus.bom.decomposer.DecomposedBomTransformer;
 import io.quarkus.bom.decomposer.DecomposedBomVisitor;
-import io.quarkus.bom.decomposer.DefaultMessageWriter;
-import io.quarkus.bom.decomposer.MessageWriter;
 import io.quarkus.bom.decomposer.PomUtils;
 import io.quarkus.bom.decomposer.ProjectDependency;
 import io.quarkus.bom.decomposer.ProjectRelease;
@@ -18,11 +16,11 @@ import io.quarkus.bom.decomposer.ReleaseOrigin;
 import io.quarkus.bom.decomposer.ReleaseVersion;
 import io.quarkus.bom.diff.BomDiff;
 import io.quarkus.bom.diff.HtmlBomDiffReportGenerator;
+import io.quarkus.bom.resolver.ArtifactResolver;
+import io.quarkus.bom.resolver.ArtifactResolverProvider;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.model.AppArtifactKey;
-import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
-import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
-import java.io.File;
+import io.quarkus.devtools.messagewriter.MessageWriter;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -53,8 +51,8 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
     private final DecomposedBom originalQuarkusBom;
     private final DecomposedBom generatedQuarkusBom;
 
-    private final MessageWriter logger = new DefaultMessageWriter();
-    private MavenArtifactResolver resolver;
+    private final MessageWriter logger;
+    private ArtifactResolver resolver;
 
     private Collection<ReleaseVersion> quarkusVersions;
     private LinkedHashMap<String, ReleaseId> preferredVersions;
@@ -77,13 +75,13 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
     private PlatformBomConfig config;
 
     public PlatformBomComposer(PlatformBomConfig config) throws BomDecomposerException {
-        this(config, null);
+        this(config, MessageWriter.info());
     }
 
-    public PlatformBomComposer(PlatformBomConfig config, MavenArtifactResolver resolver) throws BomDecomposerException {
-
+    public PlatformBomComposer(PlatformBomConfig config, MessageWriter logger) throws BomDecomposerException {
         this.config = config;
-        this.resolver = resolver;
+        this.logger = logger;
+        this.resolver = config.artifactResolver();
 
         this.originalQuarkusBom = BomDecomposer.config()
                 //.debug()
@@ -117,6 +115,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         generatedQuarkusBom = quarkusBomBuilder.build();
 
         for (PlatformBomMemberConfig memberConfig : config.directDeps()) {
+            logger.info("Processing " + memberConfig.originalBomArtifact());
             memberConfigs.put(
                     memberConfig.originalBomArtifact().getGroupId() + ":" + memberConfig.originalBomArtifact().getArtifactId(),
                     memberConfig);
@@ -124,28 +123,25 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             transformingBom = memberConfig.isBom();
             if (transformingBom) {
                 bomDeps = managedDepsExcludingQuarkusBom(memberConfig.originalBomArtifact());
-                final DecomposedBom originalBom = BomDecomposer.config()
-                        .mavenArtifactResolver(resolver())
-                        // .debug()
-                        .logger(logger)
-                        .bomArtifact(memberConfig.originalBomArtifact())
-                        .checkForUpdates()
-                        .decompose();
-                originalImportedBoms.put(originalBom.bomArtifact(), originalBom);
             } else {
                 bomDeps = Collections.singleton(memberConfig.asDependencyConstraint());
             }
-            BomDecomposer.config()
+
+            final DecomposedBom originalBom = BomDecomposer.config()
                     .mavenArtifactResolver(resolver())
-                    //.debug()
+                    .dependencies(bomDeps)
+                    // .debug()
                     .logger(logger)
                     .bomArtifact(memberConfig.originalBomArtifact())
                     .checkForUpdates()
-                    .dependencies(bomDeps)
-                    .transform(this)
                     .decompose();
+            if (memberConfig.isBom()) {
+                originalImportedBoms.put(originalBom.bomArtifact(), originalBom);
+            }
+            transform(originalBom);
         }
 
+        logger.info("Generating " + config.bomArtifact());
         platformBom = generatePlatformBom();
 
         generatedUpdatedImportedBoms();
@@ -163,11 +159,11 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         return platformBom;
     }
 
-    public List<DecomposedBom> upgradedImportedBoms() {
+    public List<DecomposedBom> alignedMemberBoms() {
         return importedBoms;
     }
 
-    public DecomposedBom originalImportedBom(Artifact artifact) {
+    public DecomposedBom originalMemberBom(Artifact artifact) {
         return originalImportedBoms.get(artifact);
     }
 
@@ -289,13 +285,11 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                         if (!preferred.getKey().equals(depVersion)) {
                             for (Map.Entry<String, ReleaseId> preferredVersion : preferredVersions.entrySet()) {
                                 final Artifact artifact = dep.artifact().setVersion(preferredVersion.getKey());
-                                try {
-                                    resolver().resolve(artifact);
+                                if (resolver().resolveOrNull(artifact) != null) {
                                     // logger.info(" EXISTS IN " + preferredVersion);
                                     dep = ProjectDependency.create(preferredVersion.getValue(),
                                             dep.dependency().setArtifact(artifact));
                                     break;
-                                } catch (BootstrapMavenException e) {
                                 }
                             }
                         }
@@ -361,8 +355,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
     }
 
     @Override
-    public DecomposedBom transform(BomDecomposer decomposer, DecomposedBom decomposedBom)
-            throws BomDecomposerException {
+    public DecomposedBom transform(DecomposedBom decomposedBom) throws BomDecomposerException {
         if (transformingBom) {
             this.importedBoms.add(decomposedBom);
         }
@@ -414,12 +407,10 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             if (!preferredVersions.containsKey(depVersion)) {
                 for (Map.Entry<String, ReleaseId> preferredVersion : preferredVersions.entrySet()) {
                     final Artifact artifact = dep.artifact().setVersion(preferredVersion.getKey());
-                    try {
-                        resolver().resolve(artifact);
+                    if (resolver().resolveOrNull(artifact) != null) {
                         //logger.info("  EXISTS IN " + preferredVersion);
                         dep = ProjectDependency.create(preferredVersion.getValue(), dep.dependency().setArtifact(artifact));
                         break;
-                    } catch (BootstrapMavenException e) {
                     }
                 }
             }
@@ -453,31 +444,14 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
     private Collection<Dependency> managedDepsExcludingQuarkusBom(Artifact bom) throws BomDecomposerException {
         final ArtifactDescriptorResult bomDescr = describe(bom);
         Artifact quarkusCore = null;
-        Artifact quarkusCoreDeployment = null;
         final List<Dependency> allDeps = bomDescr.getManagedDependencies();
         final Map<AppArtifactKey, Dependency> result = new HashMap<>(allDeps.size());
         for (Dependency dep : allDeps) {
             final Artifact artifact = dep.getArtifact();
             result.put(key(artifact), dep);
-            if (quarkusCoreDeployment == null) {
-                if (artifact.getArtifactId().equals("quarkus-core-deployment") && artifact.getGroupId().equals("io.quarkus")) {
-                    quarkusCoreDeployment = artifact;
-                } else if (quarkusCore == null && artifact.getArtifactId().equals("quarkus-core")
-                        && artifact.getGroupId().equals("io.quarkus")) {
-                    quarkusCore = artifact;
-                }
-            }
-        }
-
-        if (quarkusCoreDeployment != null) {
-            try {
-                subtractQuarkusBom(result, new DefaultArtifact("io.quarkus", "quarkus-bom-deployment", null, "pom",
-                        quarkusCoreDeployment.getVersion()));
-                return result.values();
-            } catch (BomDecomposerException e) {
-                if (quarkusCore == null) {
-                    throw e;
-                }
+            if (quarkusCore == null && artifact.getArtifactId().equals("quarkus-core")
+                    && artifact.getGroupId().equals("io.quarkus")) {
+                quarkusCore = artifact;
             }
         }
 
@@ -509,27 +483,11 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
     }
 
     private ArtifactDescriptorResult describe(Artifact artifact) throws BomDecomposerException {
-        final ArtifactDescriptorResult descr;
-        try {
-            descr = resolver().resolveDescriptor(artifact);
-        } catch (BootstrapMavenException e) {
-            throw new BomDecomposerException("Failed to describe " + artifact, e);
-        }
-        // if it didn't throw an exception it still might not exist in the local repo
-        final File file = new File(resolver().getSession().getLocalRepository().getBasedir(),
-                resolver().getSession().getLocalRepositoryManager().getPathForLocalArtifact(artifact));
-        if (!file.exists()) {
-            throw new BomDecomposerException(artifact + " was not found in the local repository at " + file);
-        }
-        return descr;
+        return resolver().describe(artifact);
     }
 
-    private MavenArtifactResolver resolver() {
-        try {
-            return resolver == null ? resolver = MavenArtifactResolver.builder().build() : resolver;
-        } catch (BootstrapMavenException e) {
-            throw new IllegalStateException("Failed to initialize Maven artifact resolver", e);
-        }
+    private ArtifactResolver resolver() {
+        return resolver == null ? resolver = ArtifactResolverProvider.get() : resolver;
     }
 
     public static void main(String[] args) throws Exception {
@@ -551,8 +509,8 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             final Path generatedReleasesFile = generateReleasesHtml(generatedBom, outputDir);
             index.mainBom(generatedBom.bomResolver().pomPath().toUri().toURL(), generatedBom, generatedReleasesFile);
 
-            for (DecomposedBom importedBom : bomComposer.upgradedImportedBoms()) {
-                report(bomComposer.originalImportedBom(importedBom.bomArtifact()), importedBom, outputDir, index);
+            for (DecomposedBom importedBom : bomComposer.alignedMemberBoms()) {
+                report(bomComposer.originalMemberBom(importedBom.bomArtifact()), importedBom, outputDir, index);
             }
         }
     }

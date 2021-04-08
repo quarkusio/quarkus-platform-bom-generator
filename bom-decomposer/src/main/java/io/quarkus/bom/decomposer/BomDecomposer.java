@@ -2,12 +2,15 @@ package io.quarkus.bom.decomposer;
 
 import io.quarkus.bom.PomResolver;
 import io.quarkus.bom.PomSource;
-import io.quarkus.bootstrap.resolver.AppModelResolverException;
+import io.quarkus.bom.resolver.ArtifactNotFoundException;
+import io.quarkus.bom.resolver.ArtifactResolver;
+import io.quarkus.bom.resolver.ArtifactResolverProvider;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
+import io.quarkus.devtools.messagewriter.MessageWriter;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -40,27 +43,35 @@ public class BomDecomposer {
             return this;
         }
 
-        public BomDecomposerConfig mavenArtifactResolver(MavenArtifactResolver resolver) {
+        public BomDecomposerConfig mavenArtifactResolver(ArtifactResolver resolver) {
             mvnResolver = resolver;
             return this;
         }
 
         public BomDecomposerConfig bomFile(Path bom) {
-            BootstrapMavenContext mvnCtx;
-            try {
-                mvnCtx = new BootstrapMavenContext(
-                        BootstrapMavenContext.config().setCurrentProject(bom.normalize().toAbsolutePath().toString()));
-            } catch (BootstrapMavenException e) {
-                throw new RuntimeException("Failed to initialize bootstrap Maven context", e);
+
+            final MavenArtifactResolver.Builder resolverBuilder = MavenArtifactResolver.builder()
+                    .setCurrentProject(bom.normalize().toAbsolutePath().toString());
+            if (mvnResolver != null) {
+                final MavenArtifactResolver baseResolver = mvnResolver.underlyingResolver();
+                resolverBuilder.setRepositorySystem(baseResolver.getSystem())
+                        .setRemoteRepositoryManager(baseResolver.getRemoteRepositoryManager());
             }
-            final LocalProject bomProject = mvnCtx.getCurrentProject();
+            MavenArtifactResolver underlyingResolver;
             try {
-                mavenArtifactResolver(new MavenArtifactResolver(mvnCtx));
+                underlyingResolver = resolverBuilder.build();
             } catch (BootstrapMavenException e) {
                 throw new RuntimeException("Failed to initialize Maven artifact resolver for " + bom, e);
             }
+            mavenArtifactResolver(
+                    ArtifactResolverProvider.get(underlyingResolver,
+                            mvnResolver == null ? null : mvnResolver.getBaseDir()));
+
+            final BootstrapMavenContext mvnCtx = underlyingResolver.getMavenContext();
+            final LocalProject bomProject = mvnCtx.getCurrentProject();
             bomArtifact = new DefaultArtifact(bomProject.getGroupId(), bomProject.getArtifactId(), "", "pom",
                     bomProject.getVersion());
+            bomArtifact = bomArtifact.setFile(bom.toFile());
             bomSource = PomSource.of(bom);
             return this;
         }
@@ -81,7 +92,7 @@ public class BomDecomposer {
         }
 
         public BomDecomposerConfig checkForUpdates() {
-            return transform(new UpdateAvailabilityTransformer());
+            return transform(new UpdateAvailabilityTransformer(mvnResolver, logger));
         }
 
         public BomDecomposerConfig transform(DecomposedBomTransformer bomTransformer) {
@@ -119,18 +130,19 @@ public class BomDecomposer {
     private Artifact bomArtifact;
     private PomResolver bomSource;
     private Iterable<Dependency> artifacts;
-    private MavenArtifactResolver mvnResolver;
+    private ArtifactResolver mvnResolver;
     private List<ReleaseIdDetector> releaseDetectors = new ArrayList<>();
     private DecomposedBomBuilder decomposedBuilder;
     private DecomposedBomTransformer transformer;
 
-    private MavenArtifactResolver artifactResolver() throws BomDecomposerException {
+    private ArtifactResolver artifactResolver() {
         try {
-            return mvnResolver == null ? mvnResolver = new MavenArtifactResolver(new BootstrapMavenContext(
-                    BootstrapMavenContext.config().setArtifactTransferLogging(debug)))
+            return mvnResolver == null
+                    ? mvnResolver = ArtifactResolverProvider
+                            .get(MavenArtifactResolver.builder().setArtifactTransferLogging(debug).build())
                     : mvnResolver;
-        } catch (AppModelResolverException e) {
-            throw new BomDecomposerException("Failed to initialize Maven artifact resolver", e);
+        } catch (BootstrapMavenException e) {
+            throw new RuntimeException("Failed to initialize Maven artifact resolver", e);
         }
     }
 
@@ -144,17 +156,14 @@ public class BomDecomposer {
             try {
                 bomBuilder.bomDependency(releaseId(dep.getArtifact()), dep);
             } catch (BomDecomposerException e) {
-                if (e.getCause() instanceof AppModelResolverException) {
-                    // there are plenty of BOMs that include artifacts that don't exist
-                    Object[] params = { dep };
-                    logger().debug("Failed to resolve POM for %s", params);
-                } else {
-                    throw e;
-                }
+                throw e;
+            } catch (ArtifactNotFoundException e) {
+                // there are plenty of BOMs that include artifacts that don't exist
+                logger().debug("Failed to resolve POM for %s", dep);
             }
         }
 
-        return transformer == null ? bomBuilder.build() : transformer.transform(this, bomBuilder.build());
+        return transformer == null ? bomBuilder.build() : transformer.transform(bomBuilder.build());
     }
 
     private Iterable<Dependency> bomManagedDeps() throws BomDecomposerException {
@@ -211,26 +220,18 @@ public class BomDecomposer {
     }
 
     public MessageWriter logger() {
-        return logger == null ? logger = new DefaultMessageWriter().setDebugEnabled(debug) : logger;
+        return logger == null ? logger = MessageWriter.debug() : logger;
     }
 
     public Model model(Artifact artifact) throws BomDecomposerException {
         return Util.model(resolve(Util.pom(artifact)).getFile());
     }
 
-    public ArtifactDescriptorResult describe(Artifact artifact) throws BomDecomposerException {
-        try {
-            return artifactResolver().resolveDescriptor(artifact);
-        } catch (Exception e) {
-            throw new BomDecomposerException("Failed to resolve artifact descriptor for " + artifact, e);
-        }
+    private ArtifactDescriptorResult describe(Artifact artifact) throws BomDecomposerException {
+        return artifactResolver().describe(artifact);
     }
 
-    public Artifact resolve(Artifact artifact) throws BomDecomposerException {
-        try {
-            return artifactResolver().resolve(artifact).getArtifact();
-        } catch (Exception e) {
-            throw new BomDecomposerException("Failed to resolve artifact " + artifact, e);
-        }
+    private Artifact resolve(Artifact artifact) throws BomDecomposerException {
+        return artifactResolver().resolve(artifact).getArtifact();
     }
 }

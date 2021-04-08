@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.quarkus.bom.decomposer.maven.platformgen.PlatformStackConfig;
 import io.quarkus.bootstrap.BootstrapConstants;
-import io.quarkus.bootstrap.model.AppArtifact;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalWorkspace;
@@ -59,7 +58,6 @@ import org.eclipse.aether.resolution.ArtifactDescriptorException;
 import org.eclipse.aether.resolution.ArtifactDescriptorRequest;
 import org.eclipse.aether.resolution.ArtifactRequest;
 import org.eclipse.aether.resolution.ArtifactResolutionException;
-import org.eclipse.aether.resolution.ArtifactResult;
 
 /**
  * This goal generates a platform JSON descriptor for a given platform BOM.
@@ -210,16 +208,16 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
         platformJson.setBom(ArtifactCoords.pom(bomGroupId, bomArtifactId, bomVersion));
         platformJson.setPlatform(true);
 
-        final List<AppArtifact> importedDescriptors = deps.stream().filter(
+        final List<Artifact> importedDescriptors = deps.stream().filter(
                 d -> d.getArtifact().getArtifactId().endsWith(BootstrapConstants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX)
                         && d.getArtifact().getExtension().equals("json")
                         && !(d.getArtifact().getArtifactId().equals(jsonArtifact.getArtifactId())
                                 && d.getArtifact().getGroupId().equals(jsonArtifact.getGroupId())))
-                .map(d -> new AppArtifact(d.getArtifact().getGroupId(), d.getArtifact().getArtifactId(),
+                .map(d -> new DefaultArtifact(d.getArtifact().getGroupId(), d.getArtifact().getArtifactId(),
                         d.getArtifact().getClassifier(), d.getArtifact().getExtension(), d.getArtifact().getVersion()))
                 .collect(Collectors.toList());
 
-        Map<ArtifactKey, Extension> inheritedExtensions = Collections.emptyMap();
+        Map<ArtifactKey, JsonExtension> inheritedExtensions = Collections.emptyMap();
         if (!importedDescriptors.isEmpty()) {
             final MavenArtifactResolver mvnResolver;
             try {
@@ -235,11 +233,9 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
             }
             final List<ExtensionCatalog> importedCatalogs = new ArrayList<>(importedDescriptors.size());
             try {
-                for (AppArtifact a : importedDescriptors) {
-                    importedCatalogs.add(JsonCatalogMapperHelper.deserialize(
-                            mvnResolver.resolve(new DefaultArtifact(a.getGroupId(), a.getArtifactId(), a.getClassifier(),
-                                    a.getType(), a.getVersion())).getArtifact().getFile().toPath(),
-                            JsonExtensionCatalog.class));
+                for (Artifact a : importedDescriptors) {
+                    importedCatalogs.add(JsonCatalogMapperHelper
+                            .deserialize(mvnResolver.resolve(a).getArtifact().getFile().toPath(), JsonExtensionCatalog.class));
                 }
             } catch (Exception e) {
                 throw new MojoExecutionException("Failed to resolver inherited platform descriptor", e);
@@ -261,7 +257,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
             if (!extensions.isEmpty()) {
                 inheritedExtensions = new HashMap<>(extensions.size());
                 for (Extension e : extensions) {
-                    inheritedExtensions.put(e.getArtifact().getKey(), e);
+                    inheritedExtensions.put(e.getArtifact().getKey(), (JsonExtension) e);
                 }
             }
 
@@ -306,33 +302,32 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
                     && artifact.getGroupId().equals(quarkusCoreGroupId)) {
                 quarkusCoreVersion = artifact.getVersion();
             }
-            ArtifactResult resolved = null;
-            JsonExtension extension = null;
-            try {
-                resolved = repoSystem.resolveArtifact(repoSession,
-                        new ArtifactRequest().setRepositories(repos).setArtifact(artifact));
-                extension = processDependency(resolved.getArtifact());
-            } catch (ArtifactResolutionException e) {
-                // there are some parent poms that appear as jars for some reason
-                debug("Failed to resolve dependency %s defined in %s", artifact, bomArtifact);
-            } catch (IOException e) {
-                throw new MojoExecutionException("Failed to process dependency " + artifact, e);
-            }
 
-            if (extension == null) {
-                continue;
-            }
-
-            Extension inherited = inheritedExtensions.get(extension.getArtifact().getKey());
+            JsonExtension extension = inheritedExtensions.isEmpty() ? null
+                    : inheritedExtensions.get(new ArtifactKey(artifact.getGroupId(), artifact.getArtifactId(),
+                            artifact.getClassifier(), artifact.getExtension()));
             final List<ExtensionOrigin> origins;
-            if (inherited != null) {
-                origins = new ArrayList<>(inherited.getOrigins().size() + 1);
-                origins.addAll(inherited.getOrigins());
-                origins.add(platformJson);
-            } else {
+            if (extension == null) {
+                try {
+                    extension = processDependency(repoSystem.resolveArtifact(repoSession,
+                            new ArtifactRequest().setRepositories(repos).setArtifact(artifact)).getArtifact());
+                } catch (ArtifactResolutionException e) {
+                    // there are some parent poms that appear as jars for some reason
+                    debug("Failed to resolve dependency %s defined in %s", artifact, bomArtifact);
+                } catch (IOException e) {
+                    throw new MojoExecutionException("Failed to process dependency " + artifact, e);
+                }
+                if (extension == null) {
+                    continue;
+                }
                 origins = Arrays.asList(platformJson);
+            } else {
+                origins = new ArrayList<>(extension.getOrigins().size() + 1);
+                origins.addAll(extension.getOrigins());
+                origins.add(platformJson);
             }
             extension.setOrigins(origins);
+
             String key = extensionId(extension);
             for (OverrideInfo info : allOverrides) {
                 io.quarkus.registry.catalog.Extension extOverride = info.getExtOverrides().get(key);

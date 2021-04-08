@@ -1,8 +1,8 @@
 package io.quarkus.bom.platform;
 
 import io.quarkus.bom.PomResolver;
+import io.quarkus.bom.resolver.ArtifactResolver;
 import io.quarkus.bootstrap.model.AppArtifactKey;
-import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.registry.util.PlatformArtifacts;
 import java.nio.file.Path;
@@ -75,7 +75,7 @@ public class PlatformBomConfig {
             return this;
         }
 
-        public Builder artifactResolver(MavenArtifactResolver resolver) {
+        public Builder artifactResolver(ArtifactResolver resolver) {
             config.artifactResolver = resolver;
             return this;
         }
@@ -179,7 +179,7 @@ public class PlatformBomConfig {
     private Map<AppArtifactKey, Artifact> enforced = new HashMap<>(0);
     private Set<AppArtifactKey> excluded = new HashSet<>(0);
     private Set<String> excludedGroups = new HashSet<>(0);
-    private MavenArtifactResolver artifactResolver;
+    private ArtifactResolver artifactResolver;
 
     private PlatformBomConfig() {
     }
@@ -220,7 +220,7 @@ public class PlatformBomConfig {
         return excluded;
     }
 
-    public MavenArtifactResolver artifactResolver() {
+    public ArtifactResolver artifactResolver() {
         return artifactResolver;
     }
 

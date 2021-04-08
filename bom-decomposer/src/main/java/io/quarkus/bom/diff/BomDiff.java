@@ -1,5 +1,7 @@
 package io.quarkus.bom.diff;
 
+import io.quarkus.bom.resolver.ArtifactResolver;
+import io.quarkus.bom.resolver.ArtifactResolverProvider;
 import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
@@ -36,22 +38,22 @@ public class BomDiff {
         private List<Dependency> mainDeps;
         private List<Dependency> toDeps;
 
-        private MavenArtifactResolver resolver;
+        private ArtifactResolver resolver;
 
         private Config() {
         }
 
-        public Config resolver(MavenArtifactResolver resolver) {
+        public Config resolver(ArtifactResolver resolver) {
             this.resolver = resolver;
             return this;
         }
 
         public Config compare(Artifact bomArtifact) {
-            final MavenArtifactResolver resolver = defaultResolver();
-            final ArtifactDescriptorResult descr = descriptor(resolver, bomArtifact);
+            final ArtifactResolver resolver = defaultResolver();
+            final ArtifactDescriptorResult descr = resolver.describe(bomArtifact);
             mainBom = descr.getArtifact();
             mainSource = bomArtifact.toString();
-            mainUrl = toUrl(resolve(resolver, bomArtifact));
+            mainUrl = toUrl(resolver.resolve(bomArtifact).getArtifact().getFile().toPath());
             mainDeps = descr.getManagedDependencies();
             return this;
         }
@@ -70,11 +72,11 @@ public class BomDiff {
         }
 
         public BomDiff to(Artifact bomArtifact) {
-            final MavenArtifactResolver resolver = defaultResolver();
-            final ArtifactDescriptorResult descr = descriptor(resolver, bomArtifact);
+            final ArtifactResolver resolver = defaultResolver();
+            final ArtifactDescriptorResult descr = resolver.describe(bomArtifact);
             toBom = descr.getArtifact();
             toSource = bomArtifact.toString();
-            toUrl = toUrl(resolve(resolver, bomArtifact));
+            toUrl = toUrl(resolver.resolve(bomArtifact).getArtifact().getFile().toPath());
             toDeps = descr.getManagedDependencies();
             return diff();
         }
@@ -89,48 +91,32 @@ public class BomDiff {
         }
 
         private ArtifactDescriptorResult descriptor(Path pom) {
-            BootstrapMavenContext mvnCtx;
-            try {
-                mvnCtx = new BootstrapMavenContext(BootstrapMavenContext.config().setCurrentProject(pom.toString()));
-            } catch (BootstrapMavenException e) {
-                throw new RuntimeException("Failed to initialize bootstrap Maven context", e);
+
+            final MavenArtifactResolver.Builder resolverBuilder = MavenArtifactResolver.builder()
+                    .setCurrentProject(pom.normalize().toAbsolutePath().toString());
+            if (resolver != null) {
+                final MavenArtifactResolver baseResolver = resolver.underlyingResolver();
+                resolverBuilder.setRepositorySystem(baseResolver.getSystem())
+                        .setRemoteRepositoryManager(baseResolver.getRemoteRepositoryManager());
             }
-            final LocalProject bomProject = mvnCtx.getCurrentProject();
-            final MavenArtifactResolver resolver;
+            MavenArtifactResolver underlyingResolver;
             try {
-                resolver = new MavenArtifactResolver(mvnCtx);
+                underlyingResolver = resolverBuilder.build();
             } catch (BootstrapMavenException e) {
                 throw new RuntimeException("Failed to initialize Maven artifact resolver for " + pom, e);
             }
-            return descriptor(resolver, new DefaultArtifact(bomProject.getGroupId(), bomProject.getArtifactId(), null, "pom",
-                    bomProject.getVersion()));
+
+            final BootstrapMavenContext mvnCtx = underlyingResolver.getMavenContext();
+            final LocalProject bomProject = mvnCtx.getCurrentProject();
+            Artifact pomArtifact = new DefaultArtifact(bomProject.getGroupId(), bomProject.getArtifactId(), "", "pom",
+                    bomProject.getVersion());
+            pomArtifact = pomArtifact.setFile(pom.toFile());
+
+            return ArtifactResolverProvider.get(underlyingResolver, resolver.getBaseDir()).describe(pomArtifact);
         }
 
-        private ArtifactDescriptorResult descriptor(MavenArtifactResolver resolver, Artifact artifact) {
-            try {
-                return resolver.resolveDescriptor(artifact);
-            } catch (BootstrapMavenException e) {
-                throw new RuntimeException("Failed to resolve " + artifact + " descriptor", e);
-            }
-        }
-
-        private Path resolve(MavenArtifactResolver resolver, Artifact artifact) {
-            try {
-                return resolver.resolve(artifact).getArtifact().getFile().toPath();
-            } catch (BootstrapMavenException e) {
-                throw new RuntimeException("Failed to resolve " + artifact, e);
-            }
-        }
-
-        private MavenArtifactResolver defaultResolver() {
-            if (resolver == null) {
-                try {
-                    resolver = MavenArtifactResolver.builder().build();
-                } catch (BootstrapMavenException e) {
-                    throw new RuntimeException("Failed to initialize Maven artifact resolver", e);
-                }
-            }
-            return resolver;
+        private ArtifactResolver defaultResolver() {
+            return resolver == null ? resolver = ArtifactResolverProvider.get() : resolver;
         }
 
         private URL toUrl(Path p) {
