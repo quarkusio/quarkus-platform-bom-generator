@@ -123,8 +123,12 @@ public class GeneratePlatformBomMojo extends AbstractMojo {
 
             final Path platformBomXml = outputDir.resolve(bomDirName(generatedBom.bomArtifact())).resolve("pom.xml");
             PlatformBomUtils.toPom(generatedBom, platformBomXml, project.getModel(), catalogResolver());
-            index.mainBom(platformBomXml.toUri().toURL(), generatedBom, platformBomXml);
             project.setPomFile(platformBomXml.toFile());
+
+            final Path generatedReleasesFile = outputDir.resolve(bomDirName(generatedBom.bomArtifact()))
+                    .resolve("generated-releases.html");
+            generateReleasesReport(generatedBom, generatedReleasesFile);
+            index.mainBom(platformBomXml.toUri().toURL(), generatedBom, generatedReleasesFile);
 
             for (DecomposedBom importedBom : bomComposer.upgradedImportedBoms()) {
                 generateBomReports(bomComposer.originalImportedBom(importedBom.bomArtifact()), importedBom, null, outputDir,
