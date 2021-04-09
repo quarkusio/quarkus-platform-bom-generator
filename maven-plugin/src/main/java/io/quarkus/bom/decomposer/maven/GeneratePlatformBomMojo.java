@@ -11,17 +11,21 @@ import io.quarkus.bom.platform.PlatformBomConfig;
 import io.quarkus.bom.platform.PlatformBomUtils;
 import io.quarkus.bom.platform.PlatformCatalogResolver;
 import io.quarkus.bom.platform.ReportIndexPageGenerator;
+import io.quarkus.bom.resolver.ArtifactResolver;
+import io.quarkus.bom.resolver.ArtifactResolverProvider;
 import io.quarkus.bootstrap.model.AppArtifact;
 import io.quarkus.bootstrap.model.AppArtifactCoords;
 import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
+import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import org.apache.maven.execution.MavenSession;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -69,7 +73,18 @@ public class GeneratePlatformBomMojo extends AbstractMojo {
     @Parameter
     protected Set<String> excludedGroups = new HashSet<>(0);
 
-    MavenArtifactResolver artifactResolver;
+    @Parameter(defaultValue = "${session}", readonly = true)
+    private MavenSession session;
+
+    /**
+     * Whether to record not found artifacts in a file that will serve as an artifact info cache for the subsequent builds.
+     * If this option is enabled, the file be stored in <code>${basedir}/.quarkus-bom-generator/not-found-artifacts.txt</code>.
+     */
+    @Parameter(property = "recordNotFoundArtifacts")
+    boolean recordNotFoundArtifacts;
+
+    MavenArtifactResolver mavenResolver;
+    ArtifactResolver artifactResolver;
 
     PlatformCatalogResolver catalogs;
 
@@ -118,7 +133,7 @@ public class GeneratePlatformBomMojo extends AbstractMojo {
                 .build();
 
         try (ReportIndexPageGenerator index = new ReportIndexPageGenerator(outputDir.resolve("index.html"))) {
-            final PlatformBomComposer bomComposer = new PlatformBomComposer(config);
+            final PlatformBomComposer bomComposer = new PlatformBomComposer(config, new MojoMessageWriter(getLog()));
             final DecomposedBom generatedBom = bomComposer.platformBom();
 
             final Path platformBomXml = outputDir.resolve(bomDirName(generatedBom.bomArtifact())).resolve("pom.xml");
@@ -130,8 +145,8 @@ public class GeneratePlatformBomMojo extends AbstractMojo {
             generateReleasesReport(generatedBom, generatedReleasesFile);
             index.mainBom(platformBomXml.toUri().toURL(), generatedBom, generatedReleasesFile);
 
-            for (DecomposedBom importedBom : bomComposer.upgradedImportedBoms()) {
-                generateBomReports(bomComposer.originalImportedBom(importedBom.bomArtifact()), importedBom, null, outputDir,
+            for (DecomposedBom importedBom : bomComposer.alignedMemberBoms()) {
+                generateBomReports(bomComposer.originalMemberBom(importedBom.bomArtifact()), importedBom, null, outputDir,
                         index);
             }
         }
@@ -159,7 +174,7 @@ public class GeneratePlatformBomMojo extends AbstractMojo {
     }
 
     public static void generateBomReports(DecomposedBom originalBom, DecomposedBom generatedBom, Path outputDir,
-            ReportIndexPageGenerator index, final Path platformBomXml, MavenArtifactResolver resolver)
+            ReportIndexPageGenerator index, final Path platformBomXml, ArtifactResolver resolver)
             throws BomDecomposerException {
         final BomDiff.Config config = BomDiff.config();
         config.resolver(resolver);
@@ -194,17 +209,36 @@ public class GeneratePlatformBomMojo extends AbstractMojo {
     }
 
     private PlatformCatalogResolver catalogResolver() throws MojoExecutionException {
-        return catalogs == null ? catalogs = new PlatformCatalogResolver(artifactResolver()) : catalogs;
+        return catalogs == null ? catalogs = new PlatformCatalogResolver(mavenArtifactResolver()) : catalogs;
     }
 
-    private MavenArtifactResolver artifactResolver() throws MojoExecutionException {
+    private ArtifactResolver artifactResolver() throws MojoExecutionException {
+        if (artifactResolver == null) {
+            final MavenArtifactResolver mavenResolver = mavenArtifactResolver();
+            Path baseDir = null;
+            if (recordNotFoundArtifacts) {
+                LocalProject project = mavenResolver.getMavenContext().getCurrentProject();
+                if (project != null) {
+                    LocalProject parent;
+                    while ((parent = project.getLocalParent()) != null) {
+                        project = parent;
+                    }
+                }
+                baseDir = project == null ? session.getTopLevelProject().getBasedir().toPath() : project.getDir();
+            }
+            artifactResolver = ArtifactResolverProvider.get(mavenResolver, baseDir);
+        }
+        return artifactResolver;
+    }
+
+    private MavenArtifactResolver mavenArtifactResolver() throws MojoExecutionException {
         try {
-            return artifactResolver == null ? artifactResolver = MavenArtifactResolver.builder()
+            return mavenResolver == null ? mavenResolver = MavenArtifactResolver.builder()
                     .setRepositorySystem(repoSystem)
                     .setRepositorySystemSession(repoSession)
                     .setRemoteRepositories(repos)
                     .setRemoteRepositoryManager(remoteRepoManager)
-                    .build() : artifactResolver;
+                    .build() : mavenResolver;
         } catch (BootstrapMavenException e) {
             throw new MojoExecutionException("Failed to initialize Maven artifact resolver", e);
         }

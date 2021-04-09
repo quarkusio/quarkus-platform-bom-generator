@@ -1,6 +1,7 @@
 package io.quarkus.bom.decomposer;
 
 import io.quarkus.bom.decomposer.ProjectDependency.UpdateStatus;
+import io.quarkus.devtools.messagewriter.MessageWriter;
 import org.eclipse.aether.artifact.Artifact;
 
 public class DecomposedBomReleasesLogger extends NoopDecomposedBomVisitor {
@@ -78,7 +79,7 @@ public class DecomposedBomReleasesLogger extends NoopDecomposedBomVisitor {
     private int unresolvableConflictCounter;
 
     private MessageWriter logger() {
-        return log == null ? log = new DefaultMessageWriter() : log;
+        return log == null ? log = MessageWriter.info() : log;
     }
 
     private StringBuilder buf() {
@@ -207,16 +208,16 @@ public class DecomposedBomReleasesLogger extends NoopDecomposedBomVisitor {
     private void log(Level level, Object msg) {
         switch (level) {
             case DEBUG:
-                logger().debug(msg);
+                logger().debug(msg == null ? "null" : msg.toString());
                 break;
             case INFO:
-                logger().info(msg);
+                logger().info(msg == null ? "null" : msg.toString());
                 break;
             case ERROR:
-                logger().error(msg);
+                logger().error(msg == null ? "null" : msg.toString());
                 break;
             default:
-                logger().warn(msg);
+                logger().warn(msg == null ? "null" : msg.toString());
         }
     }
 }

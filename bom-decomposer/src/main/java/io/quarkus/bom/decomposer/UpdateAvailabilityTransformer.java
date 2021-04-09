@@ -1,22 +1,33 @@
 package io.quarkus.bom.decomposer;
 
 import io.quarkus.bom.decomposer.ProjectDependency.UpdateStatus;
+import io.quarkus.bom.resolver.ArtifactResolver;
+import io.quarkus.devtools.messagewriter.MessageWriter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.apache.maven.artifact.versioning.ArtifactVersion;
 import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
 import org.eclipse.aether.artifact.Artifact;
 
 public class UpdateAvailabilityTransformer implements DecomposedBomTransformer {
 
+    private final ArtifactResolver resolver;
+    private final MessageWriter log;
+
+    public UpdateAvailabilityTransformer(ArtifactResolver resolver, MessageWriter log) {
+        this.resolver = Objects.requireNonNull(resolver);
+        this.log = Objects.requireNonNull(log);
+    }
+
     @Override
-    public DecomposedBom transform(BomDecomposer decomposer, DecomposedBom decomposedBom)
+    public DecomposedBom transform(DecomposedBom decomposedBom)
             throws BomDecomposerException {
         Object[] params = { decomposedBom.bomArtifact() };
-        decomposer.logger().debug("Transforming decomposed %s", params);
+        log.debug("Transforming decomposed %s", params);
         decomposedBom.visit(new NoopDecomposedBomVisitor(true) {
 
             List<ProjectRelease> releases = new ArrayList<>();
@@ -59,7 +70,7 @@ public class UpdateAvailabilityTransformer implements DecomposedBomTransformer {
                                 break;
                             }
                             final Artifact updatedArtifact = dep.artifact().setVersion(version.toString());
-                            if (isAvailable(decomposer, updatedArtifact)) {
+                            if (isAvailable(updatedArtifact)) {
                                 dep.setAvailableUpdate(
                                         ProjectDependency.create(releaseId, dep.dependency().setArtifact(updatedArtifact)));
                                 break;
@@ -79,20 +90,11 @@ public class UpdateAvailabilityTransformer implements DecomposedBomTransformer {
                 releases.add(release);
             }
         });
-        Object[] params1 = { decomposedBom.bomArtifact() };
-        decomposer.logger().debug("Transformed decomposed BOM %s", params1);
+        log.debug("Transformed decomposed BOM %s", decomposedBom.bomArtifact());
         return decomposedBom;
     }
 
-    private boolean isAvailable(BomDecomposer decomposer, Artifact artifact) {
-        try {
-            // we can't rely on artifact description here, unfortunately
-            // since it may not fail if the artifact does not exist
-            // so we are actually resolving the artifact
-            decomposer.resolve(artifact);
-            return true;
-        } catch (BomDecomposerException e) {
-            return false;
-        }
+    private boolean isAvailable(Artifact artifact) {
+        return resolver.resolveOrNull(artifact) != null;
     }
 }

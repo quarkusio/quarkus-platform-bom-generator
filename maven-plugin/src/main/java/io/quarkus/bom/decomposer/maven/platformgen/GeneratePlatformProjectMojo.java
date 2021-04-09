@@ -10,6 +10,8 @@ import io.quarkus.bom.platform.PlatformBomMemberConfig;
 import io.quarkus.bom.platform.PlatformBomUtils;
 import io.quarkus.bom.platform.PlatformCatalogResolver;
 import io.quarkus.bom.platform.ReportIndexPageGenerator;
+import io.quarkus.bom.resolver.ArtifactResolver;
+import io.quarkus.bom.resolver.ArtifactResolverProvider;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.model.AppArtifact;
 import io.quarkus.bootstrap.model.AppArtifactCoords;
@@ -31,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.apache.maven.execution.MavenSession;
 import org.apache.maven.model.Activation;
 import org.apache.maven.model.ActivationProperty;
 import org.apache.maven.model.Build;
@@ -80,6 +83,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project}")
     protected MavenProject project;
 
+    @Parameter(defaultValue = "${session}", readonly = true)
+    private MavenSession session;
+
     @Parameter(required = true, defaultValue = "${basedir}/generated-platform-project")
     File outputDir;
 
@@ -91,7 +97,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
     Artifact mainBom;
     MavenArtifactResolver nonWorkspaceResolver;
-    MavenArtifactResolver artifactResolver;
+    MavenArtifactResolver mavenResolver;
+    ArtifactResolver artifactResolver;
+
     PlatformCatalogResolver catalogs;
     Map<ArtifactKey, PlatformMember> members = new HashMap<>();
 
@@ -189,6 +197,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         final Path reportsOutputDir = reportsDir.toPath();
+        // reset the resolver to pick up all the generated platform modules
+        resetResolver();
         try (ReportIndexPageGenerator index = new ReportIndexPageGenerator(
                 reportsOutputDir.resolve("index.html"))) {
 
@@ -196,8 +206,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             GeneratePlatformBomMojo.generateReleasesReport(mainGeneratedBom, releasesReport);
             index.mainBom(mainPlatformBomXml.toUri().toURL(), mainGeneratedBom, releasesReport);
 
-            // reset the resolver to pick up all the generated platform modules
-            artifactResolver = null;
             for (PlatformMember member : members.values()) {
                 GeneratePlatformBomMojo.generateBomReports(member.originalBom, member.generatedBom,
                         reportsOutputDir.resolve(member.config.name.toLowerCase()), index,
@@ -286,7 +294,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         if (member.config.release.previous != null) {
             final Path previousPom;
             try {
-                previousPom = artifactResolver().resolve(toPomArtifact(member.config.release.previous)).getArtifact().getFile()
+                previousPom = mavenArtifactResolver().resolve(toPomArtifact(member.config.release.previous)).getArtifact()
+                        .getFile()
                         .toPath();
             } catch (BootstrapMavenException e) {
                 throw new MojoExecutionException("Failed to resolve " + member.config.release.previous, e);
@@ -787,7 +796,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         PlatformBomComposer bomComposer;
         try {
-            bomComposer = new PlatformBomComposer(config, artifactResolver());
+            bomComposer = new PlatformBomComposer(config);
         } catch (BomDecomposerException e) {
             throw new MojoExecutionException("Failed to generate the platform BOM", e);
         }
@@ -810,9 +819,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         quarkusCore.originalBom = bomComposer.originalQuarkusCoreBom();
         quarkusCore.generatedBom = bomComposer.generatedQuarkusCoreBom();
 
-        for (DecomposedBom importedBom : bomComposer.upgradedImportedBoms()) {
+        for (DecomposedBom importedBom : bomComposer.alignedMemberBoms()) {
             final PlatformMember member = members.get(toKey(importedBom.bomArtifact()));
-            member.originalBom = bomComposer.originalImportedBom(member.originalBomCoords);
+            member.originalBom = bomComposer.originalMemberBom(member.originalBomCoords);
             member.generatedBom = importedBom;
         }
     }
@@ -822,7 +831,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private PlatformCatalogResolver catalogResolver() throws MojoExecutionException {
-        return catalogs == null ? catalogs = new PlatformCatalogResolver(artifactResolver()) : catalogs;
+        return catalogs == null ? catalogs = new PlatformCatalogResolver(mavenArtifactResolver()) : catalogs;
     }
 
     private MavenArtifactResolver nonWorkspaceResolver() throws MojoExecutionException {
@@ -842,12 +851,27 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
     }
 
-    private MavenArtifactResolver artifactResolver() throws MojoExecutionException {
-        if (artifactResolver != null) {
-            return artifactResolver;
+    private void resetResolver() {
+        mavenResolver = null;
+        artifactResolver = null;
+    }
+
+    private ArtifactResolver artifactResolver() throws MojoExecutionException {
+        if (mavenResolver == null) {
+            artifactResolver = null;
+        }
+        return artifactResolver == null
+                ? artifactResolver = ArtifactResolverProvider.get(mavenArtifactResolver(),
+                        session.getTopLevelProject().getBasedir().toPath())
+                : artifactResolver;
+    }
+
+    private MavenArtifactResolver mavenArtifactResolver() throws MojoExecutionException {
+        if (mavenResolver != null) {
+            return mavenResolver;
         }
         try {
-            return artifactResolver = MavenArtifactResolver.builder()
+            return mavenResolver = MavenArtifactResolver.builder()
                     .setRepositorySystem(repoSystem)
                     //.setRepositorySystemSession(repoSession) use the generated workspace
                     .setRemoteRepositories(repos)

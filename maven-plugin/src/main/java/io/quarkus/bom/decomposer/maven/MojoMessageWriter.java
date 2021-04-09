@@ -1,6 +1,6 @@
 package io.quarkus.bom.decomposer.maven;
 
-import io.quarkus.bom.decomposer.MessageWriter;
+import io.quarkus.devtools.messagewriter.MessageWriter;
 import java.util.Objects;
 import org.apache.maven.plugin.logging.Log;
 
@@ -13,31 +13,27 @@ public class MojoMessageWriter implements MessageWriter {
     }
 
     @Override
-    public void info(Object msg) {
-        log.info(toStr(msg));
+    public void info(String msg) {
+        log.info(msg);
     }
 
     @Override
-    public void error(Object msg) {
-        log.error(toStr(msg));
+    public void error(String msg) {
+        log.error(msg);
     }
 
     @Override
-    public boolean debugEnabled() {
+    public boolean isDebugEnabled() {
         return log.isDebugEnabled();
     }
 
     @Override
-    public void debug(Object msg) {
-        log.debug(toStr(msg));
+    public void debug(String msg) {
+        log.debug(msg);
     }
 
     @Override
-    public void warn(Object msg) {
-        log.warn(toStr(msg));
-    }
-
-    private CharSequence toStr(Object msg) {
-        return msg == null ? "null" : msg.toString();
+    public void warn(String msg) {
+        log.warn(msg);
     }
 }

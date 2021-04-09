@@ -1,8 +1,7 @@
 package io.quarkus.bom.diff;
 
-import io.quarkus.bom.decomposer.DefaultMessageWriter;
-import io.quarkus.bom.decomposer.MessageWriter;
 import io.quarkus.bom.diff.BomDiff.VersionChange;
+import io.quarkus.devtools.messagewriter.MessageWriter;
 import java.math.RoundingMode;
 import java.text.NumberFormat;
 import org.eclipse.aether.graph.Dependency;
@@ -91,6 +90,6 @@ public class BomDiffLogger implements BomDiffReportGenerator {
     }
 
     private MessageWriter log() {
-        return log == null ? log = new DefaultMessageWriter() : log;
+        return log == null ? log = MessageWriter.debug() : log;
     }
 }
