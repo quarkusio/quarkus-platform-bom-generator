@@ -92,7 +92,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         final DecomposedBom.Builder quarkusBomBuilder = DecomposedBom.builder()
                 .bomArtifact(config.quarkusBom().generatedBomArtifact())
                 .bomSource(PomSource.of(config.quarkusBom().generatedBomArtifact()));
-        addPlatformDescriptor(config.quarkusBom(), quarkusBomBuilder);
+        addPlatformArtifacts(config.quarkusBom(), quarkusBomBuilder);
         originalQuarkusBom.releases().forEach(r -> {
             final AtomicReference<ProjectRelease.Builder> rbRef = new AtomicReference<>();
             r.dependencies().forEach(d -> {
@@ -214,12 +214,12 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             for (ProjectRelease.Builder releaseBuilder : releaseBuilders.values()) {
                 updatedBom.addRelease(releaseBuilder.build());
             }
-            addPlatformDescriptor(memberConfig, updatedBom);
+            addPlatformArtifacts(memberConfig, updatedBom);
             importedBoms.set(i++, updatedBom.build());
         }
     }
 
-    private void addPlatformDescriptor(PlatformBomMemberConfig memberConfig,
+    private void addPlatformArtifacts(PlatformBomMemberConfig memberConfig,
             final DecomposedBom.Builder updatedBom) {
         final Artifact generatedBomArtifact = memberConfig.generatedBomArtifact();
         if (!generatedBomArtifact.equals(memberConfig.originalBomArtifact())) {
@@ -233,6 +233,11 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                                     generatedBomArtifact.getArtifactId()
                                             + BootstrapConstants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX,
                                     generatedBomArtifact.getVersion(), "json", generatedBomArtifact.getVersion())))
+                    .add(ProjectDependency.create(memberReleaseId,
+                            new DefaultArtifact(generatedBomArtifact.getGroupId(),
+                                    generatedBomArtifact.getArtifactId()
+                                            + BootstrapConstants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX,
+                                    null, "properties", generatedBomArtifact.getVersion())))
                     .build();
             updatedBom.addRelease(memberRelease);
         }

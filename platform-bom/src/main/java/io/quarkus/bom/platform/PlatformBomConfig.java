@@ -82,7 +82,7 @@ public class PlatformBomConfig {
 
         public PlatformBomConfig build() {
             Objects.requireNonNull(config.bomResolver);
-            if (config.bomArtifact != null && config.quarkusBom != null && !config.directDeps.isEmpty()) {
+            if (config.bomArtifact != null && config.quarkusBom != null) {
                 return config;
             }
 
