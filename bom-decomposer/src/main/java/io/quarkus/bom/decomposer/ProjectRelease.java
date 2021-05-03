@@ -7,6 +7,8 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Set;
+import org.eclipse.aether.artifact.Artifact;
+import org.eclipse.aether.graph.Dependency;
 
 public class ProjectRelease {
 
@@ -30,6 +32,14 @@ public class ProjectRelease {
                         "Failed to add " + dep + " since the release already includes " + existing);
             }
             return this;
+        }
+
+        public Builder add(Artifact a) {
+            return add(ProjectDependency.create(id, a));
+        }
+
+        public Builder add(Dependency d) {
+            return add(ProjectDependency.create(id, d));
         }
 
         public boolean includes(AppArtifactKey key) {
@@ -80,5 +90,36 @@ public class ProjectRelease {
 
     public Collection<String> artifactVersions() {
         return artifactVersions;
+    }
+
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = 1;
+        result = prime * result + ((deps == null) ? 0 : deps.hashCode());
+        result = prime * result + ((id == null) ? 0 : id.hashCode());
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj)
+            return true;
+        if (obj == null)
+            return false;
+        if (getClass() != obj.getClass())
+            return false;
+        ProjectRelease other = (ProjectRelease) obj;
+        if (deps == null) {
+            if (other.deps != null)
+                return false;
+        } else if (!deps.equals(other.deps))
+            return false;
+        if (id == null) {
+            if (other.id != null)
+                return false;
+        } else if (!id.equals(other.id))
+            return false;
+        return true;
     }
 }
