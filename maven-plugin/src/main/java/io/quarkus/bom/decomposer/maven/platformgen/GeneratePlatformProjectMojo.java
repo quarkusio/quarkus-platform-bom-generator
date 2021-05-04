@@ -102,6 +102,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     @Parameter(required = true)
     PlatformConfig platformConfig;
 
+    @Parameter(required = true, defaultValue = "${project.build.directory}/updated-pom.xml")
+    File updatedPom;
+
     Artifact mainBom;
     MavenArtifactResolver nonWorkspaceResolver;
     MavenArtifactResolver mavenResolver;
@@ -130,7 +133,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
 
-        //coreMember.release = new PlatformMemberReleaseConfig();
         quarkusCore = new PlatformMember(platformConfig.core);
         members.put(quarkusCore.key(), quarkusCore);
         for (PlatformMemberConfig memberConfig : platformConfig.members) {
@@ -210,11 +212,16 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         if (pomLines != null) {
+            final File outputDir = updatedPom.getParentFile();
+            if (!outputDir.exists()) {
+                outputDir.mkdirs();
+            }
             try {
-                Files.write(project.getFile().toPath(), pomLines);
+                Files.write(updatedPom.toPath(), pomLines);
             } catch (IOException e) {
                 throw new MojoExecutionException("Failed to persist changes to " + project.getFile(), e);
             }
+            project.setPomFile(updatedPom);
         }
 
         final Path reportsOutputDir = reportsDir.toPath();
@@ -260,7 +267,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         member.baseModel = pom;
 
         generateMemberBom(member);
-        //generatePlatformDescriptorModule(member.descriptorCoords(), pom, true);
 
         if (member.skipDeploy) {
             skipInstall(pom);
@@ -679,6 +685,14 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         persistPom(parentPom);
         generateAllInclusivePlatformBomModule(pom);
 
+        if (platformConfig.generatePlatformProperties) {
+            final PlatformMemberConfig tmpConfig = new PlatformMemberConfig();
+            tmpConfig.bom = platformConfig.bom;
+            final PlatformMember tmp = new PlatformMember(tmpConfig);
+            tmp.baseModel = pom;
+            generatePlatformPropertiesModule(tmp, false);
+        }
+
         if (platformConfig.skipInstall) {
             skipInstall(pom);
         }
@@ -919,9 +933,11 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             throw new MojoExecutionException("Failed to create directory " + dir, e);
         }
 
+        // this is just to copy the core properties to the main platform
+        final PlatformMember srcMember = platformConfig.bom.equals(member.config.bom) ? quarkusCore : member;
         List<org.eclipse.aether.graph.Dependency> originalDm;
         try {
-            originalDm = nonWorkspaceResolver().resolveDescriptor(member.originalBomCoords()).getManagedDependencies();
+            originalDm = nonWorkspaceResolver().resolveDescriptor(srcMember.originalBomCoords()).getManagedDependencies();
         } catch (BootstrapMavenException e) {
             throw new MojoExecutionException("Failed to resolve " + member.originalBomCoords(), e);
         }
@@ -929,9 +945,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             final Artifact a = d.getArtifact();
             if (a.getExtension().equals("properties")
                     && a.getArtifactId().endsWith(Constants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX)
-                    && a.getArtifactId().startsWith(member.originalBomCoords.getArtifactId())
-                    && a.getGroupId().equals(member.originalBomCoords().getGroupId())
-                    && a.getVersion().equals(member.originalBomCoords().getVersion())) {
+                    && a.getArtifactId().startsWith(srcMember.originalBomCoords().getArtifactId())
+                    && a.getGroupId().equals(srcMember.originalBomCoords().getGroupId())
+                    && a.getVersion().equals(srcMember.originalBomCoords().getVersion())) {
                 try (BufferedReader reader = Files
                         .newBufferedReader(nonWorkspaceResolver.resolve(a).getArtifact().getFile().toPath())) {
                     props.load(reader);
@@ -962,6 +978,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Artifact bomArtifact = getMainBomArtifact();
         final PlatformBomConfig.Builder configBuilder = PlatformBomConfig.builder()
                 .pomResolver(PomSource.of(bomArtifact))
+                .includePlatformProperties(platformConfig.generatePlatformProperties)
                 .platformBom(bomArtifact);
 
         for (PlatformMember member : members.values()) {

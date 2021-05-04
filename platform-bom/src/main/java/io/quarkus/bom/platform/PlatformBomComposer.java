@@ -256,6 +256,13 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                                 config.bomArtifact().getArtifactId()
                                         + BootstrapConstants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX,
                                 config.bomArtifact().getVersion(), "json", config.bomArtifact().getVersion())));
+        if (config.includePlatformProperties()) {
+            bomReleaseBuilder.add(ProjectDependency.create(bomReleaseId,
+                    new DefaultArtifact(config.bomArtifact().getGroupId(),
+                            config.bomArtifact().getArtifactId()
+                                    + BootstrapConstants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX,
+                            null, "properties", config.bomArtifact().getVersion())));
+        }
         platformReleaseBuilders.put(bomReleaseId, bomReleaseBuilder);
 
         for (ProjectDependency dep : quarkusBomDeps.values()) {

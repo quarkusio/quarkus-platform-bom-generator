@@ -1,6 +1,7 @@
 package io.quarkus.bom.decomposer.maven.platformgen;
 
 import java.io.File;
+import java.util.Properties;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -10,6 +11,7 @@ import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.plugins.annotations.ResolutionScope;
+import org.apache.maven.project.MavenProject;
 import org.apache.maven.shared.invoker.DefaultInvocationRequest;
 import org.apache.maven.shared.invoker.InvocationRequest;
 import org.apache.maven.shared.invoker.InvocationResult;
@@ -28,13 +30,16 @@ public class BuildPlatformProjectMojo extends AbstractMojo {
     @Parameter(defaultValue = "${session}", readonly = true, required = true)
     MavenSession mavenSession;
 
+    @Parameter(defaultValue = "${project}")
+    protected MavenProject project;
+
     @Component
     private Invoker invoker;
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
+
         InvocationRequest request = new DefaultInvocationRequest();
-        request.setProperties(mavenSession.getRequest().getUserProperties());
         request.setPomFile(new File(outputDir, "pom.xml"));
         request.setGoals(mavenSession.getRequest().getGoals());
         request.setShowErrors(mavenSession.getRequest().isShowErrors());
@@ -43,6 +48,12 @@ public class BuildPlatformProjectMojo extends AbstractMojo {
 
         request.setProfiles(mavenSession.getRequest().getActiveProfiles());
         request.setProperties(mavenSession.getRequest().getUserProperties());
+
+        final String registryUrl = project.getProperties().getProperty(PlatformBomLifecycleParticipant.QUARKUS_REGISTRY_URL);
+        final Properties props = request.getProperties();
+        if (registryUrl != null && !props.containsKey(PlatformBomLifecycleParticipant.QUARKUS_REGISTRY_URL)) {
+            props.setProperty(PlatformBomLifecycleParticipant.QUARKUS_REGISTRY_URL, registryUrl);
+        }
 
         final InvocationResult result;
         try {
