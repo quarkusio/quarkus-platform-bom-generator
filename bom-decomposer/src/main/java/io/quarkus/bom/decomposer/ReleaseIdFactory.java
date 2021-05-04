@@ -1,5 +1,6 @@
 package io.quarkus.bom.decomposer;
 
+import io.quarkus.bootstrap.model.AppArtifactCoords;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import org.apache.maven.model.Model;
 
@@ -21,5 +22,18 @@ public class ReleaseIdFactory {
 
     public static ReleaseId create(ReleaseOrigin origin, ReleaseVersion version) {
         return new DefaultReleaseId(origin, version);
+    }
+
+    public static ReleaseId forGav(String groupId, String artifactId, String version) {
+        return create(ReleaseOrigin.Factory.ga(groupId, artifactId), ReleaseVersion.Factory.version(version));
+    }
+
+    public static ReleaseId forGav(String coordsStr) {
+        final AppArtifactCoords coords = AppArtifactCoords.fromString(coordsStr);
+        return forGav(coords.getGroupId(), coords.getArtifactId(), coords.getVersion());
+    }
+
+    public static ReleaseId forScmAndTag(String scm, String tag) {
+        return create(ReleaseOrigin.Factory.scmConnection(scm), ReleaseVersion.Factory.tag(tag));
     }
 }

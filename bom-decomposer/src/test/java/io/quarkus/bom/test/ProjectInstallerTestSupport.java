@@ -53,8 +53,16 @@ public class ProjectInstallerTestSupport {
         IoUtils.recursiveDelete(workDir);
     }
 
+    protected Path workDir() {
+        return workDir;
+    }
+
     protected ProjectReleaseInstaller projectWithParentPom(String coords) {
         return ProjectReleaseInstaller.forParentPom(coords).resolver(resolver);
+    }
+
+    protected ProjectReleaseInstaller projectWithScmAndTag(String scm, String tag) {
+        return ProjectReleaseInstaller.forScmAndTag(scm, tag).resolver(resolver);
     }
 
     protected PomInstaller pomInstaller(String coords) {
@@ -86,7 +94,9 @@ public class ProjectInstallerTestSupport {
         while (expectedReleases.hasNext()) {
             final ProjectRelease expectedRelease = expectedReleases.next();
             assertEqualReleases(expectedRelease, actualMap.remove(expectedRelease.id()));
-
+        }
+        if (!actualMap.isEmpty()) {
+            fail("Unexpected releases: " + actualMap.keySet());
         }
     }
 

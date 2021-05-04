@@ -5,6 +5,7 @@ import org.apache.maven.model.Dependency;
 import org.apache.maven.model.DependencyManagement;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Parent;
+import org.apache.maven.model.Scm;
 
 public class ModelComposer<T extends ModelComposer<T>> {
 
@@ -60,7 +61,9 @@ public class ModelComposer<T extends ModelComposer<T>> {
         final Dependency d = new Dependency();
         d.setGroupId(coords.getGroupId());
         d.setArtifactId(coords.getArtifactId());
-        d.setClassifier(coords.getClassifier());
+        if (!coords.getClassifier().isEmpty()) {
+            d.setClassifier(coords.getClassifier());
+        }
         d.setType(coords.getType());
         d.setVersion(coords.getVersion());
         return managedDep(d);
@@ -79,6 +82,15 @@ public class ModelComposer<T extends ModelComposer<T>> {
         p.setGroupId(groupId);
         p.setArtifactId(artifactId);
         p.setVersion(version);
+        return (T) this;
+    }
+
+    @SuppressWarnings("unchecked")
+    public T scm(String scmConnection, String tag) {
+        final Scm scm = new Scm();
+        scm.setConnection(scmConnection);
+        scm.setTag(tag);
+        model.setScm(scm);
         return (T) this;
     }
 

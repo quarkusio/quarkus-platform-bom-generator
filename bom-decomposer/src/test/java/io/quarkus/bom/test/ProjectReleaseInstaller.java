@@ -4,6 +4,7 @@ import io.quarkus.bom.decomposer.ProjectDependency;
 import io.quarkus.bom.decomposer.ProjectRelease;
 import io.quarkus.bom.decomposer.ReleaseIdFactory;
 import io.quarkus.bom.decomposer.ReleaseOrigin;
+import io.quarkus.bom.decomposer.ReleaseOrigin.ScmConnectionOrigin;
 import io.quarkus.bom.decomposer.ReleaseVersion;
 import io.quarkus.bootstrap.model.AppArtifactCoords;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
@@ -24,6 +25,10 @@ public class ProjectReleaseInstaller {
 
     public static ProjectReleaseInstaller forScm(String scm) {
         return new ProjectReleaseInstaller(ReleaseOrigin.Factory.scmConnection(scm));
+    }
+
+    public static ProjectReleaseInstaller forScmAndTag(String scm, String tag) {
+        return new ProjectReleaseInstaller(ReleaseOrigin.Factory.scmConnection(scm)).tag(tag);
     }
 
     public static ProjectReleaseInstaller forParentPom(String coordsString) {
@@ -100,6 +105,9 @@ public class ProjectReleaseInstaller {
 
     private void artifact(final Artifact a) {
         pb.add(ProjectDependency.create(pb.id(), a));
+        if (parentPom != null) {
+            parentPom.module(a.getArtifactId());
+        }
     }
 
     public ProjectReleaseInstaller resolver(MavenArtifactResolver resolver) {
@@ -122,6 +130,10 @@ public class ProjectReleaseInstaller {
             if (parentPom != null) {
                 pomInstaller.parent(parentPom.model().getGroupId(), parentPom.model().getArtifactId(),
                         parentPom.model().getVersion());
+            }
+            if (pb.id().origin() instanceof ReleaseOrigin.ScmConnectionOrigin) {
+                final ReleaseOrigin.ScmConnectionOrigin scm = (ScmConnectionOrigin) pb.id().origin();
+                pomInstaller.scm(scm.toString(), pb.id().version().asString());
             }
             if ("pom".equals(a.getExtension())) {
                 pomInstaller.packaging("pom");
