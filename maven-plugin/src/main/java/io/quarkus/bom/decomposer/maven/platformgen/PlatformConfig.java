@@ -9,6 +9,9 @@ public class PlatformConfig {
     @Parameter(required = true)
     String bom;
 
+    @Parameter(required = true)
+    boolean generatePlatformProperties = true;
+
     @Parameter
     boolean skipInstall;
 

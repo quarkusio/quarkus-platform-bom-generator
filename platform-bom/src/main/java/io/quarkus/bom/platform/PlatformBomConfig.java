@@ -36,6 +36,11 @@ public class PlatformBomConfig {
             return this;
         }
 
+        public Builder includePlatformProperties(boolean includePlatformProperties) {
+            config.includePlatformProperties = includePlatformProperties;
+            return this;
+        }
+
         public Builder importBom(PlatformBomMemberConfig member) {
             if (member.originalBomArtifact().getArtifactId().equals("quarkus-bom")
                     && member.originalBomArtifact().getGroupId().equals("io.quarkus")) {
@@ -174,6 +179,7 @@ public class PlatformBomConfig {
 
     private PomResolver bomResolver;
     private Artifact bomArtifact;
+    private boolean includePlatformProperties;
     private PlatformBomMemberConfig quarkusBom;
     private List<PlatformBomMemberConfig> directDeps = new ArrayList<>();
     private Map<AppArtifactKey, Artifact> enforced = new HashMap<>(0);
@@ -190,6 +196,10 @@ public class PlatformBomConfig {
 
     public Artifact bomArtifact() {
         return bomArtifact;
+    }
+
+    public boolean includePlatformProperties() {
+        return includePlatformProperties;
     }
 
     public PlatformBomMemberConfig quarkusBom() {
