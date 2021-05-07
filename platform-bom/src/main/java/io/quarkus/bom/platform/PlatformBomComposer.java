@@ -52,6 +52,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
     private final DecomposedBom generatedQuarkusBom;
 
     private final MessageWriter logger;
+    private final ExtensionCoordsFilterFactory extCoordsFilterFactory;
     private ArtifactResolver resolver;
 
     private Collection<ReleaseVersion> quarkusVersions;
@@ -82,6 +83,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         this.config = config;
         this.logger = logger;
         this.resolver = config.artifactResolver();
+        this.extCoordsFilterFactory = ExtensionCoordsFilterFactory.newInstance(config);
 
         this.originalQuarkusBom = BomDecomposer.config()
                 //.debug()
@@ -122,11 +124,10 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             final Iterable<Dependency> bomDeps;
             transformingBom = memberConfig.isBom();
             if (transformingBom) {
-                bomDeps = managedDepsExcludingQuarkusBom(memberConfig.originalBomArtifact());
+                bomDeps = managedDepsExcludingQuarkusBom(memberConfig);
             } else {
                 bomDeps = Collections.singleton(memberConfig.asDependencyConstraint());
             }
-
             final DecomposedBom originalBom = BomDecomposer.config()
                     .mavenArtifactResolver(resolver())
                     .dependencies(bomDeps)
@@ -453,18 +454,24 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         return result;
     }
 
-    private Collection<Dependency> managedDepsExcludingQuarkusBom(Artifact bom) throws BomDecomposerException {
+    private Collection<Dependency> managedDepsExcludingQuarkusBom(PlatformBomMemberConfig member)
+            throws BomDecomposerException {
+        final Artifact bom = member.originalBomArtifact();
         final ArtifactDescriptorResult bomDescr = describe(bom);
         Artifact quarkusCore = null;
         final List<Dependency> allDeps = bomDescr.getManagedDependencies();
         final Map<AppArtifactKey, Dependency> result = new HashMap<>(allDeps.size());
+        final ExtensionCoordsFilter extCoordsFilter = extCoordsFilterFactory.forMember(member);
         for (Dependency dep : allDeps) {
             final Artifact artifact = dep.getArtifact();
-            result.put(key(artifact), dep);
             if (quarkusCore == null && artifact.getArtifactId().equals("quarkus-core")
                     && artifact.getGroupId().equals("io.quarkus")) {
                 quarkusCore = artifact;
             }
+            if (extCoordsFilter.isExcludeFromBom(artifact)) {
+                continue;
+            }
+            result.put(key(artifact), dep);
         }
 
         if (quarkusCore != null) {

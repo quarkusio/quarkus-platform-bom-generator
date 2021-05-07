@@ -5,11 +5,11 @@ import org.eclipse.aether.graph.Dependency;
 
 public class PlatformBomMemberConfig {
 
-    private Dependency dep;
+    private Dependency bomDep;
     private Artifact generatedBomArtifact;
 
     public PlatformBomMemberConfig(Dependency dep) {
-        this.dep = dep;
+        this.bomDep = dep;
         this.generatedBomArtifact = dep.getArtifact();
     }
 
@@ -18,7 +18,7 @@ public class PlatformBomMemberConfig {
     }
 
     public Artifact originalBomArtifact() {
-        return dep.getArtifact();
+        return bomDep.getArtifact();
     }
 
     public Artifact generatedBomArtifact() {
@@ -26,10 +26,10 @@ public class PlatformBomMemberConfig {
     }
 
     public boolean isBom() {
-        return dep.getScope().equals("import");
+        return bomDep.getScope().equals("import");
     }
 
     public Dependency asDependencyConstraint() {
-        return dep;
+        return bomDep;
     }
 }

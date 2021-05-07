@@ -162,7 +162,6 @@ public class BomDecomposer {
                 logger().debug("Failed to resolve POM for %s", dep);
             }
         }
-
         return transformer == null ? bomBuilder.build() : transformer.transform(bomBuilder.build());
     }
 

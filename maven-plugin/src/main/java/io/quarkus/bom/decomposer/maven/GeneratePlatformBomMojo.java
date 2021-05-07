@@ -73,6 +73,9 @@ public class GeneratePlatformBomMojo extends AbstractMojo {
     @Parameter
     protected Set<String> excludedGroups = new HashSet<>(0);
 
+    @Parameter
+    protected boolean enableNonMemberQuarkiverseExtensions;
+
     @Parameter(defaultValue = "${session}", readonly = true)
     private MavenSession session;
 
@@ -129,6 +132,7 @@ public class GeneratePlatformBomMojo extends AbstractMojo {
         }
 
         final PlatformBomConfig config = configBuilder
+                .enableNonMemberQuarkiverseExtensions(enableNonMemberQuarkiverseExtensions)
                 .artifactResolver(artifactResolver())
                 .build();
 
