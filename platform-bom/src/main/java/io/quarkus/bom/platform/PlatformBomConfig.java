@@ -80,6 +80,11 @@ public class PlatformBomConfig {
             return this;
         }
 
+        public Builder enableNonMemberQuarkiverseExtensions(boolean enableNonMemberQuarkiverseExtensions) {
+            config.enableNonMemberQuarkiverseExtensions = enableNonMemberQuarkiverseExtensions;
+            return this;
+        }
+
         public Builder artifactResolver(ArtifactResolver resolver) {
             config.artifactResolver = resolver;
             return this;
@@ -185,6 +190,7 @@ public class PlatformBomConfig {
     private Map<AppArtifactKey, Artifact> enforced = new HashMap<>(0);
     private Set<AppArtifactKey> excluded = new HashSet<>(0);
     private Set<String> excludedGroups = new HashSet<>(0);
+    private boolean enableNonMemberQuarkiverseExtensions;
     private ArtifactResolver artifactResolver;
 
     private PlatformBomConfig() {
@@ -228,6 +234,10 @@ public class PlatformBomConfig {
 
     public Set<AppArtifactKey> excluded() {
         return excluded;
+    }
+
+    public boolean isEnableNonMemberQuarkiverseExtensions() {
+        return enableNonMemberQuarkiverseExtensions;
     }
 
     public ArtifactResolver artifactResolver() {

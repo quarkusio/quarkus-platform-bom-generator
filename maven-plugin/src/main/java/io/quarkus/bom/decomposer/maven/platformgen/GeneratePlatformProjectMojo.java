@@ -226,7 +226,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         final Path reportsOutputDir = reportsDir.toPath();
         // reset the resolver to pick up all the generated platform modules
-        resetResolver();
+        //resetResolver();
         try (ReportIndexPageGenerator index = new ReportIndexPageGenerator(
                 reportsOutputDir.resolve("index.html"))) {
 
@@ -979,7 +979,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final PlatformBomConfig.Builder configBuilder = PlatformBomConfig.builder()
                 .pomResolver(PomSource.of(bomArtifact))
                 .includePlatformProperties(platformConfig.generatePlatformProperties)
-                .platformBom(bomArtifact);
+                .platformBom(bomArtifact)
+                .enableNonMemberQuarkiverseExtensions(platformConfig.bomGenerator.enableNonMemberQuarkiverseExtensions);
 
         for (PlatformMember member : members.values()) {
             configBuilder.importBom(member.bomGeneratorMemberConfig());
@@ -1085,7 +1086,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         try {
             return mavenResolver = MavenArtifactResolver.builder()
                     .setRepositorySystem(repoSystem)
-                    //.setRepositorySystemSession(repoSession) use the generated workspace
+                    .setRepositorySystemSession(repoSession)
                     .setRemoteRepositories(repos)
                     .setRemoteRepositoryManager(remoteRepoManager)
                     .setCurrentProject(new File(outputDir, "pom.xml").toString())
