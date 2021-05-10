@@ -118,26 +118,27 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
 
         for (PlatformBomMemberConfig memberConfig : config.directDeps()) {
             logger.info("Processing " + memberConfig.originalBomArtifact());
-            memberConfigs.put(
-                    memberConfig.originalBomArtifact().getGroupId() + ":" + memberConfig.originalBomArtifact().getArtifactId(),
-                    memberConfig);
+            memberConfigs.put(memberConfig.key(), memberConfig);
             final Iterable<Dependency> bomDeps;
-            transformingBom = memberConfig.isBom();
-            if (transformingBom) {
+            transformingBom = memberConfig.isBom() || memberConfig.asDependencyConstraints().size() > 1;
+            if (memberConfig.isBom()) {
                 bomDeps = managedDepsExcludingQuarkusBom(memberConfig);
             } else {
-                bomDeps = Collections.singleton(memberConfig.asDependencyConstraint());
+                bomDeps = memberConfig.asDependencyConstraints();
             }
             final DecomposedBom originalBom = BomDecomposer.config()
                     .mavenArtifactResolver(resolver())
                     .dependencies(bomDeps)
                     // .debug()
                     .logger(logger)
-                    .bomArtifact(memberConfig.originalBomArtifact())
+                    .bomArtifact(memberConfig.originalBomArtifact() == null ? memberConfig.generatedBomArtifact()
+                            : memberConfig.originalBomArtifact())
                     .checkForUpdates()
                     .decompose();
             if (memberConfig.isBom()) {
                 originalImportedBoms.put(originalBom.bomArtifact(), originalBom);
+            } else if (memberConfig.asDependencyConstraints().size() > 1) {
+                originalImportedBoms.put(memberConfig.generatedBomArtifact(), originalBom);
             }
             transform(originalBom);
         }

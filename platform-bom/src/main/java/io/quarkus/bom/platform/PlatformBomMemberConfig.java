@@ -1,16 +1,35 @@
 package io.quarkus.bom.platform;
 
+import java.util.Collections;
+import java.util.List;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.graph.Dependency;
 
 public class PlatformBomMemberConfig {
 
-    private Dependency bomDep;
+    private final Dependency bomDep;
+    private final List<Dependency> dm;
+    private String key;
     private Artifact generatedBomArtifact;
 
-    public PlatformBomMemberConfig(Dependency dep) {
-        this.bomDep = dep;
-        this.generatedBomArtifact = dep.getArtifact();
+    public PlatformBomMemberConfig(Dependency bomDep) {
+        this.bomDep = bomDep;
+        this.dm = Collections.singletonList(bomDep);
+        this.generatedBomArtifact = bomDep == null ? null : bomDep.getArtifact();
+        this.key = bomDep.getArtifact().getGroupId() + ":" + bomDep.getArtifact().getArtifactId();
+    }
+
+    public PlatformBomMemberConfig(List<Dependency> dm) {
+        this.bomDep = null;
+        this.dm = dm;
+    }
+
+    public String key() {
+        if (key == null) {
+            key = bomDep == null ? generatedBomArtifact.getGroupId() + ":" + generatedBomArtifact.getArtifactId()
+                    : bomDep.getArtifact().getGroupId() + ":" + bomDep.getArtifact().getArtifactId();
+        }
+        return key;
     }
 
     public void setGeneratedBomArtifact(Artifact generatedBomArtifact) {
@@ -18,7 +37,7 @@ public class PlatformBomMemberConfig {
     }
 
     public Artifact originalBomArtifact() {
-        return bomDep.getArtifact();
+        return bomDep == null ? null : bomDep.getArtifact();
     }
 
     public Artifact generatedBomArtifact() {
@@ -26,10 +45,10 @@ public class PlatformBomMemberConfig {
     }
 
     public boolean isBom() {
-        return bomDep.getScope().equals("import");
+        return bomDep == null ? false : bomDep.getScope().equals("import");
     }
 
-    public Dependency asDependencyConstraint() {
-        return bomDep;
+    public List<Dependency> asDependencyConstraints() {
+        return dm;
     }
 }

@@ -42,7 +42,8 @@ public class PlatformBomConfig {
         }
 
         public Builder importBom(PlatformBomMemberConfig member) {
-            if (member.originalBomArtifact().getArtifactId().equals("quarkus-bom")
+            if (member.originalBomArtifact() != null
+                    && member.originalBomArtifact().getArtifactId().equals("quarkus-bom")
                     && member.originalBomArtifact().getGroupId().equals("io.quarkus")) {
                 config.quarkusBom = member;
             } else {
