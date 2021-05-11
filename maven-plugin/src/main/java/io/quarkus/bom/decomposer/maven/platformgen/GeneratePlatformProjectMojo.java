@@ -33,6 +33,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -235,6 +236,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             index.mainBom(mainPlatformBomXml.toUri().toURL(), mainGeneratedBom, releasesReport);
 
             for (PlatformMember member : members.values()) {
+                if (member.originalBomCoords() == null) {
+                    continue;
+                }
                 GeneratePlatformBomMojo.generateBomReports(member.originalBom, member.generatedBom,
                         reportsOutputDir.resolve(member.config.name.toLowerCase()), index,
                         member.generatedPomFile, artifactResolver());
@@ -933,28 +937,30 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             throw new MojoExecutionException("Failed to create directory " + dir, e);
         }
 
-        // this is just to copy the core properties to the main platform
-        final PlatformMember srcMember = platformConfig.bom.equals(member.config.bom) ? quarkusCore : member;
-        List<org.eclipse.aether.graph.Dependency> originalDm;
-        try {
-            originalDm = nonWorkspaceResolver().resolveDescriptor(srcMember.originalBomCoords()).getManagedDependencies();
-        } catch (BootstrapMavenException e) {
-            throw new MojoExecutionException("Failed to resolve " + member.originalBomCoords(), e);
-        }
-        for (org.eclipse.aether.graph.Dependency d : originalDm) {
-            final Artifact a = d.getArtifact();
-            if (a.getExtension().equals("properties")
-                    && a.getArtifactId().endsWith(Constants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX)
-                    && a.getArtifactId().startsWith(srcMember.originalBomCoords().getArtifactId())
-                    && a.getGroupId().equals(srcMember.originalBomCoords().getGroupId())
-                    && a.getVersion().equals(srcMember.originalBomCoords().getVersion())) {
-                try (BufferedReader reader = Files
-                        .newBufferedReader(nonWorkspaceResolver.resolve(a).getArtifact().getFile().toPath())) {
-                    props.load(reader);
-                } catch (Exception e) {
-                    throw new MojoExecutionException("Failed to resolve " + a, e);
+        if (member.config.bom != null) {
+            // this is just to copy the core properties to the main platform
+            final PlatformMember srcMember = platformConfig.bom.equals(member.config.bom) ? quarkusCore : member;
+            List<org.eclipse.aether.graph.Dependency> originalDm;
+            try {
+                originalDm = nonWorkspaceResolver().resolveDescriptor(srcMember.originalBomCoords()).getManagedDependencies();
+            } catch (BootstrapMavenException e) {
+                throw new MojoExecutionException("Failed to resolve " + member.originalBomCoords(), e);
+            }
+            for (org.eclipse.aether.graph.Dependency d : originalDm) {
+                final Artifact a = d.getArtifact();
+                if (a.getExtension().equals("properties")
+                        && a.getArtifactId().endsWith(Constants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX)
+                        && a.getArtifactId().startsWith(srcMember.originalBomCoords().getArtifactId())
+                        && a.getGroupId().equals(srcMember.originalBomCoords().getGroupId())
+                        && a.getVersion().equals(srcMember.originalBomCoords().getVersion())) {
+                    try (BufferedReader reader = Files
+                            .newBufferedReader(nonWorkspaceResolver.resolve(a).getArtifact().getFile().toPath())) {
+                        props.load(reader);
+                    } catch (Exception e) {
+                        throw new MojoExecutionException("Failed to resolve " + a, e);
+                    }
+                    break;
                 }
-                break;
             }
         }
 
@@ -1035,7 +1041,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         for (DecomposedBom importedBom : bomComposer.alignedMemberBoms()) {
             final PlatformMember member = members.get(toKey(importedBom.bomArtifact()));
-            member.originalBom = bomComposer.originalMemberBom(member.originalBomCoords);
+            member.originalBom = bomComposer.originalMemberBom(
+                    member.originalBomCoords == null ? member.generatedBomCoords() : member.originalBomCoords);
             member.generatedBom = importedBom;
         }
     }
@@ -1100,7 +1107,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         public boolean skipDeploy;
         final PlatformMemberConfig config;
-        private Artifact originalBomCoords;
+        private final Artifact originalBomCoords;
         private Artifact generatedBomCoords;
         private ArtifactCoords descriptorCoords;
         private ArtifactCoords propertiesCoords;
@@ -1114,10 +1121,23 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         PlatformMember(PlatformMemberConfig config) {
             this.config = config;
+            if (config.bom == null) {
+                originalBomCoords = null;
+                if (config.dependencyManagement.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "Neither BOM coordinates nor dependencyManagement have been configured for member " + config.name);
+                }
+            } else {
+                if (!config.dependencyManagement.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "Either BOM or dependencyManagement are allowed for a platform member: " + config.name);
+                }
+                originalBomCoords = toPomArtifact(config.bom);
+            }
         }
 
         Artifact originalBomCoords() {
-            return originalBomCoords == null ? originalBomCoords = toPomArtifact(config.bom) : originalBomCoords;
+            return originalBomCoords;
         }
 
         Artifact generatedBomCoords() {
@@ -1138,8 +1158,19 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         PlatformBomMemberConfig bomGeneratorMemberConfig() {
-            final PlatformBomMemberConfig bomMember = new PlatformBomMemberConfig(
-                    new org.eclipse.aether.graph.Dependency(originalBomCoords(), "import"));
+            final PlatformBomMemberConfig bomMember;
+            if (originalBomCoords == null) {
+                final List<org.eclipse.aether.graph.Dependency> dm = new ArrayList<>(config.dependencyManagement.size());
+                for (String coordsStr : config.dependencyManagement) {
+                    final ArtifactCoords coords = ArtifactCoords.fromString(coordsStr);
+                    dm.add(new org.eclipse.aether.graph.Dependency(new DefaultArtifact(coords.getGroupId(),
+                            coords.getArtifactId(), coords.getClassifier(), coords.getType(), coords.getVersion()), "compile"));
+                }
+                bomMember = new PlatformBomMemberConfig(dm);
+            } else {
+                bomMember = new PlatformBomMemberConfig(
+                        new org.eclipse.aether.graph.Dependency(originalBomCoords(), "import"));
+            }
             bomMember.setGeneratedBomArtifact(generatedBomCoords());
             return bomMember;
         }
