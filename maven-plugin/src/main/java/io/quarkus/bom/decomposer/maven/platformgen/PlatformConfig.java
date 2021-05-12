@@ -15,7 +15,7 @@ public class PlatformConfig {
     @Parameter
     boolean skipInstall;
 
-    PlatformStackConfig platformStack;
+    PlatformReleaseConfig platformRelease;
 
     @Parameter(required = true)
     PlatformMemberConfig core;

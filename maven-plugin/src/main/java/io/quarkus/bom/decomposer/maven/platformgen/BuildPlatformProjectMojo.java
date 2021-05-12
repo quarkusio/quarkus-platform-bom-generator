@@ -14,6 +14,7 @@ import org.apache.maven.plugins.annotations.ResolutionScope;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.shared.invoker.DefaultInvocationRequest;
 import org.apache.maven.shared.invoker.InvocationRequest;
+import org.apache.maven.shared.invoker.InvocationRequest.ReactorFailureBehavior;
 import org.apache.maven.shared.invoker.InvocationResult;
 import org.apache.maven.shared.invoker.Invoker;
 import org.apache.maven.shared.invoker.MavenInvocationException;
@@ -39,12 +40,18 @@ public class BuildPlatformProjectMojo extends AbstractMojo {
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
 
-        InvocationRequest request = new DefaultInvocationRequest();
+        final InvocationRequest request = new DefaultInvocationRequest();
         request.setPomFile(new File(outputDir, "pom.xml"));
         request.setGoals(mavenSession.getRequest().getGoals());
         request.setShowErrors(mavenSession.getRequest().isShowErrors());
         request.setShellEnvironmentInherited(true);
         request.setBatchMode(true);
+
+        final String reactorFailureBehavior = mavenSession.getReactorFailureBehavior();
+        if (reactorFailureBehavior != null) {
+            request.setReactorFailureBehavior(
+                    ReactorFailureBehavior.valueOfByLongOption(reactorFailureBehavior.toLowerCase().replace('_', '-')));
+        }
 
         request.setProfiles(mavenSession.getRequest().getActiveProfiles());
         request.setProperties(mavenSession.getRequest().getUserProperties());

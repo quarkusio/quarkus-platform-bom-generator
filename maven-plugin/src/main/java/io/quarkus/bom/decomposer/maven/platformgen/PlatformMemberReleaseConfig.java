@@ -2,7 +2,22 @@ package io.quarkus.bom.decomposer.maven.platformgen;
 
 public class PlatformMemberReleaseConfig {
 
-    boolean skip;
-    String previous;
-    String upcoming;
+    private boolean skip;
+    private String upcoming;
+
+    public boolean isSkip() {
+        return skip;
+    }
+
+    public void setSkip(boolean skip) {
+        this.skip = skip;
+    }
+
+    public String getUpcoming() {
+        return upcoming;
+    }
+
+    public void setUpcoming(String upcoming) {
+        this.upcoming = upcoming;
+    }
 }
