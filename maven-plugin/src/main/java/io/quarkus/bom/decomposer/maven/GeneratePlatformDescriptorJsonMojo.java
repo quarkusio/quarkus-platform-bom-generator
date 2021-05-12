@@ -2,7 +2,7 @@ package io.quarkus.bom.decomposer.maven;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import io.quarkus.bom.decomposer.maven.platformgen.PlatformStackConfig;
+import io.quarkus.bom.decomposer.maven.platformgen.PlatformReleaseConfig;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
@@ -108,7 +108,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
      * Platform stack info
      */
     @Parameter(required = false)
-    PlatformStackConfig platformStack;
+    PlatformReleaseConfig platformRelease;
 
     /**
      * A set of artifact group ID's that should be excluded from of the BOM and the descriptor.
@@ -404,11 +404,11 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
             }
         }
 
-        if (platformStack != null) {
+        if (platformRelease != null) {
             if (platformJson.getMetadata().isEmpty()) {
                 platformJson.setMetadata(new HashMap<>(1));
             }
-            platformJson.getMetadata().put("platform-stack", platformStack);
+            platformJson.getMetadata().put("platform-release", platformRelease);
         }
 
         // make sure all the categories referenced by extensions are actually present in

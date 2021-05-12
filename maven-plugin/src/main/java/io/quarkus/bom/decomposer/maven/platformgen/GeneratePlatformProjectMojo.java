@@ -197,7 +197,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         if (isBumpVersions()) {
             for (PlatformMember member : members.values()) {
                 if (!member.skipDeploy) {
-                    int lineIndex = pomLineContaining("<platformStack>", 0);
+                    int lineIndex = pomLineContaining("<platformRelease>", 0);
                     lineIndex = pomLineContaining("<version>", lineIndex + 1);
                     String versionLine = pomLines().get(lineIndex);
                     final String versionStr = versionLine.substring(versionLine.indexOf("<version>") + "<version>".length(),
@@ -703,7 +703,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         persistPom(pom);
     }
 
-    private void generatePlatformDescriptorModule(ArtifactCoords descriptorCoords, Model parentPom, boolean addPlatformStack)
+    private void generatePlatformDescriptorModule(ArtifactCoords descriptorCoords, Model parentPom,
+            boolean addPlatformReleaseConfig)
             throws MojoExecutionException {
         final String moduleName = "descriptor";
         parentPom.addModule(moduleName);
@@ -750,14 +751,17 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         e.setValue(quarkusCoreVersion());
         config.addChild(e);
 
-        if (addPlatformStack && platformConfig.platformStack != null) {
-            final Xpp3Dom stackConfig = new Xpp3Dom("platformStack");
+        if (addPlatformReleaseConfig && platformConfig.platformRelease != null) {
+            final Xpp3Dom stackConfig = new Xpp3Dom("platformRelease");
             config.addChild(stackConfig);
+            e = new Xpp3Dom("platformKey");
+            e.setValue(platformConfig.platformRelease.platformKey);
+            stackConfig.addChild(e);
             e = new Xpp3Dom("stream");
-            e.setValue(platformConfig.platformStack.stream);
+            e.setValue(platformConfig.platformRelease.stream);
             stackConfig.addChild(e);
             e = new Xpp3Dom("version");
-            e.setValue(platformConfig.platformStack.version);
+            e.setValue(platformConfig.platformRelease.version);
             stackConfig.addChild(e);
             final Xpp3Dom membersConfig = new Xpp3Dom("members");
             stackConfig.addChild(membersConfig);
@@ -832,7 +836,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         persistPom(pom);
     }
 
-    private void generatePlatformPropertiesModule(PlatformMember member, boolean addPlatformStack)
+    private void generatePlatformPropertiesModule(PlatformMember member, boolean addPlatformReleaseConfig)
             throws MojoExecutionException {
 
         final ArtifactCoords propertiesCoords = member.propertiesCoords();
@@ -897,14 +901,17 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Xpp3Dom config = new Xpp3Dom("configuration");
         final Properties props = new Properties();
 
-        if (addPlatformStack && platformConfig.platformStack != null) {
-            final Xpp3Dom stackConfig = new Xpp3Dom("platformStack");
+        if (addPlatformReleaseConfig && platformConfig.platformRelease != null) {
+            final Xpp3Dom stackConfig = new Xpp3Dom("platformRelease");
             config.addChild(stackConfig);
-            Xpp3Dom e = new Xpp3Dom("stream");
-            e.setValue(platformConfig.platformStack.stream);
+            Xpp3Dom e = new Xpp3Dom("platformKey");
+            e.setValue(platformConfig.platformRelease.platformKey);
+            stackConfig.addChild(e);
+            e = new Xpp3Dom("stream");
+            e.setValue(platformConfig.platformRelease.stream);
             stackConfig.addChild(e);
             e = new Xpp3Dom("version");
-            e.setValue(platformConfig.platformStack.version);
+            e.setValue(platformConfig.platformRelease.version);
             stackConfig.addChild(e);
             final Xpp3Dom membersConfig = new Xpp3Dom("members");
             stackConfig.addChild(membersConfig);
@@ -922,7 +929,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
 
             props.setProperty(
-                    "platform.stack.stream." + platformConfig.platformStack.stream + "#" + platformConfig.platformStack.version,
+                    "platform.release-info@" + platformConfig.platformRelease.platformKey + "$"
+                            + platformConfig.platformRelease.stream + "#" + platformConfig.platformRelease.version,
                     buf.toString());
         }
 
