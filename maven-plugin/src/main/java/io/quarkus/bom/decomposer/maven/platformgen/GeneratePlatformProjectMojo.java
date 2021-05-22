@@ -24,6 +24,7 @@ import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
+import io.quarkus.bootstrap.util.IoUtils;
 import io.quarkus.maven.ArtifactCoords;
 import io.quarkus.maven.ArtifactKey;
 import io.quarkus.registry.Constants;
@@ -153,6 +154,11 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
+
+        if (session.getRequest().getGoals().contains("clean")) {
+            getLog().info("Deleting " + outputDir);
+            IoUtils.recursiveDelete(outputDir.toPath());
+        }
 
         quarkusCore = new PlatformMember(platformConfig.core);
         members.put(quarkusCore.key(), quarkusCore);
@@ -441,17 +447,18 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                             testCoords.getGroupId() + ":" + testCoords.getArtifactId() + ":" + testCoords.getVersion());
                     testConfigs.put(testCoords, testConfig);
                 }
-                if (member.config.getDefaultTestConfig() != null) {
-                    testConfig.applyDefaults(member.config.getDefaultTestConfig());
-                }
             }
         }
 
         for (Map.Entry<ArtifactCoords, PlatformMemberTestConfig> test : testConfigs.entrySet()) {
-            if (!test.getValue().isEnabled()) {
+            final PlatformMemberTestConfig testConfig = test.getValue();
+            if (member.config.getDefaultTestConfig() != null) {
+                testConfig.applyDefaults(member.config.getDefaultTestConfig());
+            }
+            if (!testConfig.isEnabled()) {
                 continue;
             }
-            generateIntegrationTestModule(test.getKey(), test.getValue(), pom);
+            generateIntegrationTestModule(test.getKey(), testConfig, pom);
         }
 
         skipInstall(pom);
@@ -503,6 +510,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         dep.setScope("test");
         pom.addDependency(dep);
 
+        addDependencies(pom, testConfig.getDependencies(), false);
+        addDependencies(pom, testConfig.getTestDependencies(), true);
+
         final Xpp3Dom depsToScan = new Xpp3Dom("dependenciesToScan");
         final Xpp3Dom testDep = new Xpp3Dom("dependency");
         depsToScan.addChild(testDep);
@@ -527,14 +537,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 Xpp3Dom systemProps = null;
                 if (!testConfig.getSystemProperties().isEmpty()) {
                     systemProps = new Xpp3Dom("systemPropertyVariables");
-                    ;
                     config.addChild(systemProps);
                     addSystemProperties(systemProps, testConfig.getSystemProperties());
                 }
                 if (!testConfig.getJvmSystemProperties().isEmpty()) {
                     if (systemProps == null) {
                         systemProps = new Xpp3Dom("systemPropertyVariables");
-                        ;
                         config.addChild(systemProps);
                     }
                     addSystemProperties(systemProps, testConfig.getJvmSystemProperties());
@@ -651,6 +659,32 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
         } catch (IOException e) {
             throw new MojoExecutionException("Failed to create file " + seed, e);
+        }
+    }
+
+    private void addDependencies(final Model pom, List<String> dependencies, boolean test) {
+        Dependency dep;
+        if (!dependencies.isEmpty()) {
+            for (String depStr : dependencies) {
+                final ArtifactCoords coords = ArtifactCoords.fromString(depStr);
+                dep = new Dependency();
+                dep.setGroupId(coords.getGroupId());
+                dep.setArtifactId(coords.getArtifactId());
+                if (!coords.getClassifier().isEmpty()) {
+                    dep.setClassifier(coords.getClassifier());
+                }
+                if (!coords.getType().equals("jar")) {
+                    dep.setType(coords.getType());
+                }
+                if (!mainBomDepKeys.contains(new AppArtifactKey(coords.getGroupId(), coords.getArtifactId(),
+                        coords.getClassifier(), coords.getType()))) {
+                    dep.setVersion(coords.getVersion());
+                }
+                if (test) {
+                    dep.setScope("test");
+                }
+                pom.addDependency(dep);
+            }
         }
     }
 
@@ -1223,12 +1257,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         Artifact generatedBomCoords() {
             if (generatedBomCoords == null) {
-                if (config.getRelease() == null || config.getRelease().getUpcoming() == null) {
+                if (config.getRelease() == null || config.getRelease().getNext() == null) {
                     generatedBomCoords = new DefaultArtifact(getMainBomArtifact().getGroupId(),
                             originalBomCoords().getArtifactId(), null,
                             "pom", originalBomCoords().getVersion());
                 } else {
-                    generatedBomCoords = toPomArtifact(config.getRelease().getUpcoming());
+                    generatedBomCoords = toPomArtifact(config.getRelease().getNext());
                 }
             }
             return generatedBomCoords;
@@ -1260,7 +1294,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             if (stackDescriptorCoords != null) {
                 return stackDescriptorCoords;
             }
-            final String currentCoords = config.getRelease().getUpcoming();
+            final String currentCoords = config.getRelease().getNext();
             final String currentVersion = ArtifactCoords.fromString(currentCoords).getVersion();
             return stackDescriptorCoords = new ArtifactCoords(generatedBomCoords().getGroupId(),
                     generatedBomCoords().getArtifactId() + BootstrapConstants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX,

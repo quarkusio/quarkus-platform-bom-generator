@@ -117,7 +117,8 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         generatedQuarkusBom = quarkusBomBuilder.build();
 
         for (PlatformBomMemberConfig memberConfig : config.directDeps()) {
-            logger.info("Processing " + memberConfig.originalBomArtifact());
+            logger.info("Processing " + (memberConfig.originalBomArtifact() == null ? memberConfig.generatedBomArtifact()
+                    : memberConfig.originalBomArtifact()));
             memberConfigs.put(memberConfig.key(), memberConfig);
             final Iterable<Dependency> bomDeps;
             transformingBom = memberConfig.isBom() || memberConfig.asDependencyConstraints().size() > 1;

@@ -59,11 +59,6 @@ public class PlatformMemberConfig {
 
     public void setDefaultTestConfig(PlatformMemberDefaultTestConfig defaultTestConfig) {
         this.defaultTestConfig = defaultTestConfig;
-        if (defaultTestConfig != null) {
-            for (PlatformMemberTestConfig testConfig : tests) {
-                testConfig.applyDefaults(defaultTestConfig);
-            }
-        }
     }
 
     public PlatformMemberDefaultTestConfig getDefaultTestConfig() {
@@ -71,9 +66,6 @@ public class PlatformMemberConfig {
     }
 
     public void addTest(PlatformMemberTestConfig test) {
-        if (defaultTestConfig != null) {
-            test.applyDefaults(defaultTestConfig);
-        }
         tests.add(test);
     }
 

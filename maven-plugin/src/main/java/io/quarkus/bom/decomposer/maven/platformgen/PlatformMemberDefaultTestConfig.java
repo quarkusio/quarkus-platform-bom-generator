@@ -1,6 +1,7 @@
 package io.quarkus.bom.decomposer.maven.platformgen;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
@@ -17,6 +18,8 @@ public class PlatformMemberDefaultTestConfig {
     protected Properties pomProperties;
     protected String groups;
     protected String nativeGroups;
+    protected List<String> dependencies = Collections.emptyList();
+    protected List<String> testDependencies = Collections.emptyList();
 
     public PlatformMemberDefaultTestConfig() {
         super();
@@ -108,5 +111,21 @@ public class PlatformMemberDefaultTestConfig {
 
     public String getNativeGroups() {
         return nativeGroups;
+    }
+
+    public void setDependencies(List<String> dependencies) {
+        this.dependencies = dependencies;
+    }
+
+    public List<String> getDependencies() {
+        return dependencies;
+    }
+
+    public void setTestDependencies(List<String> testDependencies) {
+        this.testDependencies = testDependencies;
+    }
+
+    public List<String> getTestDependencies() {
+        return testDependencies;
     }
 }
