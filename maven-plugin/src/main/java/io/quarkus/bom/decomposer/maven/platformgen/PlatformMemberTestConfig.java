@@ -82,5 +82,19 @@ public class PlatformMemberTestConfig extends PlatformMemberDefaultTestConfig {
         if (nativeGroups == null) {
             nativeGroups = defaults.nativeGroups;
         }
+        if (!defaults.dependencies.isEmpty()) {
+            if (dependencies.isEmpty()) {
+                dependencies = defaults.dependencies;
+            } else {
+                dependencies.addAll(defaults.dependencies);
+            }
+        }
+        if (!defaults.testDependencies.isEmpty()) {
+            if (testDependencies.isEmpty()) {
+                testDependencies = defaults.testDependencies;
+            } else {
+                testDependencies.addAll(defaults.testDependencies);
+            }
+        }
     }
 }
