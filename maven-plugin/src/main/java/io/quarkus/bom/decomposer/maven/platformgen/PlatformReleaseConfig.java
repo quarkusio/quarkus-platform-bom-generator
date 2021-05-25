@@ -1,13 +1,9 @@
 package io.quarkus.bom.decomposer.maven.platformgen;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public class PlatformReleaseConfig {
     private String platformKey;
     private String stream;
     private String version;
-    private List<String> members = new ArrayList<>();
 
     public String getPlatformKey() {
         return platformKey;
@@ -31,13 +27,5 @@ public class PlatformReleaseConfig {
 
     public void setVersion(String version) {
         this.version = version;
-    }
-
-    public void addMember(String member) {
-        members.add(member);
-    }
-
-    public List<String> getMembers() {
-        return members;
     }
 }

@@ -119,6 +119,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
     @Parameter(required = true)
     PlatformConfig platformConfig;
+    private PlatformReleaseConfig platformReleaseConfig;
 
     @Parameter(required = true, defaultValue = "${project.build.directory}/updated-pom.xml")
     File updatedPom;
@@ -212,16 +213,56 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         persistPom(pom);
 
         if (isBumpVersions()) {
-            int lineIndex = pomLineContaining("<platformRelease>", 0);
-            lineIndex = pomLineContaining("<version>", lineIndex + 1);
-            String versionLine = pomLines().get(lineIndex);
+            int pcIndex = pomLineContaining("<platformConfig>", 0);
+            if (pcIndex < 0) {
+                throw new MojoExecutionException("Failed to locate <platformConfig> in " + project.getFile());
+            }
+            int prIndex = pomLineContaining("<platformRelease>", pcIndex);
+            int vIndex = -1;
+            if (prIndex < 0) {
+                final String platformConfigLine = pomLines().get(pcIndex);
+                final int offset = platformConfigLine.indexOf('<');
+                final StringBuilder buf = new StringBuilder();
+                for (int i = 0; i < offset + 4; ++i) {
+                    buf.append(' ');
+                }
+                buf.append("</platformRelease>");
+                pomLines().add(pcIndex + 1, buf.toString());
+
+                buf.setLength(0);
+                for (int i = 0; i < offset + 4; ++i) {
+                    buf.append(' ');
+                }
+                buf.append("<platformRelease>");
+                pomLines().add(pcIndex + 1, buf.toString());
+                prIndex = pcIndex + 1;
+            } else {
+                vIndex = pomLineContaining("<version>", prIndex + 1);
+            }
+
+            String versionLine = null;
+            if (vIndex < 0) {
+                vIndex = prIndex + 1;
+                final String platformReleaseLine = pomLines().get(prIndex);
+                final int offset = platformReleaseLine.indexOf('<');
+                final StringBuilder buf = new StringBuilder();
+                for (int i = 0; i < offset + 4; ++i) {
+                    buf.append(' ');
+                }
+                buf.append("<version>-1</version>");
+                versionLine = buf.toString();
+                pomLines().add(vIndex, buf.toString());
+            } else {
+                versionLine = pomLines().get(vIndex);
+            }
+
             final String versionStr = versionLine.substring(versionLine.indexOf("<version>") + "<version>".length(),
                     versionLine.lastIndexOf("</version>"));
             final int version = Integer.parseInt(versionStr);
             final StringBuilder buf = new StringBuilder();
             buf.append(versionLine.substring(0, versionLine.indexOf("<version>") + "<version>".length()))
                     .append(version + 1).append("</version>");
-            pomLines.set(lineIndex, buf.toString());
+            pomLines().set(vIndex, buf.toString());
         }
 
         if (pomLines != null) {
@@ -352,10 +393,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
             ++fromLine;
         }
-        if (fromLine == lines.size()) {
-            throw new MojoExecutionException("Failed to locate " + text + " in " + project.getFile());
-        }
-        return fromLine;
+        return fromLine == lines.size() ? -1 : fromLine;
     }
 
     private void generateMemberIntegrationTestsModule(PlatformMember member)
@@ -852,17 +890,17 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         e.setValue(quarkusCoreVersion());
         config.addChild(e);
 
-        if (addPlatformReleaseConfig && platformConfig.platformRelease != null) {
+        if (addPlatformReleaseConfig) {
             final Xpp3Dom stackConfig = new Xpp3Dom("platformRelease");
             config.addChild(stackConfig);
             e = new Xpp3Dom("platformKey");
-            e.setValue(platformConfig.platformRelease.getPlatformKey());
+            e.setValue(releaseConfig().getPlatformKey());
             stackConfig.addChild(e);
             e = new Xpp3Dom("stream");
-            e.setValue(platformConfig.platformRelease.getStream());
+            e.setValue(releaseConfig().getStream());
             stackConfig.addChild(e);
             e = new Xpp3Dom("version");
-            e.setValue(platformConfig.platformRelease.getVersion());
+            e.setValue(releaseConfig().getVersion());
             stackConfig.addChild(e);
             final Xpp3Dom membersConfig = new Xpp3Dom("members");
             stackConfig.addChild(membersConfig);
@@ -1002,17 +1040,17 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Xpp3Dom config = new Xpp3Dom("configuration");
         final Properties props = new Properties();
 
-        if (addPlatformReleaseConfig && platformConfig.platformRelease != null) {
+        if (addPlatformReleaseConfig) {
             final Xpp3Dom stackConfig = new Xpp3Dom("platformRelease");
             config.addChild(stackConfig);
             Xpp3Dom e = new Xpp3Dom("platformKey");
-            e.setValue(platformConfig.platformRelease.getPlatformKey());
+            e.setValue(releaseConfig().getPlatformKey());
             stackConfig.addChild(e);
             e = new Xpp3Dom("stream");
-            e.setValue(platformConfig.platformRelease.getStream());
+            e.setValue(releaseConfig().getStream());
             stackConfig.addChild(e);
             e = new Xpp3Dom("version");
-            e.setValue(platformConfig.platformRelease.getVersion());
+            e.setValue(releaseConfig().getVersion());
             stackConfig.addChild(e);
             final Xpp3Dom membersConfig = new Xpp3Dom("members");
             stackConfig.addChild(membersConfig);
@@ -1030,8 +1068,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
 
             props.setProperty(
-                    "platform.release-info@" + platformConfig.platformRelease.getPlatformKey() + "$"
-                            + platformConfig.platformRelease.getStream() + "#" + platformConfig.platformRelease.getVersion(),
+                    "platform.release-info@" + releaseConfig().getPlatformKey() + "$"
+                            + releaseConfig().getStream() + "#" + releaseConfig().getVersion(),
                     buf.toString());
         }
 
@@ -1187,6 +1225,27 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
     }
 
+    private PlatformReleaseConfig releaseConfig() {
+        if (platformReleaseConfig == null) {
+            final PlatformReleaseConfig tmp = platformConfig.platformRelease == null ? new PlatformReleaseConfig()
+                    : platformConfig.platformRelease;
+            if (tmp.getPlatformKey() == null) {
+                tmp.setPlatformKey(project.getGroupId());
+            }
+            if (tmp.getStream() == null || tmp.getVersion() == null) {
+                final int lastDot = project.getVersion().lastIndexOf('.');
+                if (tmp.getStream() == null) {
+                    tmp.setStream(lastDot < 0 ? project.getVersion() : project.getVersion().substring(0, lastDot));
+                }
+                if (tmp.getVersion() == null) {
+                    tmp.setVersion(lastDot < 0 ? "0" : project.getVersion().substring(lastDot + 1));
+                }
+            }
+            platformReleaseConfig = tmp;
+        }
+        return platformReleaseConfig;
+    }
+
     private void resetResolver() {
         mavenResolver = null;
         artifactResolver = null;
@@ -1335,7 +1394,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         return new DefaultArtifact(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getType(), a.getVersion());
     }
 
-    private void persistPom(final Model pom) throws MojoExecutionException {
+    private static void persistPom(final Model pom) throws MojoExecutionException {
         try {
             pom.getPomFile().getParentFile().mkdirs();
             ModelUtils.persistModel(pom.getPomFile().toPath(), pom);
