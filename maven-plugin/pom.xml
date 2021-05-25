@@ -10,7 +10,7 @@
     <name>Quarkus - Platform BOM Tools - Maven plugin</name>
     <packaging>maven-plugin</packaging>
     <properties>
-        <version.maven-plugin-plugin>3.5.2</version.maven-plugin-plugin>
+        <version.maven-plugin-plugin>3.6.1</version.maven-plugin-plugin>
     </properties>
     <build>
         <plugins>

@@ -210,6 +210,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             persistPom(member.baseModel);
         }
 
+        if (platformConfig.attachedMavenPlugin != null) {
+            generateMavenPluginModule(pom);
+        }
+
         persistPom(pom);
 
         if (isBumpVersions()) {
@@ -299,6 +303,53 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         } catch (Exception e) {
             throw new MojoExecutionException("Failed to generate platform member BOM reports", e);
         }
+    }
+
+    private void generateMavenPluginModule(Model parentPom) throws MojoExecutionException {
+        final ArtifactCoords targetCoords = ArtifactCoords
+                .fromString(platformConfig.attachedMavenPlugin.getTargetPluginCoords());
+
+        final String moduleName = targetCoords.getArtifactId();
+        final Model pom = new Model();
+        pom.setModelVersion("4.0.0");
+        pom.setArtifactId(moduleName);
+        pom.setPackaging("maven-plugin");
+        pom.setName(getNameBase(parentPom) + " " + artifactIdToName(targetCoords.getArtifactId()));
+        parentPom.addModule(moduleName);
+
+        final File pomXml = new File(new File(parentPom.getProjectDirectory(), moduleName), "pom.xml");
+        pom.setPomFile(pomXml);
+
+        final Parent parent = new Parent();
+        parent.setGroupId(ModelUtils.getGroupId(parentPom));
+        parent.setArtifactId(parentPom.getArtifactId());
+        parent.setVersion(ModelUtils.getVersion(parentPom));
+        parent.setRelativePath(pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
+        pom.setParent(parent);
+
+        final Build build = new Build();
+        pom.setBuild(build);
+        final Plugin plugin = new Plugin();
+        build.addPlugin(plugin);
+        plugin.setGroupId(pluginDescriptor().getGroupId());
+        plugin.setArtifactId(pluginDescriptor().getArtifactId());
+        final PluginExecution exec = new PluginExecution();
+        plugin.addExecution(exec);
+        exec.setPhase("generate-resources");
+        exec.addGoal("attach-maven-plugin");
+
+        final Xpp3Dom config = new Xpp3Dom("configuration");
+        exec.setConfiguration(config);
+
+        Xpp3Dom e = new Xpp3Dom("originalPluginCoords");
+        e.setValue(platformConfig.attachedMavenPlugin.getOriginalPluginCoords());
+        config.addChild(e);
+
+        e = new Xpp3Dom("targetPluginCoords");
+        e.setValue(platformConfig.attachedMavenPlugin.getTargetPluginCoords());
+        config.addChild(e);
+
+        persistPom(pom);
     }
 
     private void generateMemberModule(PlatformMember member, Model parentPom) throws MojoExecutionException {
@@ -423,13 +474,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final DependencyManagement dm = new DependencyManagement();
         pom.setDependencyManagement(dm);
 
-        Dependency bomDep = new Dependency();
-        final Artifact bom = getMainBomArtifact();
-        bomDep.setGroupId(bom.getGroupId());
-        bomDep.setArtifactId(bom.getArtifactId());
-        bomDep.setVersion(bom.getVersion());
-        bomDep.setType("pom");
-        bomDep.setScope("import");
+        Dependency bomDep = getMainBomImport();
         dm.addDependency(bomDep);
 
         bomDep = new Dependency();
@@ -501,6 +546,17 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         skipInstall(pom);
         persistPom(pom);
+    }
+
+    private Dependency getMainBomImport() {
+        Dependency bomDep = new Dependency();
+        final Artifact bom = getMainBomArtifact();
+        bomDep.setGroupId(bom.getGroupId());
+        bomDep.setArtifactId(bom.getArtifactId());
+        bomDep.setVersion(bom.getVersion());
+        bomDep.setType("pom");
+        bomDep.setScope("import");
+        return bomDep;
     }
 
     private void generateIntegrationTestModule(ArtifactCoords testArtifact, PlatformMemberTestConfig testConfig,
