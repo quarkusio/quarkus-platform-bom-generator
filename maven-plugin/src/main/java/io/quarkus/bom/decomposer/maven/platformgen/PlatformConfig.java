@@ -25,4 +25,6 @@ public class PlatformConfig {
     PlatformBomGeneratorConfig bomGenerator;
 
     PlatformDescriptorGeneratorConfig descriptorGenerator;
+
+    AttachedMavenPluginConfig attachedMavenPlugin;
 }

@@ -99,7 +99,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
     private List<RemoteRepository> repos;
 
-    @Component
+    @Parameter(defaultValue = "${project}", readonly = true)
     private MavenProject project;
     @Component
     private MavenProjectHelper projectHelper;
