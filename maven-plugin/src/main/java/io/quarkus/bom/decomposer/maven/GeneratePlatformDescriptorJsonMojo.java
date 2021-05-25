@@ -2,7 +2,7 @@ package io.quarkus.bom.decomposer.maven;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import io.quarkus.bom.decomposer.maven.platformgen.PlatformReleaseConfig;
+import io.quarkus.bom.decomposer.maven.platformgen.PlatformReleaseWithMembersConfig;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
@@ -108,7 +108,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
      * Platform stack info
      */
     @Parameter(required = false)
-    PlatformReleaseConfig platformRelease;
+    PlatformReleaseWithMembersConfig platformRelease;
 
     /**
      * A set of artifact group ID's that should be excluded from of the BOM and the descriptor.
