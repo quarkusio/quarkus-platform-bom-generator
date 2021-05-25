@@ -911,43 +911,54 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
         }
 
-        String overridesFile = null;
+        Path overridesFile = null;
         if (descriptorCoords.getArtifactId().equals("quarkus-bom-quarkus-platform-descriptor")) {
             // copy the quarkus-bom metadata
-            JsonNode metadata = null;
+            final ObjectNode overrides = JsonCatalogMapperHelper.mapper().createObjectNode();
             final Artifact bom = quarkusCore.originalBomCoords();
             final Path jsonPath = artifactResolver().resolve(new DefaultArtifact(bom.getGroupId(),
                     bom.getArtifactId() + Constants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX, bom.getVersion(), "json",
                     bom.getVersion())).getArtifact().getFile().toPath();
             try (BufferedReader reader = Files.newBufferedReader(jsonPath)) {
-                JsonNode node = JsonCatalogMapperHelper.mapper().readTree(reader);
-                metadata = node.get("metadata");
+                final JsonNode node = JsonCatalogMapperHelper.mapper().readTree(reader);
+                final JsonNode metadata = node.get("metadata");
+                if (metadata != null) {
+                    overrides.set("metadata", metadata);
+                }
+                final JsonNode categories = node.get("categories");
+                if (categories != null) {
+                    overrides.set("categories", categories);
+                }
             } catch (IOException e1) {
                 throw new MojoExecutionException("Failed to deserialize " + jsonPath, e1);
             }
-            if (metadata != null) {
+            if (overrides != null) {
                 final Path overridesJson = moduleDir.resolve("src").resolve("main").resolve("resources")
-                        .resolve("metadata.json");
-                final ObjectNode root = JsonCatalogMapperHelper.mapper().createObjectNode();
-                root.set("metadata", metadata);
+                        .resolve("overrides.json");
                 try {
-                    JsonCatalogMapperHelper.serialize(root, overridesJson);
+                    JsonCatalogMapperHelper.serialize(overrides, overridesJson);
                 } catch (Exception ex) {
                     throw new MojoExecutionException("Failed to serialize metadata to " + overridesJson, ex);
                 }
-                overridesFile = overridesJson.toString();
+                overridesFile = overridesJson;
             }
         }
 
         if (overridesFile != null
                 || platformConfig.descriptorGenerator != null && platformConfig.descriptorGenerator.overridesFile != null) {
             e = new Xpp3Dom("overridesFile");
-            if (overridesFile == null) {
-                overridesFile = platformConfig.descriptorGenerator.overridesFile;
-            } else if (platformConfig.descriptorGenerator.overridesFile != null) {
-                overridesFile += "," + platformConfig.descriptorGenerator.overridesFile;
+            final StringBuilder buf = new StringBuilder();
+            if (overridesFile != null) {
+                buf.append("${project.basedir}/").append(moduleDir.relativize(overridesFile));
             }
-            e.setValue(overridesFile);
+            if (platformConfig.descriptorGenerator.overridesFile != null) {
+                if (buf.length() > 0) {
+                    buf.append(",");
+                }
+                buf.append("${project.basedir}/")
+                        .append(moduleDir.relativize(Paths.get(platformConfig.descriptorGenerator.overridesFile)).toString());
+            }
+            e.setValue(buf.toString());
             config.addChild(e);
         }
         if (platformConfig.descriptorGenerator != null && platformConfig.descriptorGenerator.skipCategoryCheck) {
