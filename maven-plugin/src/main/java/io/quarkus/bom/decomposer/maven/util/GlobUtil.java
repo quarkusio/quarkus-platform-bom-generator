@@ -11,52 +11,18 @@ public class GlobUtil {
      * Transforms the given {@code glob} to a regular expression suitable for passing to
      * {@link Pattern#compile(String)}.
      *
-     * <h2>Glob syntax
-     * <h2>
-     *
-     * <table>
-     * <tr>
-     * <th>Construct</th>
-     * <th>Description</th>
-     * </tr>
-     * <tr>
-     * <td><code>*</code></td>
-     * <td>Matches a (possibly empty) sequence of characters that does not contain slash ({@code /})</td>
-     * </tr>
-     * <tr>
-     * <td><code>**</code></td>
-     * <td>Matches a (possibly empty) sequence of characters that may contain slash ({@code /})</td>
-     * </tr>
-     * <tr>
-     * <td><code>?</code></td>
-     * <td>Matches one character, but not slash</td>
-     * </tr>
-     * <tr>
-     * <td><code>[abc]</code></td>
-     * <td>Matches one character given in the bracket, but not slash</td>
-     * </tr>
-     * <tr>
-     * <td><code>[a-z]</code></td>
-     * <td>Matches one character from the range given in the bracket, but not slash</td>
-     * </tr>
-     * <tr>
-     * <td><code>[!abc]</code></td>
-     * <td>Matches one character not named in the bracket; does not match slash</td>
-     * </tr>
-     * <tr>
-     * <td><code>[a-z]</code></td>
-     * <td>Matches one character outside the range given in the bracket; does not match slash</td>
-     * </tr>
-     * <tr>
-     * <td><code>{one,two,three}</code></td>
-     * <td>Matches any of the alternating tokens separated by comma; the tokens may contain wildcards, nested
-     * alternations and ranges</td>
-     * </tr>
-     * <tr>
-     * <td><code>\</code></td>
-     * <td>The escape character</td>
-     * </tr>
-     * </table>
+     * <ul>
+     * <li><code>*</code> Matches a (possibly empty) sequence of characters that does not contain slash ({@code /})</li>
+     * <li><code>**</code> Matches a (possibly empty) sequence of characters that may contain slash ({@code /})</li>
+     * <li><code>?</code> Matches one character, but not slash</li>
+     * <li><code>[abc]</code> Matches one character given in the bracket, but not slash</li>
+     * <li><code>[a-z]</code> Matches one character from the range given in the bracket, but not slash</li>
+     * <li><code>[!abc]</code> Matches one character not named in the bracket; does not match slash</li>
+     * <li><code>[a-z]</code> Matches one character outside the range given in the bracket; does not match slash</li>
+     * <li><code>{one,two,three}</code> Matches any of the alternating tokens separated by comma; the tokens may contain
+     * wildcards, nested alternations and ranges</li>
+     * <li><code>\</code> The escape character</li>
+     * </ul>
      *
      * @param glob the glob expression to transform
      * @return a regular expression suitable for {@link Pattern}
