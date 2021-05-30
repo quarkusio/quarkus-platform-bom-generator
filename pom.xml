@@ -36,6 +36,8 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.target>1.8</maven.compiler.target>
     <maven.compiler.source>1.8</maven.compiler.source>
+
+    <java-ordered-properties.version>1.0.4</java-ordered-properties.version>
     <maven-core.version>3.8.1</maven-core.version>
     <maven-gpg-plugin.version>1.6</maven-gpg-plugin.version>
     <maven-javadoc-plugin.version>3.1.1</maven-javadoc-plugin.version>
@@ -77,6 +79,11 @@
         <groupId>io.quarkus</groupId>
         <artifactId>quarkus-bootstrap-maven-resolver</artifactId>
         <version>${quarkus.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>nu.studer</groupId>
+        <artifactId>java-ordered-properties</artifactId>
+        <version>${java-ordered-properties.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
