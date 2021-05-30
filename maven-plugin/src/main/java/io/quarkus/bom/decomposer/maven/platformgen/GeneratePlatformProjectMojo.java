@@ -395,13 +395,22 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             pm = new PluginManagement();
             build.setPluginManagement(pm);
         }
-        final Plugin plugin = new Plugin();
+        Plugin plugin = new Plugin();
         pm.addPlugin(plugin);
         plugin.setGroupId("org.apache.maven.plugins");
         plugin.setArtifactId("maven-install-plugin");
-        final PluginExecution e = new PluginExecution();
+        PluginExecution e = new PluginExecution();
         plugin.addExecution(e);
         e.setId("default-install");
+        e.setPhase("none");
+
+        plugin = new Plugin();
+        pm.addPlugin(plugin);
+        plugin.setGroupId("org.apache.maven.plugins");
+        plugin.setArtifactId("maven-deploy-plugin");
+        e = new PluginExecution();
+        plugin.addExecution(e);
+        e.setId("default-deploy");
         e.setPhase("none");
     }
 
