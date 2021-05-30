@@ -46,7 +46,6 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.Set;
 import javax.xml.transform.Result;
 import javax.xml.transform.Source;
@@ -55,6 +54,7 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.TransformerFactoryConfigurationError;
 import javax.xml.transform.stream.StreamResult;
 import javax.xml.transform.stream.StreamSource;
+import nu.studer.java.util.OrderedProperties;
 import nu.xom.Builder;
 import nu.xom.Document;
 import nu.xom.Element;
@@ -1105,7 +1105,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         exec.addGoal("platform-properties");
 
         final Xpp3Dom config = new Xpp3Dom("configuration");
-        final Properties props = new Properties();
+        final OrderedProperties props = new OrderedProperties.OrderedPropertiesBuilder()
+                .withOrdering(String.CASE_INSENSITIVE_ORDER).withSuppressDateInComment(true).build();
 
         if (addPlatformReleaseConfig) {
             final Xpp3Dom stackConfig = new Xpp3Dom("platformRelease");
