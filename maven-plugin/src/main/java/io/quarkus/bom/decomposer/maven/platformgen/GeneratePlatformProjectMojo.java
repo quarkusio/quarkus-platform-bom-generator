@@ -984,19 +984,32 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             final Path jsonPath = artifactResolver().resolve(new DefaultArtifact(bom.getGroupId(),
                     bom.getArtifactId() + Constants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX, bom.getVersion(), "json",
                     bom.getVersion())).getArtifact().getFile().toPath();
+            final JsonNode node;
             try (BufferedReader reader = Files.newBufferedReader(jsonPath)) {
-                final JsonNode node = JsonCatalogMapperHelper.mapper().readTree(reader);
-                final JsonNode metadata = node.get("metadata");
-                if (metadata != null) {
-                    overrides.set("metadata", metadata);
-                }
-                final JsonNode categories = node.get("categories");
-                if (categories != null) {
-                    overrides.set("categories", categories);
-                }
+                node = JsonCatalogMapperHelper.mapper().readTree(reader);
             } catch (IOException e1) {
                 throw new MojoExecutionException("Failed to deserialize " + jsonPath, e1);
             }
+            final JsonNode metadata = node.get("metadata");
+            if (metadata != null) {
+                if (platformConfig.attachedMavenPlugin != null) {
+                    JsonNode props = metadata.get("project");
+                    if (props != null) {
+                        props = props.get("properties");
+                        if (props != null) {
+                            final ObjectNode jo = (ObjectNode) props;
+                            jo.replace("maven-plugin-groupId", jo.textNode(quarkusCore.generatedBomCoords().getGroupId()));
+                            jo.replace("maven-plugin-version", jo.textNode(quarkusCore.generatedBomCoords().getVersion()));
+                        }
+                    }
+                }
+                overrides.set("metadata", metadata);
+            }
+            final JsonNode categories = node.get("categories");
+            if (categories != null) {
+                overrides.set("categories", categories);
+            }
+
             if (overrides != null) {
                 final Path overridesJson = moduleDir.resolve("src").resolve("main").resolve("resources")
                         .resolve("overrides.json");
