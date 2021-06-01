@@ -388,6 +388,11 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private static void skipInstall(final Model pom) {
+        disablePlugin(pom, "maven-install-plugin", "default-install");
+        disablePlugin(pom, "maven-deploy-plugin", "default-deploy");
+    }
+
+    private static void disablePlugin(Model pom, String pluginArtifactId, String execId) {
         Build build = pom.getBuild();
         if (build == null) {
             build = new Build();
@@ -401,19 +406,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         Plugin plugin = new Plugin();
         pm.addPlugin(plugin);
         plugin.setGroupId("org.apache.maven.plugins");
-        plugin.setArtifactId("maven-install-plugin");
+        plugin.setArtifactId(pluginArtifactId);
         PluginExecution e = new PluginExecution();
         plugin.addExecution(e);
-        e.setId("default-install");
-        e.setPhase("none");
-
-        plugin = new Plugin();
-        pm.addPlugin(plugin);
-        plugin.setGroupId("org.apache.maven.plugins");
-        plugin.setArtifactId("maven-deploy-plugin");
-        e = new PluginExecution();
-        plugin.addExecution(e);
-        e.setId("default-deploy");
+        e.setId(execId);
         e.setPhase("none");
     }
 
@@ -550,9 +546,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             if (member.config.getDefaultTestConfig() != null) {
                 testConfig.applyDefaults(member.config.getDefaultTestConfig());
             }
-            if (!testConfig.isEnabled()) {
-                continue;
-            }
             generateIntegrationTestModule(test.getKey(), testConfig, pom);
         }
 
@@ -596,6 +589,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         if (!testConfig.getPomProperties().isEmpty()) {
             pom.setProperties(testConfig.getPomProperties());
         }
+        if (!testConfig.isEnabled()) {
+            pom.getProperties().setProperty("maven.test.skip", "true");
+        }
 
         final String testArtifactVersion = getTestArtifactVersion(testArtifact);
 
@@ -636,7 +632,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 Plugin plugin = new Plugin();
                 build.addPlugin(plugin);
                 plugin.setGroupId("org.apache.maven.plugins");
-                plugin.setArtifactId(testConfig.isMavenFailsafePlugin() ? "maven-failsafe-plugin" : "maven-surefire-plugin");
+                plugin.setArtifactId("maven-surefire-plugin");
 
                 Xpp3Dom config = new Xpp3Dom("configuration");
                 plugin.setConfiguration(config);
@@ -738,11 +734,18 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
             Xpp3Dom config = new Xpp3Dom("configuration");
             exec.setConfiguration(config);
+            if (!testConfig.isEnabled()) {
+                Xpp3Dom skip = new Xpp3Dom("skip");
+                config.addChild(skip);
+                skip.setValue("true");
+            }
             final Xpp3Dom appArtifact = new Xpp3Dom("appArtifact");
             config.addChild(appArtifact);
             appArtifact.setValue(testArtifact.toString());
         }
 
+        disablePlugin(pom, "maven-jar-plugin", "default-jar");
+        disablePlugin(pom, "maven-source-plugin", "attach-sources");
         persistPom(pom);
 
         if (testConfig.getTransformWith() != null) {
