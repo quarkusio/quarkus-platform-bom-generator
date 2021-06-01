@@ -657,33 +657,48 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             try {
                 for (org.eclipse.aether.graph.Dependency d : nonWorkspaceResolver()
                         .resolveDescriptor(toPomArtifact(testArtifact)).getDependencies()) {
-                    if (d.getScope().equals("test")) {
-                        final Artifact a = d.getArtifact();
-                        final Dependency modelDep = new Dependency();
-                        modelDep.setGroupId(a.getGroupId());
-                        modelDep.setArtifactId(a.getArtifactId());
-                        if (!a.getClassifier().isEmpty()) {
-                            modelDep.setClassifier(a.getClassifier());
-                        }
-                        modelDep.setType(a.getExtension());
-                        if (!mainBomDepKeys.contains(
-                                new AppArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension()))) {
-                            modelDep.setVersion(a.getVersion());
-                        }
-                        modelDep.setScope(d.getScope());
-                        if (d.getOptional() != null) {
-                            modelDep.setOptional(d.getOptional());
-                        }
-                        if (!d.getExclusions().isEmpty()) {
-                            for (org.eclipse.aether.graph.Exclusion e : d.getExclusions()) {
-                                final Exclusion modelEx = new Exclusion();
-                                modelEx.setGroupId(e.getGroupId());
-                                modelEx.setArtifactId(e.getArtifactId());
-                                modelDep.addExclusion(modelEx);
+                    if (!d.getScope().equals("test")) {
+                        continue;
+                    }
+                    final Artifact a = d.getArtifact();
+                    // filter out pom dependencies with *:* exclusions
+                    if ("pom".equals(a.getExtension()) && !d.getExclusions().isEmpty()) {
+                        boolean skip = false;
+                        for (org.eclipse.aether.graph.Exclusion e : d.getExclusions()) {
+                            if ("*".equals(e.getGroupId()) && "*".equals(e.getArtifactId())) {
+                                skip = true;
+                                break;
                             }
                         }
-                        pom.addDependency(modelDep);
+                        if (skip) {
+                            continue;
+                        }
                     }
+
+                    final Dependency modelDep = new Dependency();
+                    modelDep.setGroupId(a.getGroupId());
+                    modelDep.setArtifactId(a.getArtifactId());
+                    if (!a.getClassifier().isEmpty()) {
+                        modelDep.setClassifier(a.getClassifier());
+                    }
+                    modelDep.setType(a.getExtension());
+                    if (!mainBomDepKeys.contains(
+                            new AppArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension()))) {
+                        modelDep.setVersion(a.getVersion());
+                    }
+                    modelDep.setScope(d.getScope());
+                    if (d.getOptional() != null) {
+                        modelDep.setOptional(d.getOptional());
+                    }
+                    if (!d.getExclusions().isEmpty()) {
+                        for (org.eclipse.aether.graph.Exclusion e : d.getExclusions()) {
+                            final Exclusion modelEx = new Exclusion();
+                            modelEx.setGroupId(e.getGroupId());
+                            modelEx.setArtifactId(e.getArtifactId());
+                            modelDep.addExclusion(modelEx);
+                        }
+                    }
+                    pom.addDependency(modelDep);
                 }
             } catch (Exception e) {
                 throw new MojoExecutionException("Failed to describe " + testArtifact, e);
