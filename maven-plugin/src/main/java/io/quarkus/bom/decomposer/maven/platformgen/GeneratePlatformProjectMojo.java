@@ -148,6 +148,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
     private TransformerFactory transformerFactory;
 
+    // POM property names by values
+    private Map<String, String> pomPropsByValues = new HashMap<>();
+
     private boolean isBumpVersions() {
         // TODO should be checking deploy instead
         return bumpVersions == null ? bumpVersions = session.getRequest().getGoals().contains("install") : bumpVersions;
@@ -594,6 +597,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             pom.setProperties(testConfig.getPomProperties());
         }
 
+        final String testArtifactVersion = getTestArtifactVersion(testArtifact);
+
         Dependency dep = new Dependency();
         dep.setGroupId(testArtifact.getGroupId());
         dep.setArtifactId(testArtifact.getArtifactId());
@@ -601,7 +606,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             dep.setClassifier(testArtifact.getClassifier());
         }
         dep.setType(testArtifact.getType());
-        dep.setVersion(testArtifact.getVersion());
+        dep.setVersion(testArtifactVersion);
         pom.addDependency(dep);
 
         dep = new Dependency();
@@ -609,7 +614,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         dep.setArtifactId(testArtifact.getArtifactId());
         dep.setClassifier("tests");
         dep.setType("test-jar");
-        dep.setVersion(testArtifact.getVersion());
+        dep.setVersion(testArtifactVersion);
         dep.setScope("test");
         pom.addDependency(dep);
 
@@ -778,6 +783,71 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         } catch (IOException e) {
             throw new MojoExecutionException("Failed to create file " + seed, e);
         }
+    }
+
+    /**
+     * Returns either a property expression that should be used in place of the actual artifact version
+     * or the actual artifact version, in case no property was found that could represent the version
+     * 
+     * @param testArtifact test artifact coords
+     * @return property expression or the actual version
+     * @throws MojoExecutionException in case of a failure
+     */
+    private String getTestArtifactVersion(ArtifactCoords testArtifact) throws MojoExecutionException {
+        if (pomPropsByValues.isEmpty()) {
+            for (Map.Entry<?, ?> prop : project.getOriginalModel().getProperties().entrySet()) {
+                final String name = prop.getKey().toString();
+                final String value = prop.getValue().toString();
+                final String previous = pomPropsByValues.putIfAbsent(value, name);
+                if (previous != null) {
+                    final String groupId = getTestArtifactGroupIdForProperty(name);
+                    if (groupId == null) {
+                        continue;
+                    }
+                    if (previous.isEmpty()) {
+                        pomPropsByValues.putIfAbsent(groupId + ":" + value, name);
+                        continue;
+                    }
+                    final String previousGroupId = getTestArtifactGroupIdForProperty(previous);
+                    if (previousGroupId == null) {
+                        pomPropsByValues.putIfAbsent(value, name);
+                    }
+
+                    pomPropsByValues.put(value, "");
+                    pomPropsByValues.put(previousGroupId + ":" + value, previous);
+                    pomPropsByValues.putIfAbsent(groupId + ":" + value, name);
+                }
+            }
+        }
+        String versionProp = pomPropsByValues.get(testArtifact.getVersion());
+        if (versionProp == null) {
+            return testArtifact.getVersion();
+        }
+        if (versionProp.isEmpty()) {
+            versionProp = pomPropsByValues.get(testArtifact.getGroupId() + ":" + testArtifact.getVersion());
+        }
+        return "${" + versionProp + "}";
+    }
+
+    private String getTestArtifactGroupIdForProperty(final String versionProperty)
+            throws MojoExecutionException {
+        for (String s : pomLines()) {
+            int coordsEnd = s.indexOf(versionProperty);
+            if (coordsEnd < 0) {
+                continue;
+            }
+            coordsEnd = s.indexOf("</artifact>", coordsEnd);
+            if (coordsEnd < 0) {
+                continue;
+            }
+            int coordsStart = s.indexOf("<artifact>");
+            if (coordsStart < 0) {
+                continue;
+            }
+            coordsStart += "<artifact>".length();
+            return ArtifactCoords.fromString(s.substring(coordsStart, coordsEnd)).getGroupId();
+        }
+        return null;
     }
 
     private void addDependencies(final Model pom, List<String> dependencies, boolean test) {
