@@ -7,9 +7,9 @@ import java.util.Properties;
 
 public class PlatformMemberDefaultTestConfig {
 
-    protected Boolean enabled;
-    protected Boolean nativeEnabled;
-    protected Boolean jvmEnabled;
+    protected Boolean skip;
+    protected Boolean skipNative;
+    protected Boolean skipJvm;
     protected Boolean failsafeMavenPlugin;
     protected String transformWith;
     protected Map<String, String> systemProperties = Collections.emptyMap();
@@ -25,28 +25,28 @@ public class PlatformMemberDefaultTestConfig {
         super();
     }
 
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
+    public void setSkip(boolean skip) {
+        this.skip = skip;
     }
 
-    public boolean isEnabled() {
-        return enabled == null ? true : enabled;
+    public boolean isSkip() {
+        return skip == null ? false : skip;
     }
 
-    public void setNativeEnabled(boolean enabled) {
-        this.nativeEnabled = enabled;
+    public void setSkipNative(boolean skip) {
+        this.skipNative = skip;
     }
 
-    public boolean isNativeEnabled() {
-        return nativeEnabled == null ? true : nativeEnabled;
+    public boolean isSkipNative() {
+        return skipNative == null ? false : skipNative;
     }
 
-    public void setJvmEnabled(boolean enabled) {
-        this.jvmEnabled = enabled;
+    public void setSkipJvm(boolean skip) {
+        this.skipJvm = skip;
     }
 
-    public boolean isJvmEnabled() {
-        return jvmEnabled == null ? true : jvmEnabled;
+    public boolean isSkipJvm() {
+        return skipJvm == null ? false : skipJvm;
     }
 
     public void setMavenFailsafePlugin(boolean failsafeMavenPlugin) {

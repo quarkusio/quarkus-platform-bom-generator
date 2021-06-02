@@ -4,8 +4,8 @@ import java.util.Map;
 
 public class PlatformMemberTestConfig extends PlatformMemberDefaultTestConfig {
 
-    private PlatformMemberDefaultTestConfig defaults;
     private String artifact;
+    private boolean excluded;
 
     public void setArtifact(String artifact) {
         this.artifact = artifact;
@@ -15,16 +15,23 @@ public class PlatformMemberTestConfig extends PlatformMemberDefaultTestConfig {
         return artifact;
     }
 
+    public void setExcluded(boolean excluded) {
+        this.excluded = excluded;
+    }
+
+    public boolean isExcluded() {
+        return excluded;
+    }
+
     void applyDefaults(PlatformMemberDefaultTestConfig defaults) {
-        this.defaults = defaults;
-        if (enabled == null) {
-            enabled = defaults.enabled;
+        if (skip == null) {
+            skip = defaults.skip;
         }
-        if (nativeEnabled == null) {
-            nativeEnabled = defaults.nativeEnabled;
+        if (skipNative == null) {
+            skipNative = defaults.skipNative;
         }
-        if (jvmEnabled == null) {
-            jvmEnabled = defaults.jvmEnabled;
+        if (skipJvm == null) {
+            skipJvm = defaults.skipJvm;
         }
         if (failsafeMavenPlugin == null) {
             failsafeMavenPlugin = defaults.failsafeMavenPlugin;
