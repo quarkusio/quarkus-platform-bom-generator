@@ -546,7 +546,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             if (member.config.getDefaultTestConfig() != null) {
                 testConfig.applyDefaults(member.config.getDefaultTestConfig());
             }
-            generateIntegrationTestModule(test.getKey(), testConfig, pom);
+            if (!testConfig.isExcluded()) {
+                generateIntegrationTestModule(test.getKey(), testConfig, pom);
+            }
         }
 
         skipInstall(pom);
@@ -564,7 +566,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         return bomDep;
     }
 
-    private void generateIntegrationTestModule(ArtifactCoords testArtifact, PlatformMemberTestConfig testConfig,
+    private void generateIntegrationTestModule(ArtifactCoords testArtifact,
+            PlatformMemberTestConfig testConfig,
             Model parentPom)
             throws MojoExecutionException {
         final String moduleName = testArtifact.getArtifactId();
@@ -589,11 +592,11 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         if (!testConfig.getPomProperties().isEmpty()) {
             pom.setProperties(testConfig.getPomProperties());
         }
-        if (!testConfig.isEnabled()) {
+        if (testConfig.isSkip()) {
             pom.getProperties().setProperty("maven.test.skip", "true");
         }
 
-        final String testArtifactVersion = getTestArtifactVersion(testArtifact);
+        final String testArtifactVersion = getTestArtifactVersion(testArtifact.getGroupId(), testArtifact.getVersion());
 
         Dependency dep = new Dependency();
         dep.setGroupId(testArtifact.getGroupId());
@@ -622,7 +625,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         depsToScan.addChild(testDep);
         testDep.setValue(testArtifact.getGroupId() + ":" + testArtifact.getArtifactId());
 
-        if (testConfig.isJvmEnabled()) {
+        if (!testConfig.isSkipJvm()) {
             final Build build = new Build();
             pom.setBuild(build);
 
@@ -685,7 +688,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                     modelDep.setType(a.getExtension());
                     if (!mainBomDepKeys.contains(
                             new AppArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension()))) {
-                        modelDep.setVersion(a.getVersion());
+                        modelDep.setVersion(getTestArtifactVersion(a.getGroupId(), a.getVersion()));
                     }
                     modelDep.setScope(d.getScope());
                     if (d.getOptional() != null) {
@@ -707,7 +710,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         // NATIVE
-        if (testConfig.isNativeEnabled()) {
+        if (!testConfig.isSkipNative()) {
             final Profile profile = new Profile();
             pom.addProfile(profile);
             profile.setId("native-image");
@@ -726,7 +729,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             buildBase.addPlugin(plugin);
             plugin.setGroupId("io.quarkus");
             plugin.setArtifactId("quarkus-maven-plugin");
-            plugin.setVersion(quarkusCoreVersion());
+            plugin.setVersion(quarkusCore.getVersionProperty());
             PluginExecution exec = new PluginExecution();
             plugin.addExecution(exec);
             exec.setId("native-image");
@@ -734,14 +737,14 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
             Xpp3Dom config = new Xpp3Dom("configuration");
             exec.setConfiguration(config);
-            if (!testConfig.isEnabled()) {
+            if (testConfig.isSkip()) {
                 Xpp3Dom skip = new Xpp3Dom("skip");
                 config.addChild(skip);
                 skip.setValue("true");
             }
             final Xpp3Dom appArtifact = new Xpp3Dom("appArtifact");
             config.addChild(appArtifact);
-            appArtifact.setValue(testArtifact.toString());
+            appArtifact.setValue(testArtifact.getGroupId() + ":" + testArtifact.getArtifactId() + ":" + testArtifactVersion);
         }
 
         disablePlugin(pom, "maven-jar-plugin", "default-jar");
@@ -796,7 +799,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
      * @return property expression or the actual version
      * @throws MojoExecutionException in case of a failure
      */
-    private String getTestArtifactVersion(ArtifactCoords testArtifact) throws MojoExecutionException {
+    private String getTestArtifactVersion(String artifactGroupId, String version) throws MojoExecutionException {
         if (pomPropsByValues.isEmpty()) {
             for (Map.Entry<?, ?> prop : project.getOriginalModel().getProperties().entrySet()) {
                 final String name = prop.getKey().toString();
@@ -822,12 +825,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 }
             }
         }
-        String versionProp = pomPropsByValues.get(testArtifact.getVersion());
+        String versionProp = pomPropsByValues.get(version);
         if (versionProp == null) {
-            return testArtifact.getVersion();
+            return version;
         }
         if (versionProp.isEmpty()) {
-            versionProp = pomPropsByValues.get(testArtifact.getGroupId() + ":" + testArtifact.getVersion());
+            versionProp = pomPropsByValues.get(artifactGroupId + ":" + version);
         }
         return "${" + versionProp + "}";
     }
@@ -1469,6 +1472,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         private DecomposedBom generatedBom;
         private Model generatedBomModel;
         private Path generatedPomFile;
+        private String versionProperty;
 
         PlatformMember(PlatformMemberConfig config) {
             this.config = config;
@@ -1552,6 +1556,23 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                             generatedBomCoords().getArtifactId() + BootstrapConstants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX,
                             null, "properties", generatedBomCoords().getVersion())
                     : propertiesCoords;
+        }
+
+        String getVersionProperty() throws MojoExecutionException {
+            if (versionProperty == null) {
+                final Artifact quarkusBom = quarkusCore.originalBomCoords();
+                versionProperty = getTestArtifactVersion(quarkusBom.getGroupId(), quarkusBom.getVersion());
+                if (versionProperty.equals(quarkusBom.getVersion())) {
+                    final String ga = quarkusBom.getGroupId() + ":" + quarkusBom.getArtifactId() + ":";
+                    for (String l : pomLines()) {
+                        if (l.startsWith(ga)) {
+                            versionProperty = ArtifactCoords.fromString(l).getVersion();
+                            break;
+                        }
+                    }
+                }
+            }
+            return versionProperty;
         }
     }
 
