@@ -34,11 +34,19 @@ public class BuildPlatformProjectMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project}")
     protected MavenProject project;
 
+    @Parameter
+    boolean skip;
+
     @Component
     private Invoker invoker;
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
+
+        if (skip) {
+            getLog().info("Skipping generated platform project invoker");
+            return;
+        }
 
         final InvocationRequest request = new DefaultInvocationRequest();
         request.setPomFile(new File(outputDir, "pom.xml"));
@@ -46,6 +54,7 @@ public class BuildPlatformProjectMojo extends AbstractMojo {
         request.setShowErrors(mavenSession.getRequest().isShowErrors());
         request.setShellEnvironmentInherited(true);
         request.setBatchMode(true);
+        request.setLocalRepositoryDirectory(mavenSession.getRequest().getLocalRepositoryPath());
 
         final String reactorFailureBehavior = mavenSession.getReactorFailureBehavior();
         if (reactorFailureBehavior != null) {
