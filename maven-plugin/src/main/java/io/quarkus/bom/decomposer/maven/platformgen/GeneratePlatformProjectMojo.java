@@ -1471,12 +1471,18 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 tmp.setPlatformKey(project.getGroupId());
             }
             if (tmp.getStream() == null || tmp.getVersion() == null) {
-                final int lastDot = project.getVersion().lastIndexOf('.');
+                final String projectVersion = project.getVersion();
+                int microDot = projectVersion.lastIndexOf('.');
+                int microEnd = projectVersion.length();
+                while (microDot > 0 && !Character.isDigit(projectVersion.charAt(microDot + 1))) {
+                    microEnd = microDot;
+                    microDot = projectVersion.lastIndexOf('.', microDot - 1);
+                }
                 if (tmp.getStream() == null) {
-                    tmp.setStream(lastDot < 0 ? project.getVersion() : project.getVersion().substring(0, lastDot));
+                    tmp.setStream(microDot < 0 ? projectVersion : projectVersion.substring(0, microDot));
                 }
                 if (tmp.getVersion() == null) {
-                    tmp.setVersion(lastDot < 0 ? "0" : project.getVersion().substring(lastDot + 1));
+                    tmp.setVersion(microDot < 0 ? "0" : projectVersion.substring(microDot + 1, microEnd));
                 }
             }
             platformReleaseConfig = tmp;
