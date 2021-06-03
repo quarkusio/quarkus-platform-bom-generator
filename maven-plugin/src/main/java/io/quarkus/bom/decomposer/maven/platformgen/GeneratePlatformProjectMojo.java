@@ -99,6 +99,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     private static final String PLATFORM_KEY_PROP = "platform.key";
     private static final String PLATFORM_STREAM_PROP = "platform.stream";
     private static final String PLATFORM_RELEASE_PROP = "platform.release";
+    private static final String MAIN_BOM_VERSION_PROP = "main.bom.version";
 
     @Component
     private RepositorySystem repoSystem;
@@ -200,6 +201,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         pom.getProperties().setProperty(PLATFORM_KEY_PROP, releaseConfig().getPlatformKey());
         pom.getProperties().setProperty(PLATFORM_STREAM_PROP, releaseConfig().getStream());
         pom.getProperties().setProperty(PLATFORM_RELEASE_PROP, releaseConfig().getVersion());
+        pom.getProperties().setProperty(MAIN_BOM_VERSION_PROP, getMainBomArtifact().getVersion());
 
         final Build build = new Build();
         pom.setBuild(build);
@@ -501,19 +503,19 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final DependencyManagement dm = new DependencyManagement();
         pom.setDependencyManagement(dm);
 
-        Dependency bomDep = getMainBomImport();
-        dm.addDependency(bomDep);
+        Dependency managedDep = getMainBomImport();
+        dm.addDependency(managedDep);
 
-        bomDep = new Dependency();
-        bomDep.setGroupId("io.quarkus");
-        bomDep.setArtifactId("quarkus-integration-test-class-transformer");
-        bomDep.setVersion(quarkusCoreVersion());
-        dm.addDependency(bomDep);
-        bomDep = new Dependency();
-        bomDep.setGroupId("io.quarkus");
-        bomDep.setArtifactId("quarkus-integration-test-class-transformer-deployment");
-        bomDep.setVersion(quarkusCoreVersion());
-        dm.addDependency(bomDep);
+        managedDep = new Dependency();
+        managedDep.setGroupId("io.quarkus");
+        managedDep.setArtifactId("quarkus-integration-test-class-transformer");
+        managedDep.setVersion(quarkusCore.getVersionProperty());
+        dm.addDependency(managedDep);
+        managedDep = new Dependency();
+        managedDep.setGroupId("io.quarkus");
+        managedDep.setArtifactId("quarkus-integration-test-class-transformer-deployment");
+        managedDep.setVersion(quarkusCore.getVersionProperty());
+        dm.addDependency(managedDep);
 
         final Map<ArtifactCoords, PlatformMemberTestConfig> testConfigs = new LinkedHashMap<>();
         for (PlatformMemberTestConfig test : member.config.getTests()) {
@@ -579,7 +581,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Artifact bom = getMainBomArtifact();
         bomDep.setGroupId(bom.getGroupId());
         bomDep.setArtifactId(bom.getArtifactId());
-        bomDep.setVersion(bom.getVersion());
+        bomDep.setVersion("${" + MAIN_BOM_VERSION_PROP + "}");
         bomDep.setType("pom");
         bomDep.setScope("import");
         return bomDep;
@@ -1062,7 +1064,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         config.addChild(bomArtifactId);
 
         Xpp3Dom e = new Xpp3Dom("quarkusCoreVersion");
-        e.setValue(quarkusCoreVersion());
+        e.setValue(quarkusCore.getVersionProperty());
         config.addChild(e);
 
         if (addPlatformReleaseConfig) {
@@ -1083,7 +1085,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 e = new Xpp3Dom("member");
                 final ArtifactCoords coords = m.stackDescriptorCoords();
                 final String value;
-                if (coords.getGroupId().equals(project.getGroupId()) && coords.getVersion().equals(project.getVersion())) {
+                if (coords.getGroupId().equals(ModelUtils.getGroupId(pom))
+                        && coords.getVersion().equals(ModelUtils.getVersion(pom))) {
                     value = "${project.groupId}:" + coords.getArtifactId() + ":${project.version}:json:${project.version}";
                 } else {
                     value = coords.toString();
@@ -1115,14 +1118,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                         props = props.get("properties");
                         if (props != null) {
                             final ObjectNode jo = (ObjectNode) props;
-                            if (quarkusCore.generatedBomCoords().getGroupId().equals(project.getGroupId())
-                                    && quarkusCore.generatedBomCoords().getVersion().equals(project.getVersion())) {
-                                jo.replace("maven-plugin-groupId", jo.textNode("${project.groupId}"));
-                                jo.replace("maven-plugin-version", jo.textNode("${project.version}"));
-                            } else {
-                                jo.replace("maven-plugin-groupId", jo.textNode(quarkusCore.generatedBomCoords().getGroupId()));
-                                jo.replace("maven-plugin-version", jo.textNode(quarkusCore.generatedBomCoords().getVersion()));
-                            }
+                            final String pluginGroupId = quarkusCore.generatedBomCoords().getGroupId()
+                                    .equals(ModelUtils.getGroupId(pom)) ? "${project.groupId}"
+                                            : quarkusCore.generatedBomCoords().getGroupId();
+                            jo.replace("maven-plugin-groupId", jo.textNode(pluginGroupId));
+                            jo.replace("maven-plugin-version",
+                                    jo.textNode(getDependencyVersion(pom, quarkusCore.descriptorCoords())));
                         }
                     }
                 }
@@ -1180,7 +1181,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         dep.setGroupId(descriptorCoords.getGroupId());
         dep.setArtifactId(bomArtifact);
         dep.setType("pom");
-        dep.setVersion(descriptorCoords.getVersion());
+        dep.setVersion(getDependencyVersion(pom, descriptorCoords));
         pom.addDependency(dep);
 
         final Path pomXml = moduleDir.resolve("pom.xml");
@@ -1226,7 +1227,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         bom.setGroupId(propertiesCoords.getGroupId());
         bom.setArtifactId(propertiesCoords.getArtifactId().substring(0,
                 propertiesCoords.getArtifactId().length() - Constants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX.length()));
-        bom.setVersion(propertiesCoords.getVersion());
+        bom.setVersion(getDependencyVersion(pom, propertiesCoords));
         bom.setType("pom");
         bom.setScope("import");
 
@@ -1357,10 +1358,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             r.setFiltering(true);
             build.setResources(Collections.singletonList(r));
         }
-    }
-
-    private String quarkusCoreVersion() {
-        return quarkusCore.originalBomCoords().getVersion();
     }
 
     private PluginDescriptor pluginDescriptor() {
@@ -1634,6 +1631,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
             return versionProperty;
         }
+    }
+
+    private static String getDependencyVersion(Model pom, ArtifactCoords coords) {
+        return ModelUtils.getVersion(pom).equals(coords.getVersion()) ? "${project.version}" : coords.getVersion();
     }
 
     private static ArtifactKey toKey(Artifact a) {
