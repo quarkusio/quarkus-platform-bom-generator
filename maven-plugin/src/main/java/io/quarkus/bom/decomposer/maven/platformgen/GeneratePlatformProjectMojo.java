@@ -96,6 +96,8 @@ import org.eclipse.aether.repository.RemoteRepository;
 @Mojo(name = "generate-platform-project", defaultPhase = LifecyclePhase.INITIALIZE, requiresDependencyCollection = ResolutionScope.NONE)
 public class GeneratePlatformProjectMojo extends AbstractMojo {
 
+    private static final String LAST_BOM_UPDATE = "last-bom-update";
+    private static final String MEMBER_LAST_BOM_UPDATE_PROP = "member.last-bom-update";
     private static final String PLATFORM_KEY_PROP = "platform.key";
     private static final String PLATFORM_STREAM_PROP = "platform.stream";
     private static final String PLATFORM_RELEASE_PROP = "platform.release";
@@ -150,7 +152,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
     private List<String> pomLines;
 
-    private Boolean bumpVersions;
+    @Parameter(property = "recordUpdatedBoms")
+    private boolean recordUpdatedBoms;
 
     private Set<AppArtifactKey> universalBomDepKeys = new HashSet<>();
 
@@ -158,11 +161,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
     // POM property names by values
     private Map<String, String> pomPropsByValues = new HashMap<>();
-
-    private boolean isBumpVersions() {
-        // TODO should be checking deploy instead
-        return bumpVersions == null ? bumpVersions = session.getRequest().getGoals().contains("install") : bumpVersions;
-    }
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
@@ -223,7 +221,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         for (PlatformMember member : members.values()) {
             generatePlatformDescriptorModule(member.descriptorCoords(), member.baseModel, true,
                     quarkusCore.originalBomCoords().equals(member.originalBomCoords()),
-                    platformConfig.getAttachedMavenPlugin());
+                    platformConfig.getAttachedMavenPlugin(), member);
             generatePlatformPropertiesModule(member, true);
             persistPom(member.baseModel);
         }
@@ -234,71 +232,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         persistPom(pom);
 
-        if (isBumpVersions()) {
-            int pcIndex = pomLineContaining("<platformConfig>", 0);
-            if (pcIndex < 0) {
-                throw new MojoExecutionException("Failed to locate <platformConfig> in " + project.getFile());
-            }
-            int prIndex = pomLineContaining("<platformRelease>", pcIndex);
-            int vIndex = -1;
-            if (prIndex < 0) {
-                final String platformConfigLine = pomLines().get(pcIndex);
-                final int offset = platformConfigLine.indexOf('<');
-                final StringBuilder buf = new StringBuilder();
-                for (int i = 0; i < offset + 4; ++i) {
-                    buf.append(' ');
-                }
-                buf.append("</platformRelease>");
-                pomLines().add(pcIndex + 1, buf.toString());
-
-                buf.setLength(0);
-                for (int i = 0; i < offset + 4; ++i) {
-                    buf.append(' ');
-                }
-                buf.append("<platformRelease>");
-                pomLines().add(pcIndex + 1, buf.toString());
-                prIndex = pcIndex + 1;
-            } else {
-                vIndex = pomLineContaining("<version>", prIndex + 1);
-            }
-
-            String versionLine = null;
-            if (vIndex < 0) {
-                vIndex = prIndex + 1;
-                final String platformReleaseLine = pomLines().get(prIndex);
-                final int offset = platformReleaseLine.indexOf('<');
-                final StringBuilder buf = new StringBuilder();
-                for (int i = 0; i < offset + 4; ++i) {
-                    buf.append(' ');
-                }
-                buf.append("<version>-1</version>");
-                versionLine = buf.toString();
-                pomLines().add(vIndex, buf.toString());
-            } else {
-                versionLine = pomLines().get(vIndex);
-            }
-
-            final String versionStr = versionLine.substring(versionLine.indexOf("<version>") + "<version>".length(),
-                    versionLine.lastIndexOf("</version>"));
-            final int version = Integer.parseInt(versionStr);
-            final StringBuilder buf = new StringBuilder();
-            buf.append(versionLine.substring(0, versionLine.indexOf("<version>") + "<version>".length()))
-                    .append(version + 1).append("</version>");
-            pomLines().set(vIndex, buf.toString());
-        }
-
-        if (pomLines != null) {
-            final File outputDir = updatedPom.getParentFile();
-            if (!outputDir.exists()) {
-                outputDir.mkdirs();
-            }
-            try {
-                Files.write(updatedPom.toPath(), pomLines);
-            } catch (IOException e) {
-                throw new MojoExecutionException("Failed to persist changes to " + project.getFile(), e);
-            }
-            project.setPomFile(updatedPom);
-        }
+        recordUpdatedBoms();
 
         final Path reportsOutputDir = reportsDir.toPath();
         // reset the resolver to pick up all the generated platform modules
@@ -320,6 +254,88 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
         } catch (Exception e) {
             throw new MojoExecutionException("Failed to generate platform member BOM reports", e);
+        }
+    }
+
+    private void recordUpdatedBoms() throws MojoExecutionException {
+        if (!recordUpdatedBoms) {
+            return;
+        }
+        final int configIndex = pomLineContaining("platformConfig", 0);
+        if (configIndex < 0) {
+            throw new MojoExecutionException("Failed to locate <platformConfig> configuration in " + project.getFile());
+        }
+        final int coreIndex = pomLineContaining("<core>", configIndex);
+        if (coreIndex < 0) {
+            throw new MojoExecutionException("Failed to locate <core> configuration in " + project.getFile());
+        }
+        updatePreviousMemberRelease(quarkusCore, coreIndex);
+
+        final int membersIndex = pomLineContaining("<members>", configIndex);
+        if (membersIndex < 0) {
+            throw new MojoExecutionException("Failed to locate <members> configuration in " + project.getFile());
+        }
+
+        for (PlatformMember member : members.values()) {
+            if (!member.config.getName().equals(quarkusCore.config.getName())) {
+                updatePreviousMemberRelease(member, membersIndex);
+            }
+        }
+
+        if (pomLines != null) {
+            final File outputDir = updatedPom.getParentFile();
+            if (!outputDir.exists()) {
+                outputDir.mkdirs();
+            }
+            try {
+                Files.write(updatedPom.toPath(), pomLines);
+            } catch (IOException e) {
+                throw new MojoExecutionException("Failed to persist changes to " + project.getFile(), e);
+            }
+            try {
+                IoUtils.copy(updatedPom.toPath(), project.getFile().toPath());
+            } catch (IOException e) {
+                throw new MojoExecutionException("Failed to replace " + project.getFile() + " with " + updatedPom, e);
+            }
+            project.setPomFile(updatedPom);
+        }
+    }
+
+    private void updatePreviousMemberRelease(PlatformMember member, int membersIndex) throws MojoExecutionException {
+        if (!member.bomChanged) {
+            return;
+        }
+        final int memberIndex = pomLineContaining("<name>" + member.config.getName() + "</name>", membersIndex);
+        if (memberIndex < 0) {
+            throw new MojoExecutionException(
+                    "Failed to locate member configuration with <name>" + member.config.getName() + "</name>");
+        }
+        final int releaseIndex = pomLineContaining("<release>", memberIndex);
+        if (releaseIndex < 0) {
+            throw new MojoExecutionException("Failed to locate <release> configuration for member with <name>"
+                    + member.config.getName() + "</name>");
+        }
+        final int releaseEnd = pomLineContaining("</release>", releaseIndex);
+        if (releaseEnd < 0) {
+            throw new MojoExecutionException("Failed to locate the closing </release> for member with <name>"
+                    + member.config.getName() + "</name>");
+        }
+        final String l = pomLines().get(releaseIndex);
+        final StringBuilder buf = new StringBuilder();
+        for (int i = 0; i < l.length(); ++i) {
+            if (!Character.isWhitespace(l.charAt(i))) {
+                break;
+            }
+            buf.append(l.charAt(i));
+        }
+        buf.append("    <lastDetectedBomUpdate>").append(member.generatedBomCoords().getGroupId()).append(":")
+                .append(member.generatedBomCoords().getArtifactId()).append(":")
+                .append(member.generatedBomCoords().getVersion()).append("</lastDetectedBomUpdate>");
+        int prevIndex = pomLineContaining("<lastDetectedBomUpdate>", releaseIndex, releaseEnd);
+        if (prevIndex < 0) {
+            pomLines().add(releaseIndex + 1, buf.toString());
+        } else {
+            pomLines().set(prevIndex, buf.toString());
         }
     }
 
@@ -453,6 +469,56 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         member.generatedPomFile = platformBomXml;
+
+        if (recordUpdatedBoms) {
+            final Artifact prevBomCoords = member.previousLastUpdatedBom();
+            if (prevBomCoords == null) {
+                member.bomChanged = true;
+            } else if (!member.config.getRelease().getNext().equals(member.config.getRelease().getLastDetectedBomUpdate())) {
+                final List<org.eclipse.aether.graph.Dependency> prevDeps;
+                try {
+                    prevDeps = nonWorkspaceResolver.resolveDescriptor(prevBomCoords).getManagedDependencies();
+                } catch (BootstrapMavenException e) {
+                    throw new MojoExecutionException("Failed to resolve " + prevBomCoords, e);
+                }
+                if (prevDeps.isEmpty()) {
+                    // failed to resolve
+                    member.bomChanged = true;
+                } else {
+                    final Set<ArtifactCoords> prevArtifacts = new HashSet<>(prevDeps.size());
+                    for (int i = 0; i < prevDeps.size(); ++i) {
+                        final org.eclipse.aether.graph.Dependency d = prevDeps.get(i);
+                        final Artifact a = d.getArtifact();
+                        if (!isIrrelevantConstraint(a)) {
+                            prevArtifacts.add(toCoords(a));
+                        }
+                    }
+
+                    final Set<ArtifactCoords> currentArtifacts = new HashSet<>(prevArtifacts.size());
+                    for (ProjectRelease r : member.generatedBom.releases()) {
+                        for (ProjectDependency d : r.dependencies()) {
+                            final Artifact a = d.artifact();
+                            if (!isIrrelevantConstraint(a)) {
+                                currentArtifacts.add(toCoords(a));
+                            }
+                        }
+                    }
+                    member.bomChanged = !prevArtifacts.equals(currentArtifacts);
+                }
+            }
+        }
+    }
+
+    private static ArtifactCoords toCoords(final Artifact a) {
+        return new ArtifactCoords(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(), a.getVersion());
+    }
+
+    private static boolean isIrrelevantConstraint(final Artifact a) {
+        return !a.getExtension().equals("jar")
+                || PlatformArtifacts.isCatalogArtifactId(a.getArtifactId())
+                || a.getArtifactId().endsWith(Constants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX)
+                || "sources".equals(a.getClassifier())
+                || "javadoc".equals(a.getClassifier());
     }
 
     private List<String> pomLines() throws MojoExecutionException {
@@ -468,14 +534,20 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
     private int pomLineContaining(String text, int fromLine)
             throws MojoExecutionException {
+        return pomLineContaining(text, fromLine, Integer.MAX_VALUE);
+    }
+
+    private int pomLineContaining(String text, int fromLine, int toLine)
+            throws MojoExecutionException {
         final List<String> lines = pomLines();
-        while (fromLine < lines.size()) {
+        final int upperLimit = Math.min(lines.size(), toLine);
+        while (fromLine < upperLimit) {
             if (lines.get(fromLine).contains(text)) {
                 break;
             }
             ++fromLine;
         }
-        return fromLine == lines.size() ? -1 : fromLine;
+        return fromLine == upperLimit ? -1 : fromLine;
     }
 
     private void generateMemberIntegrationTestsModule(PlatformMember member)
@@ -1000,7 +1072,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 new ArtifactCoords(bomArtifact.getGroupId(),
                         PlatformArtifacts.ensureCatalogArtifactId(bomArtifact.getArtifactId()),
                         bomArtifact.getVersion(), "json", bomArtifact.getVersion()),
-                pom, false, true, null);
+                pom, false, true, null, null);
 
         // to make the descriptor pom resolvable during the platform BOM generation, we need to persist the generated POMs
         persistPom(pom);
@@ -1022,7 +1094,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private void generatePlatformDescriptorModule(ArtifactCoords descriptorCoords, Model parentPom,
-            boolean addPlatformReleaseConfig, boolean copyQuarkusCoreMetadata, AttachedMavenPluginConfig attachedPlugin)
+            boolean addPlatformReleaseConfig, boolean copyQuarkusCoreMetadata, AttachedMavenPluginConfig attachedPlugin,
+            PlatformMember member)
             throws MojoExecutionException {
         final String moduleName = "descriptor";
         parentPom.addModule(moduleName);
@@ -1098,21 +1171,21 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
         }
 
-        Path overridesFile = null;
+        ObjectNode overrides = null;
         if (copyQuarkusCoreMetadata) {
             // copy the quarkus-bom metadata
-            final ObjectNode overrides = JsonCatalogMapperHelper.mapper().createObjectNode();
+            overrides = JsonCatalogMapperHelper.mapper().createObjectNode();
             final Artifact bom = quarkusCore.originalBomCoords();
             final Path jsonPath = artifactResolver().resolve(new DefaultArtifact(bom.getGroupId(),
                     bom.getArtifactId() + Constants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX, bom.getVersion(), "json",
                     bom.getVersion())).getArtifact().getFile().toPath();
-            final JsonNode node;
+            final JsonNode descriptorNode;
             try (BufferedReader reader = Files.newBufferedReader(jsonPath)) {
-                node = JsonCatalogMapperHelper.mapper().readTree(reader);
+                descriptorNode = JsonCatalogMapperHelper.mapper().readTree(reader);
             } catch (IOException e1) {
                 throw new MojoExecutionException("Failed to deserialize " + jsonPath, e1);
             }
-            final JsonNode metadata = node.get("metadata");
+            final JsonNode metadata = descriptorNode.get("metadata");
             if (metadata != null) {
                 if (attachedPlugin != null) {
                     JsonNode props = metadata.get("project");
@@ -1133,22 +1206,37 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 }
                 overrides.set("metadata", metadata);
             }
-            final JsonNode categories = node.get("categories");
+            final JsonNode categories = descriptorNode.get("categories");
             if (categories != null) {
                 overrides.set("categories", categories);
             }
+        }
 
-            if (overrides != null) {
-                Path overridesJson = moduleDir.resolve("src").resolve("main").resolve("resources")
-                        .resolve("overrides.json");
-                try {
-                    JsonCatalogMapperHelper.serialize(overrides, overridesJson);
-                } catch (Exception ex) {
-                    throw new MojoExecutionException("Failed to serialize metadata to " + overridesJson, ex);
-                }
-                overridesJson = moduleDir.resolve("target").resolve("classes").resolve(overridesJson.getFileName());
-                overridesFile = overridesJson;
+        // Update last-bom-update
+        if (member != null) {
+            pom.getProperties().setProperty(MEMBER_LAST_BOM_UPDATE_PROP, member.lastUpdatedBom().getGroupId() + ":"
+                    + member.lastUpdatedBom().getArtifactId() + ":" + member.lastUpdatedBom().getVersion());
+            if (overrides == null) {
+                overrides = JsonCatalogMapperHelper.mapper().createObjectNode();
             }
+            JsonNode metadata = overrides.get("metadata");
+            if (metadata == null) {
+                metadata = overrides.putObject("metadata");
+            }
+            final ObjectNode on = (ObjectNode) metadata;
+            on.set(LAST_BOM_UPDATE, on.textNode("${" + MEMBER_LAST_BOM_UPDATE_PROP + "}"));
+        }
+
+        Path overridesFile = null;
+        if (overrides != null) {
+            overridesFile = moduleDir.resolve("src").resolve("main").resolve("resources")
+                    .resolve("overrides.json");
+            try {
+                JsonCatalogMapperHelper.serialize(overrides, overridesFile);
+            } catch (Exception ex) {
+                throw new MojoExecutionException("Failed to serialize metadata to " + overridesFile, ex);
+            }
+            overridesFile = moduleDir.resolve("target").resolve("classes").resolve(overridesFile.getFileName());
         }
 
         final PlatformDescriptorGeneratorConfig descrGen = platformConfig.getDescriptorGenerator();
@@ -1543,6 +1631,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         private Model generatedBomModel;
         private Path generatedPomFile;
         private String versionProperty;
+        private Artifact prevBomRelease;
+        public boolean bomChanged;
 
         PlatformMember(PlatformMemberConfig config) {
             this.config = config;
@@ -1560,6 +1650,20 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 }
                 originalBomCoords = toPomArtifact(config.getBom());
             }
+        }
+
+        Artifact previousLastUpdatedBom() {
+            if (prevBomRelease == null) {
+                final String prev = config.getRelease().getLastDetectedBomUpdate();
+                if (prev != null) {
+                    prevBomRelease = toPomArtifact(prev);
+                }
+            }
+            return prevBomRelease;
+        }
+
+        Artifact lastUpdatedBom() {
+            return bomChanged || previousLastUpdatedBom() == null ? generatedBomCoords() : previousLastUpdatedBom();
         }
 
         Artifact originalBomCoords() {

@@ -2,16 +2,8 @@ package io.quarkus.bom.decomposer.maven.platformgen;
 
 public class PlatformMemberReleaseConfig {
 
-    private boolean skip;
+    private String lastBomUpdate;
     private String next;
-
-    public boolean isSkip() {
-        return skip;
-    }
-
-    public void setSkip(boolean skip) {
-        this.skip = skip;
-    }
 
     public String getNext() {
         return next;
@@ -19,5 +11,13 @@ public class PlatformMemberReleaseConfig {
 
     public void setNext(String next) {
         this.next = next;
+    }
+
+    public String getLastDetectedBomUpdate() {
+        return lastBomUpdate;
+    }
+
+    public void setLastDetectedBomUpdate(String lastBomUpdate) {
+        this.lastBomUpdate = lastBomUpdate;
     }
 }
