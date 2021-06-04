@@ -95,7 +95,7 @@ public class ReportIndexPageGenerator extends FileReportWriter implements AutoCl
         closeTag("table");
     }
 
-    public void mainBom(URL mainUrl, DecomposedBom decomposed, Path releasesHtml) {
+    public void universalBom(URL mainUrl, DecomposedBom decomposed, Path releasesHtml) {
         this.mainBomUrl = mainUrl;
         this.mainBom = decomposed;
         this.mainBomReleasesHtml = releasesHtml;

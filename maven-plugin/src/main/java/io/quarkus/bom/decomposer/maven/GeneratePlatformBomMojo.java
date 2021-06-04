@@ -147,7 +147,7 @@ public class GeneratePlatformBomMojo extends AbstractMojo {
             final Path generatedReleasesFile = outputDir.resolve(bomDirName(generatedBom.bomArtifact()))
                     .resolve("generated-releases.html");
             generateReleasesReport(generatedBom, generatedReleasesFile);
-            index.mainBom(platformBomXml.toUri().toURL(), generatedBom, generatedReleasesFile);
+            index.universalBom(platformBomXml.toUri().toURL(), generatedBom, generatedReleasesFile);
 
             for (DecomposedBom importedBom : bomComposer.alignedMemberBoms()) {
                 generateBomReports(bomComposer.originalMemberBom(importedBom.bomArtifact()), importedBom, null, outputDir,

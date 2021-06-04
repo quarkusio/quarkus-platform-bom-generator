@@ -528,7 +528,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             final DecomposedBom generatedBom = bomComposer.platformBom();
 
             final Path generatedReleasesFile = generateReleasesHtml(generatedBom, outputDir);
-            index.mainBom(generatedBom.bomResolver().pomPath().toUri().toURL(), generatedBom, generatedReleasesFile);
+            index.universalBom(generatedBom.bomResolver().pomPath().toUri().toURL(), generatedBom, generatedReleasesFile);
 
             for (DecomposedBom importedBom : bomComposer.alignedMemberBoms()) {
                 report(bomComposer.originalMemberBom(importedBom.bomArtifact()), importedBom, outputDir, index);
