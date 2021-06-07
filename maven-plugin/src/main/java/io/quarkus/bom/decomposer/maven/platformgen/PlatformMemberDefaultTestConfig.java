@@ -25,6 +25,72 @@ public class PlatformMemberDefaultTestConfig {
         super();
     }
 
+    void applyOverrides(PlatformMemberDefaultTestConfig overrides) {
+        if (overrides.skip != null) {
+            skip = overrides.skip;
+        }
+        if (overrides.skipNative != null) {
+            skipNative = overrides.skipNative;
+        }
+        if (overrides.skipJvm != null) {
+            skipJvm = overrides.skipJvm;
+        }
+        if (overrides.failsafeMavenPlugin != null) {
+            failsafeMavenPlugin = overrides.failsafeMavenPlugin;
+        }
+        if (overrides.transformWith != null) {
+            transformWith = overrides.transformWith;
+        }
+        if (!overrides.systemProperties.isEmpty()) {
+            if (systemProperties.isEmpty()) {
+                systemProperties = overrides.systemProperties;
+            } else {
+                systemProperties.putAll(overrides.systemProperties);
+            }
+        }
+        if (!overrides.jvmSystemProperties.isEmpty()) {
+            if (jvmSystemProperties.isEmpty()) {
+                jvmSystemProperties = overrides.jvmSystemProperties;
+            } else {
+                jvmSystemProperties.putAll(overrides.jvmSystemProperties);
+            }
+        }
+        if (!overrides.nativeSystemProperties.isEmpty()) {
+            if (nativeSystemProperties.isEmpty()) {
+                nativeSystemProperties = overrides.nativeSystemProperties;
+            } else {
+                nativeSystemProperties.putAll(overrides.nativeSystemProperties);
+            }
+        }
+        if (overrides.pomProperties != null && !overrides.pomProperties.isEmpty()) {
+            if (pomProperties == null || pomProperties.isEmpty()) {
+                pomProperties = overrides.pomProperties;
+            } else {
+                pomProperties.putAll(overrides.pomProperties);
+            }
+        }
+        if (overrides.groups != null) {
+            groups = overrides.groups;
+        }
+        if (overrides.nativeGroups != null) {
+            nativeGroups = overrides.nativeGroups;
+        }
+        if (!overrides.dependencies.isEmpty()) {
+            if (dependencies.isEmpty()) {
+                dependencies = overrides.dependencies;
+            } else {
+                dependencies.addAll(overrides.dependencies);
+            }
+        }
+        if (!overrides.testDependencies.isEmpty()) {
+            if (testDependencies.isEmpty()) {
+                testDependencies = overrides.testDependencies;
+            } else {
+                testDependencies.addAll(overrides.testDependencies);
+            }
+        }
+    }
+
     public void setSkip(boolean skip) {
         this.skip = skip;
     }

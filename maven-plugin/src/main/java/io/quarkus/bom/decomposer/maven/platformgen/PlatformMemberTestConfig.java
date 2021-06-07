@@ -5,7 +5,7 @@ import java.util.Map;
 public class PlatformMemberTestConfig extends PlatformMemberDefaultTestConfig {
 
     private String artifact;
-    private boolean excluded;
+    private Boolean excluded;
 
     public void setArtifact(String artifact) {
         this.artifact = artifact;
@@ -20,7 +20,14 @@ public class PlatformMemberTestConfig extends PlatformMemberDefaultTestConfig {
     }
 
     public boolean isExcluded() {
-        return excluded;
+        return excluded == null ? false : excluded.booleanValue();
+    }
+
+    void applyOverrides(PlatformMemberTestConfig overrides) {
+        super.applyOverrides(overrides);
+        if (overrides.excluded != null) {
+            excluded = overrides.excluded;
+        }
     }
 
     void applyDefaults(PlatformMemberDefaultTestConfig defaults) {
