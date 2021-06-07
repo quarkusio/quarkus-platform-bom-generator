@@ -5,6 +5,15 @@ public class PlatformMemberReleaseConfig {
     private String lastBomUpdate;
     private String next;
 
+    void applyOverrides(PlatformMemberReleaseConfig overrides) {
+        if (overrides.lastBomUpdate != null) {
+            lastBomUpdate = overrides.lastBomUpdate;
+        }
+        if (overrides.next != null) {
+            next = overrides.next;
+        }
+    }
+
     public String getNext() {
         return next;
     }

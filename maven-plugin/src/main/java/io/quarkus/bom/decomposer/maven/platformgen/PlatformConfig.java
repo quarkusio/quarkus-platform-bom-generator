@@ -1,7 +1,8 @@
 package io.quarkus.bom.decomposer.maven.platformgen;
 
-import java.util.Collections;
-import java.util.List;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public class PlatformConfig {
 
@@ -11,7 +12,7 @@ public class PlatformConfig {
 
     private PlatformMemberConfig core;
 
-    private List<PlatformMemberConfig> members = Collections.emptyList();
+    private Collection<PlatformMemberConfig> members;
 
     private PlatformBomGeneratorConfig bomGenerator;
 
@@ -43,12 +44,19 @@ public class PlatformConfig {
         this.core = core;
     }
 
-    public List<PlatformMemberConfig> getMembers() {
+    public Collection<PlatformMemberConfig> getMembers() {
         return members;
     }
 
-    public void setMembers(List<PlatformMemberConfig> members) {
-        this.members = members;
+    public void setMembers(Collection<PlatformMemberConfig> members) {
+        final Map<String, PlatformMemberConfig> map = new LinkedHashMap<>(members.size());
+        for (PlatformMemberConfig member : members) {
+            final PlatformMemberConfig original = map.putIfAbsent(member.getName(), member);
+            if (original != null) {
+                original.applyOverrides(member);
+            }
+        }
+        this.members = map.values();
     }
 
     public PlatformBomGeneratorConfig getBomGenerator() {
