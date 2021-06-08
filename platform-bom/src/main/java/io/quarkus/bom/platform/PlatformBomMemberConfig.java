@@ -1,5 +1,7 @@
 package io.quarkus.bom.platform;
 
+import io.quarkus.bootstrap.model.AppArtifactKey;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import org.eclipse.aether.artifact.Artifact;
@@ -11,6 +13,7 @@ public class PlatformBomMemberConfig {
     private final List<Dependency> dm;
     private String key;
     private Artifact generatedBomArtifact;
+    private Collection<AppArtifactKey> extensionCatalog = Collections.emptyList();
 
     public PlatformBomMemberConfig(Dependency bomDep) {
         this.bomDep = bomDep;
@@ -50,5 +53,13 @@ public class PlatformBomMemberConfig {
 
     public List<Dependency> asDependencyConstraints() {
         return dm;
+    }
+
+    public void setExtensionCatalog(Collection<AppArtifactKey> extensionCatalog) {
+        this.extensionCatalog = extensionCatalog;
+    }
+
+    public Collection<AppArtifactKey> getExtensionCatalog() {
+        return extensionCatalog;
     }
 }

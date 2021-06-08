@@ -3,6 +3,7 @@ package io.quarkus.bom.decomposer;
 import io.quarkus.bootstrap.model.AppArtifactKey;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -47,7 +48,7 @@ public class ProjectRelease {
         }
 
         public ProjectRelease build() {
-            ProjectRelease.this.deps = new ArrayList<>(deps.values());
+            ProjectRelease.this.deps = Collections.unmodifiableList(new ArrayList<>(deps.values()));
             return ProjectRelease.this;
         }
     }
@@ -57,7 +58,7 @@ public class ProjectRelease {
     }
 
     public static ProjectRelease create(ReleaseId id, List<ProjectDependency> deps) {
-        return new ProjectRelease(id, deps);
+        return new ProjectRelease(id, deps == null ? Collections.emptyList() : Collections.unmodifiableList(deps));
     }
 
     protected final ReleaseId id;

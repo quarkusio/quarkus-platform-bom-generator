@@ -20,6 +20,8 @@ public class PlatformMemberConfig {
     private Collection<PlatformMemberTestConfig> tests = new ArrayList<>();
     private String testCatalogArtifact;
 
+    private String extensionList;
+
     void applyOverrides(PlatformMemberConfig overrides) {
         if (overrides.bom != null) {
             bom = overrides.bom;
@@ -64,6 +66,9 @@ public class PlatformMemberConfig {
         }
         if (overrides.testCatalogArtifact != null) {
             testCatalogArtifact = overrides.testCatalogArtifact;
+        }
+        if (overrides.extensionList != null) {
+            extensionList = overrides.extensionList;
         }
     }
 
@@ -133,5 +138,18 @@ public class PlatformMemberConfig {
 
     public boolean isEnabled() {
         return enabled == null ? true : enabled.booleanValue();
+    }
+
+    public void setExtensionList(String extensionList) {
+        this.extensionList = extensionList;
+    }
+
+    /**
+     * Path to a JSON file containing a list of extensions the member BOM should be limited to.
+     * 
+     * @return path to a JSON file containing a list of extensions the member BOM should be limited to
+     */
+    public String getExtensionList() {
+        return extensionList;
     }
 }

@@ -28,7 +28,9 @@ import io.quarkus.bootstrap.util.IoUtils;
 import io.quarkus.maven.ArtifactCoords;
 import io.quarkus.maven.ArtifactKey;
 import io.quarkus.registry.Constants;
+import io.quarkus.registry.catalog.Extension;
 import io.quarkus.registry.catalog.json.JsonCatalogMapperHelper;
+import io.quarkus.registry.catalog.json.JsonExtensionCatalog;
 import io.quarkus.registry.util.PlatformArtifacts;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -1248,11 +1250,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 buf.append("${project.basedir}/").append(moduleDir.relativize(overridesFile));
             }
             if (descrGen.overridesFile != null) {
-                if (buf.length() > 0) {
-                    buf.append(",");
+                for (String path : descrGen.overridesFile.split(",")) {
+                    if (buf.length() > 0) {
+                        buf.append(",");
+                    }
+                    buf.append("${project.basedir}/").append(moduleDir.relativize(Paths.get(path.trim())).toString());
                 }
-                buf.append("${project.basedir}/")
-                        .append(moduleDir.relativize(Paths.get(descrGen.overridesFile)).toString());
             }
             e.setValue(buf.toString());
             config.addChild(e);
@@ -1702,6 +1705,29 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                         new org.eclipse.aether.graph.Dependency(originalBomCoords(), "import"));
             }
             bomMember.setGeneratedBomArtifact(generatedBomCoords());
+
+            final String extListStr = config.getExtensionList();
+            if (extListStr != null) {
+                final Path extListPath = Paths.get(extListStr).normalize().toAbsolutePath();
+                if (!Files.exists(extListPath)) {
+                    throw new RuntimeException(
+                            "Failed to locate extension list at " + extListPath + " for member " + config.getName());
+                }
+                final JsonExtensionCatalog catalog;
+                try {
+                    catalog = JsonCatalogMapperHelper.deserialize(extListPath, JsonExtensionCatalog.class);
+                } catch (IOException e) {
+                    throw new RuntimeException("Failed to deserialize " + extListPath, e);
+                }
+
+                final List<AppArtifactKey> extensionKeys = new ArrayList<>(catalog.getExtensions().size());
+                for (Extension e : catalog.getExtensions()) {
+                    final ArtifactCoords a = e.getArtifact();
+                    extensionKeys.add(new AppArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getType()));
+                }
+                bomMember.setExtensionCatalog(extensionKeys);
+            }
+
             return bomMember;
         }
 
