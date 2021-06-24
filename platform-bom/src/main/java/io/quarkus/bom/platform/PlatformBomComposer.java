@@ -14,6 +14,7 @@ import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.decomposer.ReleaseIdFactory;
 import io.quarkus.bom.decomposer.ReleaseOrigin;
 import io.quarkus.bom.decomposer.ReleaseVersion;
+import io.quarkus.bom.decomposer.UpdateAvailabilityTransformer;
 import io.quarkus.bom.diff.BomDiff;
 import io.quarkus.bom.diff.HtmlBomDiffReportGenerator;
 import io.quarkus.bom.resolver.ArtifactResolver;
@@ -49,6 +50,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
     }
 
     private final DecomposedBom originalQuarkusBom;
+    private final DecomposedBom filteredQuarkusBom;
     private final DecomposedBom generatedQuarkusBom;
 
     private final MessageWriter logger;
@@ -86,16 +88,19 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         this.extCoordsFilterFactory = ExtensionCoordsFilterFactory.newInstance(config);
 
         this.originalQuarkusBom = BomDecomposer.config()
-                //.debug()
                 .logger(logger)
                 .mavenArtifactResolver(resolver())
                 .bomArtifact(config.quarkusBom().originalBomArtifact())
                 .decompose();
+
+        final ExtensionFilter coreFilter = ExtensionFilter.getInstance(resolver(), logger, config.quarkusBom());
+        filteredQuarkusBom = coreFilter.transform(originalQuarkusBom);
+
         final DecomposedBom.Builder quarkusBomBuilder = DecomposedBom.builder()
                 .bomArtifact(config.quarkusBom().generatedBomArtifact())
                 .bomSource(PomSource.of(config.quarkusBom().generatedBomArtifact()));
         addPlatformArtifacts(config.quarkusBom(), quarkusBomBuilder);
-        originalQuarkusBom.releases().forEach(r -> {
+        filteredQuarkusBom.releases().forEach(r -> {
             final AtomicReference<ProjectRelease.Builder> rbRef = new AtomicReference<>();
             r.dependencies().forEach(d -> {
                 quarkusBomDeps.put(d.key(), d);
@@ -116,6 +121,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         });
         generatedQuarkusBom = quarkusBomBuilder.build();
 
+        final UpdateAvailabilityTransformer updateCheckingTransformer = new UpdateAvailabilityTransformer(resolver, logger);
         for (PlatformBomMemberConfig memberConfig : config.directDeps()) {
             logger.info("Processing " + (memberConfig.originalBomArtifact() == null ? memberConfig.generatedBomArtifact()
                     : memberConfig.originalBomArtifact()));
@@ -127,15 +133,15 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             } else {
                 bomDeps = memberConfig.asDependencyConstraints();
             }
-            final DecomposedBom originalBom = BomDecomposer.config()
+            DecomposedBom originalBom = BomDecomposer.config()
                     .mavenArtifactResolver(resolver())
                     .dependencies(bomDeps)
-                    // .debug()
                     .logger(logger)
                     .bomArtifact(memberConfig.originalBomArtifact() == null ? memberConfig.generatedBomArtifact()
                             : memberConfig.originalBomArtifact())
-                    .checkForUpdates()
                     .decompose();
+            originalBom = ExtensionFilter.getInstance(resolver(), logger, memberConfig).transform(originalBom);
+            originalBom = updateCheckingTransformer.transform(originalBom);
             if (memberConfig.isBom()) {
                 originalImportedBoms.put(originalBom.bomArtifact(), originalBom);
             } else if (memberConfig.asDependencyConstraints().size() > 1) {
@@ -388,7 +394,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
     @Override
     public boolean enterReleaseOrigin(ReleaseOrigin releaseOrigin, int versions) {
         preferredVersions = null;
-        quarkusVersions = originalQuarkusBom.releaseVersions(releaseOrigin);
+        quarkusVersions = filteredQuarkusBom.releaseVersions(releaseOrigin);
         return true;
     }
 
@@ -415,7 +421,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         }
         //logger.error("CONFLICT: " + extBom + " includes " + release.id() + " while Quarkus includes " + quarkusVersions);
         final LinkedHashMap<String, ReleaseId> preferredVersions = this.preferredVersions == null
-                ? this.preferredVersions = preferredVersions(originalQuarkusBom.releases(release.id().origin()))
+                ? this.preferredVersions = preferredVersions(filteredQuarkusBom.releases(release.id().origin()))
                 : this.preferredVersions;
         for (ProjectDependency dep : release.dependencies()) {
             final String depVersion = dep.artifact().getVersion();

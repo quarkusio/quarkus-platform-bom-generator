@@ -1,9 +1,10 @@
 package io.quarkus.bom.decomposer;
 
 import io.quarkus.bom.PomResolver;
+import io.quarkus.bootstrap.model.AppArtifactKey;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.graph.Dependency;
@@ -12,7 +13,7 @@ public class DefaultDecomposedBomBuilder implements DecomposedBomBuilder {
 
     private PomResolver bomSource;
     private Artifact bomArtifact;
-    private Map<ReleaseId, List<ProjectDependency>> releases = new HashMap<>();
+    private Map<ReleaseId, Map<AppArtifactKey, ProjectDependency>> releases = new HashMap<>();
 
     @Override
     public void bomSource(PomResolver bomSource) {
@@ -26,7 +27,8 @@ public class DefaultDecomposedBomBuilder implements DecomposedBomBuilder {
 
     @Override
     public void bomDependency(ReleaseId releaseId, Dependency artifact) throws BomDecomposerException {
-        releases.computeIfAbsent(releaseId, t -> new ArrayList<>()).add(ProjectDependency.create(releaseId, artifact));
+        final ProjectDependency d = ProjectDependency.create(releaseId, artifact);
+        releases.computeIfAbsent(releaseId, t -> new LinkedHashMap<>()).putIfAbsent(d.key(), d);
     }
 
     @Override
@@ -34,8 +36,8 @@ public class DefaultDecomposedBomBuilder implements DecomposedBomBuilder {
         final DecomposedBom.Builder bomBuilder = DecomposedBom.builder();
         bomBuilder.bomArtifact(bomArtifact);
         bomBuilder.bomSource(bomSource);
-        for (Map.Entry<ReleaseId, List<ProjectDependency>> entry : releases.entrySet()) {
-            bomBuilder.addRelease(ProjectRelease.create(entry.getKey(), entry.getValue()));
+        for (Map.Entry<ReleaseId, Map<AppArtifactKey, ProjectDependency>> entry : releases.entrySet()) {
+            bomBuilder.addRelease(ProjectRelease.create(entry.getKey(), new ArrayList<>(entry.getValue().values())));
         }
         return bomBuilder.build();
     }
