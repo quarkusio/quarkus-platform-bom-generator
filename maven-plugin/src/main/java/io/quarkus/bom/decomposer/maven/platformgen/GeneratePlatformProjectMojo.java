@@ -1,5 +1,7 @@
 package io.quarkus.bom.decomposer.maven.platformgen;
 
+import static io.quarkus.bom.decomposer.maven.util.Utils.newModel;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.quarkus.bom.PomSource;
@@ -181,8 +183,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
         }
 
-        final Model pom = new Model();
-        pom.setModelVersion("4.0.0");
+        final Model pom = newModel();
         final String rootArtifactIdBase = getArtifactIdBase(project.getModel());
         pom.setArtifactId(rootArtifactIdBase + "-parent");
         pom.setPackaging("pom");
@@ -346,8 +347,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 .fromString(platformConfig.getAttachedMavenPlugin().getTargetPluginCoords());
 
         final String moduleName = targetCoords.getArtifactId();
-        final Model pom = new Model();
-        pom.setModelVersion("4.0.0");
+        final Model pom = newModel();
         pom.setArtifactId(moduleName);
         pom.setPackaging("maven-plugin");
         pom.setName(getNameBase(parentPom) + " " + artifactIdToName(targetCoords.getArtifactId()));
@@ -392,8 +392,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         final String moduleName = getArtifactIdBase(member.generatedBomCoords().getArtifactId());
 
-        final Model pom = new Model();
-        pom.setModelVersion("4.0.0");
+        final Model pom = newModel();
 
         if (!member.generatedBomCoords().getGroupId().equals(project.getGroupId())) {
             pom.setGroupId(member.generatedBomCoords().getGroupId());
@@ -558,8 +557,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Model parentPom = member.baseModel;
         final String moduleName = "integration-tests";
 
-        final Model pom = new Model();
-        pom.setModelVersion("4.0.0");
+        final Model pom = newModel();
         pom.setArtifactId(getArtifactIdBase(parentPom) + "-" + moduleName + "-parent");
         pom.setPackaging("pom");
         pom.setName(getNameBase(parentPom) + " " + artifactIdToName(moduleName) + " - Parent");
@@ -669,8 +667,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             throws MojoExecutionException {
         final String moduleName = testArtifact.getArtifactId();
 
-        final Model pom = new Model();
-        pom.setModelVersion("4.0.0");
+        final Model pom = newModel();
         pom.setArtifactId(moduleName);
         pom.setName(getNameBase(parentPom) + " " + moduleName);
         parentPom.addModule(moduleName);
@@ -1053,8 +1050,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final String artifactIdBase = getArtifactIdBase(bomArtifact.getArtifactId());
         final String moduleName = artifactIdBase;
 
-        final Model pom = new Model();
-        pom.setModelVersion("4.0.0");
+        final Model pom = newModel();
         pom.setArtifactId(artifactIdBase + "-parent");
         pom.setPackaging("pom");
         pom.setName(getNameBase(parentPom) + " " + artifactIdToName(moduleName) + " - Parent");
@@ -1103,8 +1099,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         parentPom.addModule(moduleName);
         final Path moduleDir = parentPom.getProjectDirectory().toPath().resolve(moduleName);
 
-        final Model pom = new Model();
-        pom.setModelVersion("4.0.0");
+        final Model pom = newModel();
 
         if (!descriptorCoords.getGroupId().equals(ModelUtils.getGroupId(parentPom))) {
             pom.setGroupId(descriptorCoords.getGroupId());
@@ -1295,8 +1290,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         parentPom.addModule(moduleName);
         final Path moduleDir = parentPom.getProjectDirectory().toPath().resolve(moduleName);
 
-        final Model pom = new Model();
-        pom.setModelVersion("4.0.0");
+        final Model pom = newModel();
 
         if (!propertiesCoords.getGroupId().equals(ModelUtils.getGroupId(parentPom))) {
             pom.setGroupId(propertiesCoords.getGroupId());
