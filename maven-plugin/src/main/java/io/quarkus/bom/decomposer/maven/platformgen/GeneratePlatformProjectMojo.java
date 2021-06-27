@@ -1070,7 +1070,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 new ArtifactCoords(bomArtifact.getGroupId(),
                         PlatformArtifacts.ensureCatalogArtifactId(bomArtifact.getArtifactId()),
                         bomArtifact.getVersion(), "json", bomArtifact.getVersion()),
-                pom, false, true, null, null);
+                pom, true, true, null, null);
 
         // to make the descriptor pom resolvable during the platform BOM generation, we need to persist the generated POMs
         persistPom(pom);
@@ -1142,9 +1142,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         if (addPlatformReleaseConfig) {
             final Xpp3Dom stackConfig = new Xpp3Dom("platformRelease");
             config.addChild(stackConfig);
-            e = new Xpp3Dom("platformKey");
-            e.setValue("${" + PLATFORM_KEY_PROP + "}");
-            stackConfig.addChild(e);
+            final Xpp3Dom platformKey = new Xpp3Dom("platformKey");
+            stackConfig.addChild(platformKey);
             e = new Xpp3Dom("stream");
             e.setValue("${" + PLATFORM_STREAM_PROP + "}");
             stackConfig.addChild(e);
@@ -1153,18 +1152,16 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             stackConfig.addChild(e);
             final Xpp3Dom membersConfig = new Xpp3Dom("members");
             stackConfig.addChild(membersConfig);
-            for (PlatformMember m : members.values()) {
-                e = new Xpp3Dom("member");
-                final ArtifactCoords coords = m.stackDescriptorCoords();
-                final String value;
-                if (coords.getGroupId().equals(ModelUtils.getGroupId(pom))
-                        && coords.getVersion().equals(ModelUtils.getVersion(pom))) {
-                    value = "${project.groupId}:" + coords.getArtifactId() + ":${project.version}:json:${project.version}";
-                } else {
-                    value = coords.toString();
+            if (descriptorCoords.getGroupId().equals(getUniversalBomArtifact().getGroupId())
+                    && descriptorCoords.getArtifactId()
+                            .equals(PlatformArtifacts.ensureCatalogArtifactId(getUniversalBomArtifact().getArtifactId()))) {
+                platformKey.setValue("${project.groupId}");
+                addMemberDescriptorConfig(pom, membersConfig, descriptorCoords);
+            } else {
+                platformKey.setValue("${" + PLATFORM_KEY_PROP + "}");
+                for (PlatformMember m : members.values()) {
+                    addMemberDescriptorConfig(pom, membersConfig, m.stackDescriptorCoords());
                 }
-                e.setValue(value);
-                membersConfig.addChild(e);
             }
         }
 
@@ -1278,6 +1275,21 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Path pomXml = moduleDir.resolve("pom.xml");
         pom.setPomFile(pomXml.toFile());
         persistPom(pom);
+    }
+
+    private void addMemberDescriptorConfig(final Model pom, final Xpp3Dom membersConfig,
+            final ArtifactCoords memberCoords) {
+        Xpp3Dom e;
+        e = new Xpp3Dom("member");
+        final String value;
+        if (memberCoords.getGroupId().equals(ModelUtils.getGroupId(pom))
+                && memberCoords.getVersion().equals(ModelUtils.getVersion(pom))) {
+            value = "${project.groupId}:" + memberCoords.getArtifactId() + ":${project.version}:json:${project.version}";
+        } else {
+            value = memberCoords.toString();
+        }
+        e.setValue(value);
+        membersConfig.addChild(e);
     }
 
     private void generatePlatformPropertiesModule(PlatformMember member, boolean addPlatformReleaseConfig)
