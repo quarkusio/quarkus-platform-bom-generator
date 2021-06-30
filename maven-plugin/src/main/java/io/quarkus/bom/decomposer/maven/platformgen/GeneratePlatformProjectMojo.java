@@ -105,7 +105,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     private static final String PLATFORM_KEY_PROP = "platform.key";
     private static final String PLATFORM_STREAM_PROP = "platform.stream";
     private static final String PLATFORM_RELEASE_PROP = "platform.release";
-    private static final String UNIVERSAL_BOM_VERSION_PROP = "universal.bom.version";
 
     @Component
     private RepositorySystem repoSystem;
@@ -202,7 +201,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         pom.getProperties().setProperty(PLATFORM_KEY_PROP, releaseConfig().getPlatformKey());
         pom.getProperties().setProperty(PLATFORM_STREAM_PROP, releaseConfig().getStream());
         pom.getProperties().setProperty(PLATFORM_RELEASE_PROP, releaseConfig().getVersion());
-        pom.getProperties().setProperty(UNIVERSAL_BOM_VERSION_PROP, getUniversalBomArtifact().getVersion());
 
         final Build build = new Build();
         pom.setBuild(build);
@@ -656,7 +654,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Artifact bom = getUniversalBomArtifact();
         bomDep.setGroupId(bom.getGroupId());
         bomDep.setArtifactId(bom.getArtifactId());
-        bomDep.setVersion("${" + UNIVERSAL_BOM_VERSION_PROP + "}");
+        bomDep.setVersion(getUniversalBomArtifact().getVersion());
         bomDep.setType("pom");
         bomDep.setScope("import");
         return bomDep;
