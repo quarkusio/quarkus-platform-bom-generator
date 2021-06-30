@@ -165,6 +165,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     // POM property names by values
     private Map<String, String> pomPropsByValues = new HashMap<>();
 
+    private Profile generatedBomReleaseProfile;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
 
@@ -231,6 +233,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             generateMavenPluginModule(pom);
         }
 
+        final Profile releaseProfile = getGeneratedBomReleaseProfile();
+        if (releaseProfile != null) {
+            pom.addProfile(releaseProfile);
+        }
         persistPom(pom);
 
         recordUpdatedBoms();
@@ -460,6 +466,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         member.baseModel.addModule(moduleName);
         final Path platformBomXml = member.baseModel.getProjectDirectory().toPath().resolve(moduleName).resolve("pom.xml");
         member.generatedBomModel = PlatformBomUtils.toPlatformModel(member.generatedBom, baseModel, catalogResolver());
+        final Profile releaseProfile = getGeneratedBomReleaseProfile();
+        if (releaseProfile != null) {
+            member.generatedBomModel.addProfile(releaseProfile);
+        }
 
         try {
             Files.createDirectories(platformBomXml.getParent());
@@ -507,6 +517,50 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 }
             }
         }
+    }
+
+    private Profile getGeneratedBomReleaseProfile() {
+        if (generatedBomReleaseProfile == null) {
+            Profile parentReleaseProfile = null;
+            for (Profile p : project.getModel().getProfiles()) {
+                if (p.getId().equals("release")) {
+                    parentReleaseProfile = p;
+                    break;
+                }
+            }
+            if (parentReleaseProfile == null) {
+                getLog().warn("Failed to locate profile with id 'release'");
+                return null;
+            }
+            Plugin gpgPlugin = null;
+            for (Plugin plugin : parentReleaseProfile.getBuild().getPlugins()) {
+                if (plugin.getArtifactId().equals("maven-gpg-plugin")) {
+                    if (plugin.getVersion() == null) {
+                        final Plugin managedGpgPlugin = project.getPluginManagement().getPluginsAsMap()
+                                .get("org.apache.maven.plugins:maven-gpg-plugin");
+                        if (managedGpgPlugin == null) {
+                            getLog().warn("Failed to determine the version for org.apache.maven.plugins:maven-gpg-plugin");
+                        }
+                        plugin = plugin.clone();
+                        plugin.setVersion(managedGpgPlugin.getVersion());
+                    }
+                    gpgPlugin = plugin;
+                    break;
+                }
+            }
+            if (gpgPlugin == null) {
+                getLog().warn("Failed to locate the maven-gpg-plugin plugin in the " + parentReleaseProfile.getId()
+                        + " profile");
+                return null;
+            }
+            final Profile memberReleaseProfile = new Profile();
+            memberReleaseProfile.setId(parentReleaseProfile.getId());
+            final Build build = new Build();
+            memberReleaseProfile.setBuild(build);
+            build.addPlugin(gpgPlugin);
+            generatedBomReleaseProfile = memberReleaseProfile;
+        }
+        return generatedBomReleaseProfile;
     }
 
     private static ArtifactCoords toCoords(final Artifact a) {
@@ -1516,10 +1570,15 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final String moduleName = "bom";
         parentPom.addModule(moduleName);
         universalPlatformBomXml = parentPom.getProjectDirectory().toPath().resolve(moduleName).resolve("pom.xml");
+
+        final Model pom = PlatformBomUtils.toPlatformModel(universalGeneratedBom, baseModel, catalogResolver());
+        final Profile releaseProfile = getGeneratedBomReleaseProfile();
+        if (releaseProfile != null) {
+            pom.addProfile(releaseProfile);
+        }
         try {
-            PlatformBomUtils.toPom(universalGeneratedBom, universalPlatformBomXml, baseModel, catalogResolver());
-        } catch (MojoExecutionException e) {
-            throw e;
+            Files.createDirectories(universalPlatformBomXml.getParent());
+            ModelUtils.persistModel(universalPlatformBomXml, pom);
         } catch (IOException e) {
             throw new MojoExecutionException("Failed to persist generated BOM to " + universalPlatformBomXml, e);
         }
