@@ -430,6 +430,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     private static void skipInstall(final Model pom) {
         disablePlugin(pom, "maven-install-plugin", "default-install");
         disablePlugin(pom, "maven-deploy-plugin", "default-deploy");
+        pom.getProperties().setProperty("gpg.skip", "true");
     }
 
     private static void disablePlugin(Model pom, String pluginArtifactId, String execId) {
