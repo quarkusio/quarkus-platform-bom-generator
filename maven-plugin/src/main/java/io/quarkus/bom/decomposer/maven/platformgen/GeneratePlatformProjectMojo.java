@@ -233,10 +233,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             generateMavenPluginModule(pom);
         }
 
-        final Profile releaseProfile = getGeneratedBomReleaseProfile();
-        if (releaseProfile != null) {
-            pom.addProfile(releaseProfile);
-        }
+        addReleaseProfile(pom);
         persistPom(pom);
 
         recordUpdatedBoms();
@@ -261,6 +258,13 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
         } catch (Exception e) {
             throw new MojoExecutionException("Failed to generate platform member BOM reports", e);
+        }
+    }
+
+    private void addReleaseProfile(final Model pom) {
+        final Profile releaseProfile = getGeneratedBomReleaseProfile();
+        if (releaseProfile != null) {
+            pom.addProfile(releaseProfile);
         }
     }
 
@@ -466,10 +470,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         member.baseModel.addModule(moduleName);
         final Path platformBomXml = member.baseModel.getProjectDirectory().toPath().resolve(moduleName).resolve("pom.xml");
         member.generatedBomModel = PlatformBomUtils.toPlatformModel(member.generatedBom, baseModel, catalogResolver());
-        final Profile releaseProfile = getGeneratedBomReleaseProfile();
-        if (releaseProfile != null) {
-            member.generatedBomModel.addProfile(releaseProfile);
-        }
+        addReleaseProfile(member.generatedBomModel);
 
         try {
             Files.createDirectories(platformBomXml.getParent());
@@ -1572,10 +1573,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         universalPlatformBomXml = parentPom.getProjectDirectory().toPath().resolve(moduleName).resolve("pom.xml");
 
         final Model pom = PlatformBomUtils.toPlatformModel(universalGeneratedBom, baseModel, catalogResolver());
-        final Profile releaseProfile = getGeneratedBomReleaseProfile();
-        if (releaseProfile != null) {
-            pom.addProfile(releaseProfile);
-        }
+        addReleaseProfile(pom);
         try {
             Files.createDirectories(universalPlatformBomXml.getParent());
             ModelUtils.persistModel(universalPlatformBomXml, pom);
