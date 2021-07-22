@@ -13,6 +13,7 @@ public class PlatformMemberConfig {
     private String bom;
     private List<String> dependencyManagement = Collections.emptyList();
     private Boolean enabled;
+    private Boolean hidden;
 
     private PlatformMemberReleaseConfig release;
 
@@ -36,6 +37,9 @@ public class PlatformMemberConfig {
         }
         if (overrides.enabled != null) {
             enabled = overrides.enabled;
+        }
+        if (overrides.hidden != null) {
+            hidden = overrides.hidden;
         }
         if (overrides.release != null) {
             release.applyOverrides(overrides.release);
@@ -138,6 +142,16 @@ public class PlatformMemberConfig {
 
     public boolean isEnabled() {
         return enabled == null ? true : enabled.booleanValue();
+    }
+
+    /**
+     * Whether a member should be participating in the alignment but not be
+     * installed and deployed.
+     * 
+     * @return true if the member should not be installed and deployed
+     */
+    public boolean isHidden() {
+        return hidden == null ? false : hidden.booleanValue();
     }
 
     public void setExtensionList(String extensionList) {
