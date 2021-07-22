@@ -39,13 +39,11 @@
     <maven.compiler.release>11</maven.compiler.release>
 
     <java-ordered-properties.version>1.0.4</java-ordered-properties.version>
-    <maven-core.version>3.8.1</maven-core.version>
     <maven-gpg-plugin.version>1.6</maven-gpg-plugin.version>
     <maven-javadoc-plugin.version>3.1.1</maven-javadoc-plugin.version>
-    <maven-plugin-annotations.version>3.6.0</maven-plugin-annotations.version>
     <maven-source-plugin.version>3.2.0</maven-source-plugin.version>
     <nexus-staging-maven-plugin.version>1.6.8</nexus-staging-maven-plugin.version>
-    <quarkus.version>2.0.0.Final</quarkus.version>
+    <quarkus.version>2.1.0.Final</quarkus.version>
     <junit.jupiter.version>5.7.1</junit.jupiter.version>
     <xom.version>1.3.7</xom.version>
   </properties>
@@ -56,6 +54,13 @@
   </modules>
   <dependencyManagement>
     <dependencies>
+      <dependency>
+        <groupId>io.quarkus</groupId>
+        <artifactId>quarkus-bootstrap-bom</artifactId>
+        <version>${quarkus.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
       <dependency>
         <groupId>io.quarkus</groupId>
         <artifactId>quarkus-devtools-registry-client</artifactId>
@@ -77,11 +82,6 @@
         <version>${project.version}</version>
       </dependency>
       <dependency>
-        <groupId>io.quarkus</groupId>
-        <artifactId>quarkus-bootstrap-maven-resolver</artifactId>
-        <version>${quarkus.version}</version>
-      </dependency>
-      <dependency>
         <groupId>nu.studer</groupId>
         <artifactId>java-ordered-properties</artifactId>
         <version>${java-ordered-properties.version}</version>
@@ -90,52 +90,6 @@
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-text</artifactId>
         <version>1.8</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.maven</groupId>
-        <artifactId>maven-plugin-api</artifactId>
-        <version>${maven-core.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>javax.enterprise</groupId>
-            <artifactId>cdi-api</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>javax.inject</groupId>
-            <artifactId>javax.inject</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.maven</groupId>
-        <artifactId>maven-model</artifactId>
-        <version>${maven-core.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.maven</groupId>
-        <artifactId>maven-core</artifactId>
-        <version>${maven-core.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>javax.inject</groupId>
-            <artifactId>javax.inject</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.maven.plugin-tools</groupId>
-        <artifactId>maven-plugin-annotations</artifactId>
-        <version>${maven-plugin-annotations.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>org.apache.maven</groupId>
-            <artifactId>maven-artifact</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.junit.jupiter</groupId>
