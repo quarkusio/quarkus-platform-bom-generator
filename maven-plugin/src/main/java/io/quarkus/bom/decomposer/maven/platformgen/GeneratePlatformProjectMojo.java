@@ -432,6 +432,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             generateMemberIntegrationTestsModule(member);
         }
 
+        if (member.config.isHidden()) {
+            skipInstall(pom);
+        }
         persistPom(pom);
     }
 
@@ -471,6 +474,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Path platformBomXml = member.baseModel.getProjectDirectory().toPath().resolve(moduleName).resolve("pom.xml");
         member.generatedBomModel = PlatformBomUtils.toPlatformModel(member.generatedBom, baseModel, catalogResolver());
         addReleaseProfile(member.generatedBomModel);
+
+        if (member.config.isHidden()) {
+            skipInstall(member.generatedBomModel);
+        }
 
         try {
             Files.createDirectories(platformBomXml.getParent());
@@ -1214,7 +1221,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             } else {
                 platformKey.setValue("${" + PLATFORM_KEY_PROP + "}");
                 for (PlatformMember m : members.values()) {
-                    addMemberDescriptorConfig(pom, membersConfig, m.stackDescriptorCoords());
+                    if (!m.config.isHidden()) {
+                        addMemberDescriptorConfig(pom, membersConfig, m.stackDescriptorCoords());
+                    }
                 }
             }
         }
@@ -1325,6 +1334,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         dep.setType("pom");
         dep.setVersion(getDependencyVersion(pom, descriptorCoords));
         pom.addDependency(dep);
+
+        if (member != null && member.config.isHidden()) {
+            skipInstall(pom);
+        }
 
         final Path pomXml = moduleDir.resolve("pom.xml");
         pom.setPomFile(pomXml.toFile());
@@ -1455,6 +1468,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             final StringBuilder buf = new StringBuilder();
             while (i.hasNext()) {
                 final PlatformMember m = i.next();
+                if (m.config.isHidden()) {
+                    continue;
+                }
                 e = new Xpp3Dom("member");
                 membersConfig.addChild(e);
                 e.setValue(m.stackDescriptorCoords().toString());
@@ -1474,6 +1490,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                     "platform.release-info@${" + PLATFORM_KEY_PROP + "}$${"
                             + PLATFORM_STREAM_PROP + "}#${" + PLATFORM_RELEASE_PROP + "}",
                     buf.toString());
+        }
+
+        if (member.config.isHidden()) {
+            skipInstall(pom);
         }
 
         final Path pomXml = moduleDir.resolve("pom.xml");
