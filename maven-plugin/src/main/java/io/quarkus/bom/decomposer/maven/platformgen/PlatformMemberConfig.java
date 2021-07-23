@@ -21,7 +21,8 @@ public class PlatformMemberConfig {
     private Collection<PlatformMemberTestConfig> tests = new ArrayList<>();
     private String testCatalogArtifact;
 
-    private String extensionList;
+    private List<String> metadataOverrideFiles = new ArrayList<>(0);
+    private List<String> metadataOverrideArtifacts = new ArrayList<>(0);
 
     void applyOverrides(PlatformMemberConfig overrides) {
         if (overrides.bom != null) {
@@ -71,8 +72,11 @@ public class PlatformMemberConfig {
         if (overrides.testCatalogArtifact != null) {
             testCatalogArtifact = overrides.testCatalogArtifact;
         }
-        if (overrides.extensionList != null) {
-            extensionList = overrides.extensionList;
+        if (!overrides.metadataOverrideFiles.isEmpty()) {
+            metadataOverrideFiles.addAll(overrides.metadataOverrideFiles);
+        }
+        if (!overrides.metadataOverrideArtifacts.isEmpty()) {
+            metadataOverrideArtifacts.addAll(overrides.metadataOverrideArtifacts);
         }
     }
 
@@ -154,16 +158,31 @@ public class PlatformMemberConfig {
         return hidden == null ? false : hidden.booleanValue();
     }
 
-    public void setExtensionList(String extensionList) {
-        this.extensionList = extensionList;
+    public void setMetadataOverrideFiles(List<String> metadataOverrideFiles) {
+        this.metadataOverrideFiles = metadataOverrideFiles;
     }
 
     /**
-     * Path to a JSON file containing a list of extensions the member BOM should be limited to.
+     * Paths to JSON files containing extension catalog overrides.
      * 
-     * @return path to a JSON file containing a list of extensions the member BOM should be limited to
+     * @return paths to JSON files containing extension catalog overrides
      */
-    public String getExtensionList() {
-        return extensionList;
+    public List<String> getMetadataOverrideFiles() {
+        return metadataOverrideFiles;
+    }
+
+    public void setMetadataOverrideArtifacts(List<String> metadataOverrideArtifacts) {
+        this.metadataOverrideArtifacts = metadataOverrideArtifacts;
+    }
+
+    /**
+     * JSON Maven artifacts containing extension catalog overrides.
+     * If both the artifacts and the {@link #metadataOverrideFiles} are configured,
+     * the artifacts will be applied before the {@link #metadataOverrideFiles}.
+     * 
+     * @return JSON Maven artifacts containing extension catalog overrides
+     */
+    public List<String> getMetadataOverrideArtifacts() {
+        return metadataOverrideArtifacts;
     }
 }

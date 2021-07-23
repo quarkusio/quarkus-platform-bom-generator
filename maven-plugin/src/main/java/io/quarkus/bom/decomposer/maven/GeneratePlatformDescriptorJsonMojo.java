@@ -80,6 +80,14 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
     @Parameter(property = "bomVersion", defaultValue = "${project.version}")
     private String bomVersion;
 
+    /**
+     * A list of JSON Maven artifacts containing extension catalog metadata overrides.
+     * If both {@link #overridesFile} and this parameter are configured, the overrides
+     * from the Maven artifacts will be applied before the local ones configured with {@link #overridesFile}.
+     */
+    @Parameter
+    private List<String> metadataOverrideArtifacts = Collections.emptyList();
+
     /** file used for overrides - overridesFiles takes precedence over this file. **/
     @Parameter(property = "overridesFile", defaultValue = "${project.basedir}/src/main/resources/extensions-overrides.json")
     private String overridesFile;
@@ -195,12 +203,27 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
             return;
         }
 
-        List<OverrideInfo> allOverrides = new ArrayList<>();
-        for (String path : overridesFile.split(",")) {
-            OverrideInfo overrideInfo = getOverrideInfo(new File(path.trim()));
-            if (overrideInfo != null) {
-                allOverrides.add(overrideInfo);
+        final List<OverrideInfo> allOverrides = new ArrayList<>();
+        if (!metadataOverrideArtifacts.isEmpty()) {
+            for (String s : metadataOverrideArtifacts) {
+                final ArtifactCoords coords = ArtifactCoords.fromString(s);
+                final File f;
+                try {
+                    f = repoSystem.resolveArtifact(repoSession, new ArtifactRequest().setArtifact(new DefaultArtifact(
+                            coords.getGroupId(), coords.getArtifactId(), coords.getClassifier(), coords.getType(),
+                            coords.getVersion())).setRepositories(repos)).getArtifact().getFile();
+                } catch (ArtifactResolutionException e) {
+                    throw new MojoExecutionException("Failed to resolve metadata override artifact " + coords, e);
+                }
+                allOverrides.add(getOverrideInfo(f));
             }
+        }
+        for (String path : overridesFile.split(",")) {
+            final File f = new File(path.trim());
+            if (!f.exists()) {
+                continue;
+            }
+            allOverrides.add(getOverrideInfo(f));
         }
 
         final JsonExtensionCatalog platformJson = new JsonExtensionCatalog();
@@ -664,30 +687,27 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
     }
 
     public OverrideInfo getOverrideInfo(File overridesFile) throws MojoExecutionException {
-        // Read the overrides file for the extensions (if it exists)
-        HashMap<String, io.quarkus.registry.catalog.Extension> extOverrides = new HashMap<>();
-        JsonExtensionCatalog theRest = null;
-        if (overridesFile.isFile()) {
-            info("Found overrides file %s", overridesFile);
-            try {
-                JsonExtensionCatalog overridesObject = JsonCatalogMapperHelper.deserialize(overridesFile.toPath(),
-                        JsonExtensionCatalog.class);
-                List<io.quarkus.registry.catalog.Extension> extensionsOverrides = overridesObject.getExtensions();
-                if (!extensionsOverrides.isEmpty()) {
-                    // Put the extension overrides into a map keyed to their GAV
-                    for (io.quarkus.registry.catalog.Extension extOverride : extensionsOverrides) {
-                        String key = extensionId(extOverride);
-                        extOverrides.put(key, extOverride);
-                    }
-                }
-
-                theRest = overridesObject;
-            } catch (IOException e) {
-                throw new MojoExecutionException("Failed to read " + overridesFile, e);
-            }
-            return new OverrideInfo(extOverrides, theRest);
+        if (!overridesFile.isFile()) {
+            throw new MojoExecutionException(overridesFile + " is not a file");
         }
-        return null;
+        // Read the overrides file for the extensions (if it exists)
+        final Map<String, io.quarkus.registry.catalog.Extension> extOverrides = new HashMap<>();
+        info("Loading overrides file %s", overridesFile);
+        final JsonExtensionCatalog overridesObject;
+        try {
+            overridesObject = JsonCatalogMapperHelper.deserialize(overridesFile.toPath(), JsonExtensionCatalog.class);
+            List<io.quarkus.registry.catalog.Extension> extensionsOverrides = overridesObject.getExtensions();
+            if (!extensionsOverrides.isEmpty()) {
+                // Put the extension overrides into a map keyed to their GAV
+                for (io.quarkus.registry.catalog.Extension extOverride : extensionsOverrides) {
+                    String key = extensionId(extOverride);
+                    extOverrides.put(key, extOverride);
+                }
+            }
+        } catch (IOException e) {
+            throw new MojoExecutionException("Failed to read " + overridesFile, e);
+        }
+        return new OverrideInfo(extOverrides, overridesObject);
     }
 
     private static class OverrideInfo {

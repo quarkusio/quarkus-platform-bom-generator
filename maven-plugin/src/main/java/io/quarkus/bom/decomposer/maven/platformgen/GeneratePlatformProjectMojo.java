@@ -30,9 +30,7 @@ import io.quarkus.bootstrap.util.IoUtils;
 import io.quarkus.maven.ArtifactCoords;
 import io.quarkus.maven.ArtifactKey;
 import io.quarkus.registry.Constants;
-import io.quarkus.registry.catalog.Extension;
 import io.quarkus.registry.catalog.json.JsonCatalogMapperHelper;
-import io.quarkus.registry.catalog.json.JsonExtensionCatalog;
 import io.quarkus.registry.util.PlatformArtifacts;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -53,6 +51,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.StringJoiner;
 import javax.xml.transform.Result;
 import javax.xml.transform.Source;
 import javax.xml.transform.Transformer;
@@ -1289,37 +1288,48 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             on.set(LAST_BOM_UPDATE, on.textNode("${" + MEMBER_LAST_BOM_UPDATE_PROP + "}"));
         }
 
-        Path overridesFile = null;
+        // METADATA OVERRIDES
+        final StringJoiner metadataOverrideFiles = new StringJoiner(",");
         if (overrides != null) {
-            overridesFile = moduleDir.resolve("src").resolve("main").resolve("resources")
-                    .resolve("overrides.json");
+            Path overridesFile = moduleDir.resolve("src").resolve("main").resolve("resources").resolve("overrides.json");
             try {
                 JsonCatalogMapperHelper.serialize(overrides, overridesFile);
             } catch (Exception ex) {
                 throw new MojoExecutionException("Failed to serialize metadata to " + overridesFile, ex);
             }
             overridesFile = moduleDir.resolve("target").resolve("classes").resolve(overridesFile.getFileName());
+            metadataOverrideFiles.add("${project.basedir}/" + moduleDir.relativize(overridesFile));
         }
 
         final PlatformDescriptorGeneratorConfig descrGen = platformConfig.getDescriptorGenerator();
-        if (overridesFile != null
-                || descrGen != null && descrGen.overridesFile != null) {
-            e = new Xpp3Dom("overridesFile");
-            final StringBuilder buf = new StringBuilder();
-            if (overridesFile != null) {
-                buf.append("${project.basedir}/").append(moduleDir.relativize(overridesFile));
+        if (descrGen != null && descrGen.overridesFile != null) {
+            for (String path : descrGen.overridesFile.split(",")) {
+                metadataOverrideFiles.add("${project.basedir}/" + moduleDir.relativize(Paths.get(path.trim())));
             }
-            if (descrGen.overridesFile != null) {
-                for (String path : descrGen.overridesFile.split(",")) {
-                    if (buf.length() > 0) {
-                        buf.append(",");
-                    }
-                    buf.append("${project.basedir}/").append(moduleDir.relativize(Paths.get(path.trim())).toString());
+        }
+
+        if (member == null) {
+            final List<String> overrideArtifacts = new ArrayList<>(0);
+            for (PlatformMember m : members.values()) {
+                for (String s : m.config.getMetadataOverrideFiles()) {
+                    addMetadataOverrideFile(metadataOverrideFiles, moduleDir, Paths.get(s));
                 }
+                overrideArtifacts.addAll(m.config.getMetadataOverrideArtifacts());
             }
-            e.setValue(buf.toString());
+            addMetadataOverrideArtifacts(config, overrideArtifacts);
+        } else {
+            for (String s : member.config.getMetadataOverrideFiles()) {
+                addMetadataOverrideFile(metadataOverrideFiles, moduleDir, Paths.get(s));
+            }
+            addMetadataOverrideArtifacts(config, member.config.getMetadataOverrideArtifacts());
+        }
+
+        if (metadataOverrideFiles.length() > 0) {
+            e = new Xpp3Dom("overridesFile");
+            e.setValue(metadataOverrideFiles.toString());
             config.addChild(e);
         }
+
         if (descrGen != null && descrGen.skipCategoryCheck) {
             e = new Xpp3Dom("skipCategoryCheck");
             e.setValue("true");
@@ -1347,6 +1357,27 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Path pomXml = moduleDir.resolve("pom.xml");
         pom.setPomFile(pomXml.toFile());
         persistPom(pom);
+    }
+
+    private void addMetadataOverrideArtifacts(final Xpp3Dom config, final List<String> overrideArtifacts) {
+        if (overrideArtifacts.isEmpty()) {
+            return;
+        }
+        final Xpp3Dom artifacts = new Xpp3Dom("metadataOverrideArtifacts");
+        config.addChild(artifacts);
+        for (String s : overrideArtifacts) {
+            final Xpp3Dom e = new Xpp3Dom("artifact");
+            e.setValue(s);
+            artifacts.addChild(e);
+        }
+    }
+
+    private void addMetadataOverrideFile(final StringJoiner metadataOverrideFiles, final Path moduleDir,
+            final Path file) throws MojoExecutionException {
+        if (!Files.exists(file)) {
+            throw new MojoExecutionException("Configured metadata overrides file " + file + " does not exist");
+        }
+        metadataOverrideFiles.add("${project.basedir}/" + moduleDir.relativize(file));
     }
 
     private void addMemberDescriptorConfig(final Model pom, final Xpp3Dom membersConfig,
@@ -1476,6 +1507,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 if (m.config.isHidden()) {
                     continue;
                 }
+                if (buf.length() > 0) {
+                    buf.append(",");
+                }
                 e = new Xpp3Dom("member");
                 membersConfig.addChild(e);
                 e.setValue(m.stackDescriptorCoords().toString());
@@ -1485,9 +1519,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                     buf.append("${project.groupId}:").append(bomCoords.getArtifactId()).append("::pom:${project.version}");
                 } else {
                     buf.append(bomCoords);
-                }
-                if (i.hasNext()) {
-                    buf.append(",");
                 }
             }
 
@@ -1788,29 +1819,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                         new org.eclipse.aether.graph.Dependency(originalBomCoords(), "import"));
             }
             bomMember.setGeneratedBomArtifact(generatedBomCoords());
-
-            final String extListStr = config.getExtensionList();
-            if (extListStr != null) {
-                final Path extListPath = Paths.get(extListStr).normalize().toAbsolutePath();
-                if (!Files.exists(extListPath)) {
-                    throw new RuntimeException(
-                            "Failed to locate extension list at " + extListPath + " for member " + config.getName());
-                }
-                final JsonExtensionCatalog catalog;
-                try {
-                    catalog = JsonCatalogMapperHelper.deserialize(extListPath, JsonExtensionCatalog.class);
-                } catch (IOException e) {
-                    throw new RuntimeException("Failed to deserialize " + extListPath, e);
-                }
-
-                final List<AppArtifactKey> extensionKeys = new ArrayList<>(catalog.getExtensions().size());
-                for (Extension e : catalog.getExtensions()) {
-                    final ArtifactCoords a = e.getArtifact();
-                    extensionKeys.add(new AppArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getType()));
-                }
-                bomMember.setExtensionCatalog(extensionKeys);
-            }
-
             return bomMember;
         }
 
