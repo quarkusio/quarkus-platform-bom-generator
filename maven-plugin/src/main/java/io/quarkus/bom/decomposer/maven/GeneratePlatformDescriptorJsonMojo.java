@@ -150,6 +150,9 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
     @Parameter(required = false)
     String quarkusCoreVersion;
 
+    @Parameter(required = false)
+    String upstreamQuarkusCoreVersion;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
 
@@ -359,6 +362,9 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
             throw new MojoExecutionException("Failed to determine the Quarkus Core version for " + bomArtifact);
         }
         platformJson.setQuarkusCoreVersion(quarkusCoreVersion);
+        if (upstreamQuarkusCoreVersion != null && !upstreamQuarkusCoreVersion.isBlank()) {
+            platformJson.setUpstreamQuarkusCoreVersion(upstreamQuarkusCoreVersion);
+        }
 
         for (OverrideInfo info : allOverrides) {
             if (info.getTheRest() != null) {

@@ -20,6 +20,8 @@ public class PlatformConfig {
 
     private AttachedMavenPluginConfig attachedMavenPlugin;
 
+    private String upstreamQuarkusCoreVersion;
+
     public PlatformReleaseConfig getRelease() {
         return release;
     }
@@ -81,5 +83,17 @@ public class PlatformConfig {
 
     public void setAttachedMavenPlugin(AttachedMavenPluginConfig attachedMavenPlugin) {
         this.attachedMavenPlugin = attachedMavenPlugin;
+    }
+
+    public String getUpstreamQuarkusCoreVersion() {
+        return upstreamQuarkusCoreVersion;
+    }
+
+    public void setUpstreamQuarkusCoreVersion(String upstreamQuarkusCoreVersion) {
+        this.upstreamQuarkusCoreVersion = upstreamQuarkusCoreVersion;
+    }
+
+    public boolean hasUpstreamQuarkusCoreVersion() {
+        return upstreamQuarkusCoreVersion != null && !upstreamQuarkusCoreVersion.isBlank();
     }
 }
