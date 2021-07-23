@@ -143,7 +143,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     ArtifactResolver artifactResolver;
 
     PlatformCatalogResolver catalogs;
-    Map<ArtifactKey, PlatformMember> members = new HashMap<>();
+    final Map<ArtifactKey, PlatformMember> members = new LinkedHashMap<>();
 
     private PlatformMember quarkusCore;
 
