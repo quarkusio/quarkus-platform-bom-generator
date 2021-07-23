@@ -1199,6 +1199,11 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         Xpp3Dom e = new Xpp3Dom("quarkusCoreVersion");
         e.setValue(quarkusCore.getVersionProperty());
         config.addChild(e);
+        if (platformConfig.hasUpstreamQuarkusCoreVersion()) {
+            e = new Xpp3Dom("upstreamQuarkusCoreVersion");
+            e.setValue(platformConfig.getUpstreamQuarkusCoreVersion());
+            config.addChild(e);
+        }
 
         if (addPlatformReleaseConfig) {
             final Xpp3Dom stackConfig = new Xpp3Dom("platformRelease");
