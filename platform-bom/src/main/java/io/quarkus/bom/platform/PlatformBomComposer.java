@@ -85,7 +85,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         this.config = config;
         this.logger = logger;
         this.resolver = config.artifactResolver();
-        this.extCoordsFilterFactory = ExtensionCoordsFilterFactory.newInstance(config);
+        this.extCoordsFilterFactory = ExtensionCoordsFilterFactory.newInstance(config, logger);
 
         this.originalQuarkusBom = BomDecomposer.config()
                 .logger(logger)
