@@ -11,6 +11,7 @@ import io.quarkus.bom.decomposer.ProjectDependency;
 import io.quarkus.bom.decomposer.ProjectRelease;
 import io.quarkus.bom.decomposer.maven.GeneratePlatformBomMojo;
 import io.quarkus.bom.decomposer.maven.MojoMessageWriter;
+import io.quarkus.bom.decomposer.maven.util.Utils;
 import io.quarkus.bom.platform.PlatformBomComposer;
 import io.quarkus.bom.platform.PlatformBomConfig;
 import io.quarkus.bom.platform.PlatformBomMemberConfig;
@@ -432,36 +433,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         if (member.config.isHidden()) {
-            skipInstall(pom);
+            Utils.skipInstallAndDeploy(pom);
         }
         persistPom(pom);
-    }
-
-    private static void skipInstall(final Model pom) {
-        disablePlugin(pom, "maven-install-plugin", "default-install");
-        disablePlugin(pom, "maven-deploy-plugin", "default-deploy");
-        pom.getProperties().setProperty("gpg.skip", "true");
-    }
-
-    private static void disablePlugin(Model pom, String pluginArtifactId, String execId) {
-        Build build = pom.getBuild();
-        if (build == null) {
-            build = new Build();
-            pom.setBuild(build);
-        }
-        PluginManagement pm = build.getPluginManagement();
-        if (pm == null) {
-            pm = new PluginManagement();
-            build.setPluginManagement(pm);
-        }
-        Plugin plugin = new Plugin();
-        pm.addPlugin(plugin);
-        plugin.setGroupId("org.apache.maven.plugins");
-        plugin.setArtifactId(pluginArtifactId);
-        PluginExecution e = new PluginExecution();
-        plugin.addExecution(e);
-        e.setId(execId);
-        e.setPhase("none");
     }
 
     private void generateMemberBom(PlatformMember member) throws MojoExecutionException {
@@ -475,7 +449,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         addReleaseProfile(member.generatedBomModel);
 
         if (member.config.isHidden()) {
-            skipInstall(member.generatedBomModel);
+            Utils.skipInstallAndDeploy(member.generatedBomModel);
         }
 
         try {
@@ -706,7 +680,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
         }
 
-        skipInstall(pom);
+        Utils.skipInstallAndDeploy(pom);
         persistPom(pom);
     }
 
@@ -901,8 +875,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             appArtifact.setValue(testArtifact.getGroupId() + ":" + testArtifact.getArtifactId() + ":" + testArtifactVersion);
         }
 
-        disablePlugin(pom, "maven-jar-plugin", "default-jar");
-        disablePlugin(pom, "maven-source-plugin", "attach-sources");
+        Utils.disablePlugin(pom, "maven-jar-plugin", "default-jar");
+        Utils.disablePlugin(pom, "maven-source-plugin", "attach-sources");
         persistPom(pom);
 
         if (testConfig.getTransformWith() != null) {
@@ -1146,7 +1120,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         if (platformConfig.getUniversal().isSkipInstall()) {
-            skipInstall(pom);
+            Utils.skipInstallAndDeploy(pom);
         }
         persistPom(pom);
     }
@@ -1351,7 +1325,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         pom.addDependency(dep);
 
         if (member != null && member.config.isHidden()) {
-            skipInstall(pom);
+            Utils.skipInstallAndDeploy(pom);
         }
 
         final Path pomXml = moduleDir.resolve("pom.xml");
@@ -1529,7 +1503,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         if (member.config.isHidden()) {
-            skipInstall(pom);
+            Utils.skipInstallAndDeploy(pom);
         }
 
         final Path pomXml = moduleDir.resolve("pom.xml");

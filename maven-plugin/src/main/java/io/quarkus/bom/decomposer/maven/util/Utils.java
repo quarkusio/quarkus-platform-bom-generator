@@ -9,7 +9,11 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.Vector;
+import org.apache.maven.model.Build;
 import org.apache.maven.model.Model;
+import org.apache.maven.model.Plugin;
+import org.apache.maven.model.PluginExecution;
+import org.apache.maven.model.PluginManagement;
 
 public class Utils {
 
@@ -31,6 +35,33 @@ public class Utils {
         model.setProperties(new SortedProperties());
         model.setModelVersion("4.0.0");
         return model;
+    }
+
+    public static void skipInstallAndDeploy(final Model pom) {
+        disablePlugin(pom, "maven-install-plugin", "default-install");
+        disablePlugin(pom, "maven-deploy-plugin", "default-deploy");
+        pom.getProperties().setProperty("gpg.skip", "true");
+    }
+
+    public static void disablePlugin(Model pom, String pluginArtifactId, String execId) {
+        Build build = pom.getBuild();
+        if (build == null) {
+            build = new Build();
+            pom.setBuild(build);
+        }
+        PluginManagement pm = build.getPluginManagement();
+        if (pm == null) {
+            pm = new PluginManagement();
+            build.setPluginManagement(pm);
+        }
+        Plugin plugin = new Plugin();
+        pm.addPlugin(plugin);
+        plugin.setGroupId("org.apache.maven.plugins");
+        plugin.setArtifactId(pluginArtifactId);
+        PluginExecution e = new PluginExecution();
+        plugin.addExecution(e);
+        e.setId(execId);
+        e.setPhase("none");
     }
 
     private static class SortedProperties extends Properties {

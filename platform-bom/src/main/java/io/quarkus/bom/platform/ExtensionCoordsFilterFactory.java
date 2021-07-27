@@ -1,31 +1,55 @@
 package io.quarkus.bom.platform;
 
+import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.maven.ArtifactKey;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import org.eclipse.aether.artifact.Artifact;
+import org.eclipse.aether.graph.Dependency;
 
 public class ExtensionCoordsFilterFactory {
 
-    public static ExtensionCoordsFilterFactory newInstance(PlatformBomConfig config) {
+    public static ExtensionCoordsFilterFactory newInstance(PlatformBomConfig config, MessageWriter log) {
         final Map<ArtifactKey, PlatformBomMemberConfig> members = new HashMap<>();
-        add(members, config.quarkusBom());
+        add(members, config.quarkusBom(), log);
         for (PlatformBomMemberConfig member : config.directDeps()) {
-            if (member.isBom()) {
-                add(members, member);
-            }
+            add(members, member, log);
         }
         return new ExtensionCoordsFilterFactory(members, config.isEnableNonMemberQuarkiverseExtensions());
     }
 
-    private static void add(Map<ArtifactKey, PlatformBomMemberConfig> members, PlatformBomMemberConfig member) {
-        final PlatformBomMemberConfig previous = members.put(
-                new ArtifactKey(member.originalBomArtifact().getGroupId(), member.originalBomArtifact().getArtifactId()),
-                member);
-        if (previous != null) {
-            throw new IllegalArgumentException("Found members with the same GAV: " + previous.originalBomArtifact() + " and "
-                    + member.originalBomArtifact());
+    private static void add(final Map<ArtifactKey, PlatformBomMemberConfig> members, PlatformBomMemberConfig member,
+            MessageWriter log) {
+        final ArtifactKey memberKey = memberKey(member);
+        if (memberKey != null) {
+            final PlatformBomMemberConfig previous = members.put(memberKey, member);
+            if (previous != null) {
+                throw new IllegalArgumentException(
+                        "Found members with the same GAV: " + previous.originalBomArtifact() + " and "
+                                + member.originalBomArtifact());
+            }
+        } else {
+            log.warn("Failed to determine the primary Maven artifact gropuId for member " + member.key());
         }
+    }
+
+    private static ArtifactKey memberKey(PlatformBomMemberConfig member) {
+        if (member.isBom()) {
+            return new ArtifactKey(member.originalBomArtifact().getGroupId(), member.originalBomArtifact().getArtifactId());
+        }
+        // we need to identify the extension groupIds for dependency filtering
+        final Set<String> memberGroupIds = new HashSet<>(1);
+        for (Dependency d : member.asDependencyConstraints()) {
+            if (d.getArtifact().getArtifactId().endsWith("-deployment")) {
+                memberGroupIds.add(d.getArtifact().getGroupId());
+            }
+        }
+        if (memberGroupIds.size() == 1) {
+            return new ArtifactKey(memberGroupIds.iterator().next(), member.generatedBomArtifact().getArtifactId());
+        }
+        return null;
     }
 
     private final Map<ArtifactKey, PlatformBomMemberConfig> members;
