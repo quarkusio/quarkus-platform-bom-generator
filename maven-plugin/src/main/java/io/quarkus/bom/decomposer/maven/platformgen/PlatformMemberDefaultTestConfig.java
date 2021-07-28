@@ -20,6 +20,10 @@ public class PlatformMemberDefaultTestConfig {
     protected String nativeGroups;
     protected List<String> dependencies = Collections.emptyList();
     protected List<String> testDependencies = Collections.emptyList();
+    protected List<String> jvmIncludes = Collections.emptyList();
+    protected List<String> jvmExcludes = Collections.emptyList();
+    protected List<String> nativeIncludes = Collections.emptyList();
+    protected List<String> nativeExcludes = Collections.emptyList();
 
     public PlatformMemberDefaultTestConfig() {
         super();
@@ -87,6 +91,34 @@ public class PlatformMemberDefaultTestConfig {
                 testDependencies = overrides.testDependencies;
             } else {
                 testDependencies.addAll(overrides.testDependencies);
+            }
+        }
+        if (!overrides.jvmIncludes.isEmpty()) {
+            if (jvmIncludes.isEmpty()) {
+                jvmIncludes = overrides.jvmIncludes;
+            } else {
+                jvmIncludes.addAll(overrides.jvmIncludes);
+            }
+        }
+        if (!overrides.jvmExcludes.isEmpty()) {
+            if (jvmExcludes.isEmpty()) {
+                jvmExcludes = overrides.jvmExcludes;
+            } else {
+                jvmExcludes.addAll(overrides.jvmExcludes);
+            }
+        }
+        if (!overrides.nativeIncludes.isEmpty()) {
+            if (nativeIncludes.isEmpty()) {
+                nativeIncludes = overrides.jvmIncludes;
+            } else {
+                nativeIncludes.addAll(overrides.jvmIncludes);
+            }
+        }
+        if (!overrides.nativeExcludes.isEmpty()) {
+            if (nativeExcludes.isEmpty()) {
+                nativeExcludes = overrides.jvmExcludes;
+            } else {
+                nativeExcludes.addAll(overrides.jvmExcludes);
             }
         }
     }
@@ -193,5 +225,37 @@ public class PlatformMemberDefaultTestConfig {
 
     public List<String> getTestDependencies() {
         return testDependencies;
+    }
+
+    public List<String> getJvmIncludes() {
+        return jvmIncludes;
+    }
+
+    public void setJvmIncludes(List<String> jvmIncludes) {
+        this.jvmIncludes = jvmIncludes;
+    }
+
+    public List<String> getJvmExcludes() {
+        return jvmExcludes;
+    }
+
+    public void setJvmExcludes(List<String> jvmExcludes) {
+        this.jvmExcludes = jvmExcludes;
+    }
+
+    public List<String> getNativeIncludes() {
+        return nativeIncludes;
+    }
+
+    public void setNativeIncludes(List<String> nativeIncludes) {
+        this.nativeIncludes = nativeIncludes;
+    }
+
+    public List<String> getNativeExcludes() {
+        return nativeExcludes;
+    }
+
+    public void setNativeExcludes(List<String> nativeExcludes) {
+        this.nativeExcludes = nativeExcludes;
     }
 }

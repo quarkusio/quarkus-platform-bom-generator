@@ -784,6 +784,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 }
 
                 addGroupsConfig(testConfig, config, false);
+                addIncludesExcludesConfig(testConfig, config, false);
             }
 
             try {
@@ -1023,6 +1024,34 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         groups.setValue(groupsStr);
     }
 
+    private static void addIncludesExcludesConfig(PlatformMemberTestConfig testConfig, Xpp3Dom config, boolean nativeTest) {
+        if (nativeTest) {
+            if (!testConfig.getNativeIncludes().isEmpty()) {
+                addElements(config, "includes", "include", testConfig.getNativeIncludes());
+            }
+            if (!testConfig.getNativeExcludes().isEmpty()) {
+                addElements(config, "excludes", "exclude", testConfig.getNativeExcludes());
+            }
+        } else {
+            if (!testConfig.getJvmIncludes().isEmpty()) {
+                addElements(config, "includes", "include", testConfig.getJvmIncludes());
+            }
+            if (!testConfig.getJvmExcludes().isEmpty()) {
+                addElements(config, "excludes", "exclude", testConfig.getJvmExcludes());
+            }
+        }
+    }
+
+    private static void addElements(Xpp3Dom config, String wrapperName, String elementName, List<String> values) {
+        final Xpp3Dom includes = new Xpp3Dom(wrapperName);
+        config.addChild(includes);
+        for (String s : values) {
+            final Xpp3Dom e = new Xpp3Dom(elementName);
+            e.setValue(s);
+            includes.addChild(e);
+        }
+    }
+
     private TransformerFactory getTransformerFactory() throws TransformerFactoryConfigurationError {
         if (transformerFactory == null) {
             final TransformerFactory factory = TransformerFactory.newInstance();
@@ -1050,25 +1079,35 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         config = new Xpp3Dom("configuration");
         exec.setConfiguration(config);
-        final Xpp3Dom sysProps = new Xpp3Dom("systemProperties");
-        config.addChild(sysProps);
-        final Xpp3Dom nativeImagePath = new Xpp3Dom("native.image.path");
-        sysProps.addChild(nativeImagePath);
-        nativeImagePath.setValue("${project.build.directory}/${project.build.finalName}-runner");
+        if (nativeTest) {
+            final Xpp3Dom nativeImagePath = new Xpp3Dom("native.image.path");
+            getOrCreateChild(config, "systemProperties").addChild(nativeImagePath);
+            nativeImagePath.setValue("${project.build.directory}/${project.build.finalName}-runner");
+        }
         if (!testConfig.getSystemProperties().isEmpty()) {
-            addSystemProperties(sysProps, testConfig.getSystemProperties());
+            addSystemProperties(getOrCreateChild(config, "systemProperties"), testConfig.getSystemProperties());
         }
 
         if (nativeTest) {
             if (!testConfig.getNativeSystemProperties().isEmpty()) {
-                addSystemProperties(sysProps, testConfig.getNativeSystemProperties());
+                addSystemProperties(getOrCreateChild(config, "systemProperties"), testConfig.getNativeSystemProperties());
             }
         } else if (!testConfig.getJvmSystemProperties().isEmpty()) {
-            addSystemProperties(sysProps, testConfig.getJvmSystemProperties());
+            addSystemProperties(getOrCreateChild(config, "systemProperties"), testConfig.getJvmSystemProperties());
         }
 
         addGroupsConfig(testConfig, config, nativeTest);
+        addIncludesExcludesConfig(testConfig, config, nativeTest);
         return plugin;
+    }
+
+    private static Xpp3Dom getOrCreateChild(Xpp3Dom parent, String child) {
+        Xpp3Dom e = parent.getChild(child);
+        if (e == null) {
+            e = new Xpp3Dom(child);
+            parent.addChild(e);
+        }
+        return e;
     }
 
     private void addSystemProperties(Xpp3Dom sysProps, Map<String, String> props) {
