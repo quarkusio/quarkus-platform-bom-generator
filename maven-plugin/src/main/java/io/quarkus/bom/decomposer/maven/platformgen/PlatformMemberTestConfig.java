@@ -110,5 +110,34 @@ public class PlatformMemberTestConfig extends PlatformMemberDefaultTestConfig {
                 testDependencies.addAll(defaults.testDependencies);
             }
         }
+
+        if (!defaults.jvmExcludes.isEmpty()) {
+            if (jvmExcludes.isEmpty()) {
+                jvmExcludes = defaults.jvmExcludes;
+            } else {
+                jvmExcludes.addAll(defaults.jvmExcludes);
+            }
+        }
+        if (!defaults.jvmIncludes.isEmpty()) {
+            if (jvmIncludes.isEmpty()) {
+                jvmIncludes = defaults.jvmIncludes;
+            } else {
+                jvmIncludes.addAll(defaults.jvmIncludes);
+            }
+        }
+        if (!defaults.nativeExcludes.isEmpty()) {
+            if (nativeExcludes.isEmpty()) {
+                nativeExcludes = defaults.nativeExcludes;
+            } else {
+                nativeExcludes.addAll(defaults.nativeExcludes);
+            }
+        }
+        if (!defaults.nativeIncludes.isEmpty()) {
+            if (nativeIncludes.isEmpty()) {
+                nativeIncludes = defaults.nativeIncludes;
+            } else {
+                nativeIncludes.addAll(defaults.nativeIncludes);
+            }
+        }
     }
 }
