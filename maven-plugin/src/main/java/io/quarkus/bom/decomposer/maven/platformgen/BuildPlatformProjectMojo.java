@@ -56,6 +56,16 @@ public class BuildPlatformProjectMojo extends AbstractMojo {
         request.setBatchMode(true);
         request.setLocalRepositoryDirectory(mavenSession.getRequest().getLocalRepositoryPath());
 
+        final File globalSettings = mavenSession.getRequest().getGlobalSettingsFile();
+        if (globalSettings != null) {
+            request.setGlobalSettingsFile(globalSettings);
+        }
+
+        final File userSettings = mavenSession.getRequest().getUserSettingsFile();
+        if (userSettings != null) {
+            request.setUserSettingsFile(userSettings);
+        }
+
         final String reactorFailureBehavior = mavenSession.getReactorFailureBehavior();
         if (reactorFailureBehavior != null) {
             request.setReactorFailureBehavior(
