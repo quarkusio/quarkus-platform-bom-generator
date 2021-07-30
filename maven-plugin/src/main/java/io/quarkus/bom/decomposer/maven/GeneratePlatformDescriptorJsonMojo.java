@@ -292,7 +292,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
 
         // Create a JSON array of extension descriptors
         final Set<String> referencedCategories = new HashSet<>();
-        final List<io.quarkus.registry.catalog.Extension> extListJson = new ArrayList<>();
+        final List<Extension> extListJson = new ArrayList<>();
         platformJson.setExtensions(extListJson);
         boolean jsonFoundInBom = false;
         for (Dependency dep : deps) {
@@ -356,7 +356,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
 
             String key = extensionId(extension);
             for (OverrideInfo info : allOverrides) {
-                io.quarkus.registry.catalog.Extension extOverride = info.getExtOverrides().get(key);
+                final Extension extOverride = info.getExtOverrides().get(key);
                 if (extOverride != null) {
                     extension = mergeObject(extension, extOverride);
                 }
@@ -611,8 +611,8 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
     private JsonExtension processPlatformArtifact(Artifact artifact, Path descriptor, ObjectMapper mapper)
             throws IOException {
         try (InputStream is = Files.newInputStream(descriptor)) {
-            JsonExtension legacy = mapper.readValue(is, JsonExtension.class);
-            JsonExtension object = transformLegacyToNew(legacy);
+            final JsonExtension legacy = mapper.readValue(is, JsonExtension.class);
+            final JsonExtension object = transformLegacyToNew(legacy);
             debug("Adding Quarkus extension %s", object.getArtifact());
             return object;
         } catch (IOException io) {
@@ -621,7 +621,6 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
     }
 
     private ObjectMapper getMapper(boolean yaml) {
-
         if (yaml) {
             YAMLFactory yf = new YAMLFactory();
             return JsonCatalogMapperHelper.initMapper(new ObjectMapper(yf));
@@ -630,13 +629,26 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
         }
     }
 
-    private String extensionId(io.quarkus.registry.catalog.Extension extObject) {
+    private String extensionId(Extension extObject) {
         return extObject.getArtifact().getGroupId() + ":" + extObject.getArtifact().getArtifactId();
     }
 
-    private JsonExtension mergeObject(JsonExtension extObject, io.quarkus.registry.catalog.Extension extOverride) {
-        if (extOverride.getArtifact() != null) {
-            extObject.setArtifact(extOverride.getArtifact());
+    private JsonExtension mergeObject(JsonExtension extObject, Extension extOverride) {
+        final ArtifactCoords overrideCoords = extOverride.getArtifact();
+        if (overrideCoords != null) {
+            if (overrideCoords.getGroupId() != null && overrideCoords.getArtifactId() != null
+                    && overrideCoords.getVersion() != null) {
+                extObject.setArtifact(overrideCoords);
+            } else {
+                final ArtifactCoords originalCoords = extObject.getArtifact();
+                extObject.setArtifact(new ArtifactCoords(
+                        overrideCoords.getGroupId() == null ? originalCoords.getGroupId() : overrideCoords.getGroupId(),
+                        overrideCoords.getArtifactId() == null ? originalCoords.getArtifactId()
+                                : overrideCoords.getArtifactId(),
+                        overrideCoords.getClassifier(),
+                        overrideCoords.getType() == null ? originalCoords.getType() : overrideCoords.getType(),
+                        overrideCoords.getVersion() == null ? originalCoords.getVersion() : overrideCoords.getVersion()));
+            }
         }
         if (!extOverride.getMetadata().isEmpty()) {
             if (extObject.getMetadata().isEmpty()) {
@@ -691,17 +703,16 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
             throw new MojoExecutionException(overridesFile + " is not a file");
         }
         // Read the overrides file for the extensions (if it exists)
-        final Map<String, io.quarkus.registry.catalog.Extension> extOverrides = new HashMap<>();
+        final Map<String, Extension> extOverrides = new HashMap<>();
         info("Loading overrides file %s", overridesFile);
         final JsonExtensionCatalog overridesObject;
         try {
             overridesObject = JsonCatalogMapperHelper.deserialize(overridesFile.toPath(), JsonExtensionCatalog.class);
-            List<io.quarkus.registry.catalog.Extension> extensionsOverrides = overridesObject.getExtensions();
+            final List<Extension> extensionsOverrides = overridesObject.getExtensions();
             if (!extensionsOverrides.isEmpty()) {
                 // Put the extension overrides into a map keyed to their GAV
-                for (io.quarkus.registry.catalog.Extension extOverride : extensionsOverrides) {
-                    String key = extensionId(extOverride);
-                    extOverrides.put(key, extOverride);
+                for (Extension extOverride : extensionsOverrides) {
+                    extOverrides.put(extensionId(extOverride), extOverride);
                 }
             }
         } catch (IOException e) {
@@ -711,16 +722,16 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
     }
 
     private static class OverrideInfo {
-        private Map<String, io.quarkus.registry.catalog.Extension> extOverrides;
+        private Map<String, Extension> extOverrides;
         private JsonExtensionCatalog theRest;
 
-        public OverrideInfo(Map<String, io.quarkus.registry.catalog.Extension> extOverrides,
+        public OverrideInfo(Map<String, Extension> extOverrides,
                 JsonExtensionCatalog theRest) {
             this.extOverrides = extOverrides;
             this.theRest = theRest;
         }
 
-        public Map<String, io.quarkus.registry.catalog.Extension> getExtOverrides() {
+        public Map<String, Extension> getExtOverrides() {
             return extOverrides;
         }
 
