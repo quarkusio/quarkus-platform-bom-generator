@@ -769,17 +769,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 plugin.setConfiguration(config);
                 config.addChild(depsToScan);
 
-                Xpp3Dom systemProps = null;
+                Xpp3Dom systemProps = initializeTestPluginSystemPropertyVariables(config);
+
                 if (!testConfig.getSystemProperties().isEmpty()) {
-                    systemProps = new Xpp3Dom("systemPropertyVariables");
-                    config.addChild(systemProps);
                     addSystemProperties(systemProps, testConfig.getSystemProperties());
                 }
                 if (!testConfig.getJvmSystemProperties().isEmpty()) {
-                    if (systemProps == null) {
-                        systemProps = new Xpp3Dom("systemPropertyVariables");
-                        config.addChild(systemProps);
-                    }
                     addSystemProperties(systemProps, testConfig.getJvmSystemProperties());
                 }
 
@@ -1079,26 +1074,36 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         config = new Xpp3Dom("configuration");
         exec.setConfiguration(config);
+
+        Xpp3Dom systemProps = initializeTestPluginSystemPropertyVariables(config);
+
         if (nativeTest) {
-            final Xpp3Dom nativeImagePath = new Xpp3Dom("native.image.path");
-            getOrCreateChild(config, "systemProperties").addChild(nativeImagePath);
-            nativeImagePath.setValue("${project.build.directory}/${project.build.finalName}-runner");
+            addSystemProperties(systemProps, Collections.singletonMap("native.image.path",
+                    "${project.build.directory}/${project.build.finalName}-runner"));
         }
         if (!testConfig.getSystemProperties().isEmpty()) {
-            addSystemProperties(getOrCreateChild(config, "systemProperties"), testConfig.getSystemProperties());
+            addSystemProperties(systemProps, testConfig.getSystemProperties());
         }
 
         if (nativeTest) {
             if (!testConfig.getNativeSystemProperties().isEmpty()) {
-                addSystemProperties(getOrCreateChild(config, "systemProperties"), testConfig.getNativeSystemProperties());
+                addSystemProperties(systemProps, testConfig.getNativeSystemProperties());
             }
         } else if (!testConfig.getJvmSystemProperties().isEmpty()) {
-            addSystemProperties(getOrCreateChild(config, "systemProperties"), testConfig.getJvmSystemProperties());
+            addSystemProperties(systemProps, testConfig.getJvmSystemProperties());
         }
 
         addGroupsConfig(testConfig, config, nativeTest);
         addIncludesExcludesConfig(testConfig, config, nativeTest);
         return plugin;
+    }
+
+    private Xpp3Dom initializeTestPluginSystemPropertyVariables(Xpp3Dom config) {
+        Xpp3Dom systemProps = new Xpp3Dom("systemPropertyVariables");
+        config.addChild(systemProps);
+        addSystemProperties(systemProps,
+                Collections.singletonMap("java.util.logging.manager", "org.jboss.logmanager.LogManager"));
+        return systemProps;
     }
 
     private static Xpp3Dom getOrCreateChild(Xpp3Dom parent, String child) {
