@@ -57,12 +57,12 @@ public class BuildPlatformProjectMojo extends AbstractMojo {
         request.setLocalRepositoryDirectory(mavenSession.getRequest().getLocalRepositoryPath());
 
         final File globalSettings = mavenSession.getRequest().getGlobalSettingsFile();
-        if (globalSettings != null) {
+        if (globalSettings != null && globalSettings.exists()) {
             request.setGlobalSettingsFile(globalSettings);
         }
 
         final File userSettings = mavenSession.getRequest().getUserSettingsFile();
-        if (userSettings != null) {
+        if (userSettings != null && userSettings.exists()) {
             request.setUserSettingsFile(userSettings);
         }
 
