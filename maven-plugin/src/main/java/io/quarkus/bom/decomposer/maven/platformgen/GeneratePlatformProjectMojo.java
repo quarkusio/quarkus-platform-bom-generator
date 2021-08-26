@@ -356,7 +356,14 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         final String moduleName = targetCoords.getArtifactId();
         final Model pom = newModel();
+        if (!targetCoords.getGroupId().equals(project.getGroupId())) {
+            pom.setGroupId(targetCoords.getGroupId());
+        }
         pom.setArtifactId(moduleName);
+        if (!targetCoords.getVersion().equals(project.getVersion())) {
+            pom.setVersion(targetCoords.getVersion());
+        }
+
         pom.setPackaging("maven-plugin");
         pom.setName(getNameBase(parentPom) + " " + artifactIdToName(targetCoords.getArtifactId()));
         parentPom.addModule(moduleName);
