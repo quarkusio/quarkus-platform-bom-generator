@@ -88,9 +88,12 @@ public class AttachPluginMojo extends AbstractMojo {
         // remove the original maven files
         IoUtils.recursiveDelete(classesDir.resolve("META-INF").resolve("maven"));
 
-        final Model generatedModel = project.getOriginalModel().clone();
         final Path originalPom = resolve(new DefaultArtifact(originalCoords.getGroupId(), originalCoords.getArtifactId(), null,
                 "pom", originalCoords.getVersion()));
+        final Model generatedModel = project.getOriginalModel().clone();
+        generatedModel.setGroupId(targetCoords.getGroupId());
+        generatedModel.setArtifactId(targetCoords.getArtifactId());
+        generatedModel.setVersion(targetCoords.getVersion());
         try {
             generatedModel.setBuild(ModelUtils.readModel(originalPom).getBuild());
         } catch (IOException e) {
