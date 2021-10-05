@@ -665,7 +665,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                             + " contains an artifact with a missing artifactId " + testElement);
                 }
                 final ArtifactCoords testCoords = new ArtifactCoords(testGroupId, testArtifactId, null, "jar",
-                        member.originalBomCoords.getVersion());
+                        testCatalogArtifact.getVersion());
                 // add it unless it's overriden in the config
                 PlatformMemberTestConfig testConfig = testConfigs.get(testCoords);
                 if (testConfig == null) {
