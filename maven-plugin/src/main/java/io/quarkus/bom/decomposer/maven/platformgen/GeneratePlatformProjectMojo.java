@@ -385,25 +385,46 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         final Build build = new Build();
         pom.setBuild(build);
-        final Plugin plugin = new Plugin();
+        Plugin plugin = new Plugin();
         build.addPlugin(plugin);
         plugin.setGroupId(pluginDescriptor().getGroupId());
         plugin.setArtifactId(pluginDescriptor().getArtifactId());
-        final PluginExecution exec = new PluginExecution();
+        PluginExecution exec = new PluginExecution();
         plugin.addExecution(exec);
         exec.setPhase("generate-resources");
         exec.addGoal("attach-maven-plugin");
-
-        final Xpp3Dom config = new Xpp3Dom("configuration");
+        Xpp3Dom config = new Xpp3Dom("configuration");
         exec.setConfiguration(config);
-
         Xpp3Dom e = new Xpp3Dom("originalPluginCoords");
         e.setValue(platformConfig.getAttachedMavenPlugin().getOriginalPluginCoords());
         config.addChild(e);
-
         e = new Xpp3Dom("targetPluginCoords");
         e.setValue(platformConfig.getAttachedMavenPlugin().getTargetPluginCoords());
         config.addChild(e);
+
+        // keep the previous plugin-help.xml path to avoid re-compiling the HelpMojo
+        plugin = new Plugin();
+        build.addPlugin(plugin);
+        plugin.setGroupId("com.coderplus.maven.plugins");
+        plugin.setArtifactId("copy-rename-maven-plugin");
+        plugin.setVersion("1.0");
+        exec = new PluginExecution();
+        plugin.addExecution(exec);
+        exec.setId("copy-plugin-help");
+        exec.setPhase("process-classes");
+        exec.addGoal("copy");
+        config = new Xpp3Dom("configuration");
+        exec.setConfiguration(config);
+        Xpp3Dom el = new Xpp3Dom("sourceFile");
+        el.setValue("${project.build.outputDirectory}/META-INF/maven/" + targetCoords.getGroupId() + "/"
+                + targetCoords.getArtifactId() + "/plugin-help.xml");
+        config.addChild(el);
+        final ArtifactCoords originalCoords = ArtifactCoords
+                .fromString(platformConfig.getAttachedMavenPlugin().getOriginalPluginCoords());
+        el = new Xpp3Dom("destinationFile");
+        el.setValue("${project.build.outputDirectory}/META-INF/maven/" + originalCoords.getGroupId() + "/"
+                + originalCoords.getArtifactId() + "/plugin-help.xml");
+        config.addChild(el);
 
         persistPom(pom);
     }
