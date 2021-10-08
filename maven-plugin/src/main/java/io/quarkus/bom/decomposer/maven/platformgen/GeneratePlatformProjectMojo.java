@@ -9,6 +9,7 @@ import io.quarkus.bom.decomposer.BomDecomposerException;
 import io.quarkus.bom.decomposer.DecomposedBom;
 import io.quarkus.bom.decomposer.ProjectDependency;
 import io.quarkus.bom.decomposer.ProjectRelease;
+import io.quarkus.bom.decomposer.maven.GenerateMavenRepoZip;
 import io.quarkus.bom.decomposer.maven.GeneratePlatformBomMojo;
 import io.quarkus.bom.decomposer.maven.MojoMessageWriter;
 import io.quarkus.bom.decomposer.maven.util.Utils;
@@ -233,6 +234,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             generateMavenPluginModule(pom);
         }
 
+        if (platformConfig.getGenerateMavenRepoZip() != null) {
+            generateMavenRepoZipModule(pom);
+        }
+
         addReleaseProfile(pom);
         persistPom(pom);
 
@@ -399,6 +404,107 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         e = new Xpp3Dom("targetPluginCoords");
         e.setValue(platformConfig.getAttachedMavenPlugin().getTargetPluginCoords());
         config.addChild(e);
+
+        persistPom(pom);
+    }
+
+    private void generateMavenRepoZipModule(Model parentPom) throws MojoExecutionException {
+        final Model pom = newModel();
+        final String artifactId = "maven-repo-zip-generator";
+        pom.setArtifactId(artifactId);
+        pom.setPackaging("pom");
+        pom.setName(getNameBase(parentPom) + " " + artifactIdToName(artifactId));
+        parentPom.addModule(artifactId);
+        final File pomXml = new File(new File(parentPom.getProjectDirectory(), artifactId), "pom.xml");
+        pom.setPomFile(pomXml);
+        final Parent parent = new Parent();
+        parent.setGroupId(ModelUtils.getGroupId(parentPom));
+        parent.setArtifactId(parentPom.getArtifactId());
+        parent.setVersion(ModelUtils.getVersion(parentPom));
+        parent.setRelativePath(pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
+        pom.setParent(parent);
+        Utils.skipInstallAndDeploy(pom);
+
+        final Plugin plugin = new Plugin();
+        Build build = pom.getBuild();
+        if (build == null) {
+            build = new Build();
+            pom.setBuild(build);
+        }
+        build.addPlugin(plugin);
+        plugin.setGroupId(pluginDescriptor().getGroupId());
+        plugin.setArtifactId(pluginDescriptor().getArtifactId());
+        plugin.setVersion(pluginDescriptor().getVersion());
+        final PluginExecution exec = new PluginExecution();
+        plugin.addExecution(exec);
+        exec.setPhase("process-resources");
+        exec.addGoal("generate-maven-repo-zip");
+
+        final GenerateMavenRepoZip generateMavenRepoZip = platformConfig.getGenerateMavenRepoZip();
+        Xpp3Dom e = new Xpp3Dom("generateMavenRepoZip");
+
+        final Xpp3Dom bom = new Xpp3Dom("bom");
+        if (generateMavenRepoZip.getBom() == null) {
+            final Artifact universalBom = getUniversalBomArtifact();
+            bom.setValue(universalBom.getGroupId() + ":" + universalBom.getArtifactId() + "::pom:" + universalBom.getVersion());
+        } else {
+            bom.setValue(generateMavenRepoZip.getBom());
+        }
+        e.addChild(bom);
+
+        if (generateMavenRepoZip.getRepositoryDir() != null) {
+            final Xpp3Dom d = new Xpp3Dom("repositoryDir");
+            d.setValue(generateMavenRepoZip.getRepositoryDir());
+            e.addChild(d);
+        }
+        if (generateMavenRepoZip.getZipLocation() != null) {
+            final Xpp3Dom d = new Xpp3Dom("zipLocation");
+            d.setValue(generateMavenRepoZip.getZipLocation());
+            e.addChild(d);
+        }
+        if (!generateMavenRepoZip.getExcludedGroupIds().isEmpty()) {
+            final Xpp3Dom d = new Xpp3Dom("excludedGroupIds");
+            for (String groupId : generateMavenRepoZip.getExcludedGroupIds()) {
+                final Xpp3Dom g = new Xpp3Dom("groupId");
+                g.setValue(groupId);
+                d.addChild(g);
+            }
+            e.addChild(d);
+        }
+        if (!generateMavenRepoZip.getExcludedArtifacts().isEmpty()) {
+            final Xpp3Dom d = new Xpp3Dom("excludedArtifacts");
+            for (String key : generateMavenRepoZip.getExcludedArtifacts()) {
+                final Xpp3Dom g = new Xpp3Dom("key");
+                g.setValue(key);
+                d.addChild(g);
+            }
+            e.addChild(d);
+        }
+        if (!generateMavenRepoZip.getExtraArtifacts().isEmpty()) {
+            final Xpp3Dom extras = new Xpp3Dom("extraArtifacts");
+            for (String coords : generateMavenRepoZip.getExtraArtifacts()) {
+                final Xpp3Dom g = new Xpp3Dom("artifact");
+                g.setValue(coords);
+                extras.addChild(g);
+            }
+            for (PlatformMember m : members.values()) {
+                if (m.config.isHidden() || !m.config.isEnabled()) {
+                    continue;
+                }
+                addExtraArtifact(extras, m.descriptorCoords().toString());
+                addExtraArtifact(extras, m.propertiesCoords().toString());
+            }
+            e.addChild(extras);
+        }
+        if (generateMavenRepoZip.getIncludedVersionsPattern() != null) {
+            final Xpp3Dom d = new Xpp3Dom("includedVersionsPattern");
+            d.setValue(generateMavenRepoZip.getIncludedVersionsPattern());
+            e.addChild(d);
+        }
+
+        final Xpp3Dom configuration = new Xpp3Dom("configuration");
+        configuration.addChild(e);
+        exec.setConfiguration(configuration);
 
         persistPom(pom);
     }
@@ -1350,18 +1456,19 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             config.addChild(e);
         }
 
-        if (descrGen != null && descrGen.skipCategoryCheck) {
-            e = new Xpp3Dom("skipCategoryCheck");
-            e.setValue("true");
-            config.addChild(e);
-            plugin.setConfiguration(config);
+        if (descrGen != null) {
+            if (descrGen.skipCategoryCheck) {
+                e = new Xpp3Dom("skipCategoryCheck");
+                e.setValue("true");
+                config.addChild(e);
+            }
+            if (descrGen.resolveDependencyManagement) {
+                e = new Xpp3Dom("resolveDependencyManagement");
+                e.setValue("true");
+                config.addChild(e);
+            }
         }
-        if (descrGen != null && descrGen.resolveDependencyManagement) {
-            e = new Xpp3Dom("resolveDependencyManagement");
-            e.setValue("true");
-            config.addChild(e);
-            plugin.setConfiguration(config);
-        }
+        plugin.setConfiguration(config);
 
         final Dependency dep = new Dependency();
         dep.setGroupId(descriptorCoords.getGroupId());
@@ -1649,6 +1756,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         universalPlatformBomXml = parentPom.getProjectDirectory().toPath().resolve(moduleName).resolve("pom.xml");
 
         final Model pom = PlatformBomUtils.toPlatformModel(universalGeneratedBom, baseModel, catalogResolver());
+
         addReleaseProfile(pom);
         try {
             Files.createDirectories(universalPlatformBomXml.getParent());
@@ -1672,6 +1780,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 universalBomDepKeys.add(d.key());
             }
         }
+    }
+
+    private void addExtraArtifact(final Xpp3Dom extras, String coords) {
+        Xpp3Dom artifact = new Xpp3Dom("artifact");
+        artifact.setValue(coords);
+        extras.addChild(artifact);
     }
 
     private Artifact getUniversalBomArtifact() {

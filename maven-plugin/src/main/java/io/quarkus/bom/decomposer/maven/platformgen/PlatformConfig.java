@@ -1,5 +1,6 @@
 package io.quarkus.bom.decomposer.maven.platformgen;
 
+import io.quarkus.bom.decomposer.maven.GenerateMavenRepoZip;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -21,6 +22,8 @@ public class PlatformConfig {
     private AttachedMavenPluginConfig attachedMavenPlugin;
 
     private String upstreamQuarkusCoreVersion;
+
+    private GenerateMavenRepoZip generateMavenRepoZip;
 
     public PlatformReleaseConfig getRelease() {
         return release;
@@ -95,5 +98,13 @@ public class PlatformConfig {
 
     public boolean hasUpstreamQuarkusCoreVersion() {
         return upstreamQuarkusCoreVersion != null && !upstreamQuarkusCoreVersion.isBlank();
+    }
+
+    public GenerateMavenRepoZip getGenerateMavenRepoZip() {
+        return generateMavenRepoZip;
+    }
+
+    public void setGenerateMavenRepoZip(GenerateMavenRepoZip generateMavenRepoZip) {
+        this.generateMavenRepoZip = generateMavenRepoZip;
     }
 }

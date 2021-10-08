@@ -161,6 +161,8 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
     @Parameter(required = false)
     String upstreamQuarkusCoreVersion;
 
+    MavenArtifactResolver resolver;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
 
@@ -245,18 +247,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
 
         Map<ArtifactKey, JsonExtension> inheritedExtensions = Collections.emptyMap();
         if (!importedDescriptors.isEmpty()) {
-            final MavenArtifactResolver mvnResolver;
-            try {
-                mvnResolver = MavenArtifactResolver.builder()
-                        .setRepositorySystem(repoSystem)
-                        .setRemoteRepositoryManager(remoteRepoManager)
-                        .setRepositorySystemSession(repoSession)
-                        .setRemoteRepositories(repos)
-                        .setWorkspaceDiscovery(false)
-                        .build();
-            } catch (BootstrapMavenException e) {
-                throw new MojoExecutionException("Failed to initialize Maven artifact resolver", e);
-            }
+            final MavenArtifactResolver mvnResolver = getResolver();
             final List<ExtensionCatalog> importedCatalogs = new ArrayList<>(importedDescriptors.size());
             try {
                 for (Artifact a : importedDescriptors) {
@@ -485,6 +476,23 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
             }
         }
         projectHelper.attachArtifact(project, jsonArtifact.getExtension(), jsonArtifact.getClassifier(), published);
+    }
+
+    private MavenArtifactResolver getResolver() throws MojoExecutionException {
+        if (resolver == null) {
+            try {
+                resolver = MavenArtifactResolver.builder()
+                        .setRepositorySystem(repoSystem)
+                        .setRemoteRepositoryManager(remoteRepoManager)
+                        .setRepositorySystemSession(repoSession)
+                        .setRemoteRepositories(repos)
+                        .setWorkspaceDiscovery(false)
+                        .build();
+            } catch (BootstrapMavenException e) {
+                throw new MojoExecutionException("Failed to initialize Maven artifact resolver", e);
+            }
+        }
+        return resolver;
     }
 
     private List<Dependency> dependencyManagementFromDescriptor(Artifact bomArtifact) throws MojoExecutionException {
