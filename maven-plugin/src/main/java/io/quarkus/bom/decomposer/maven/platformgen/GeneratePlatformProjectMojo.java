@@ -383,6 +383,20 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         parent.setRelativePath(pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
         pom.setParent(parent);
 
+        DependencyManagement dm = pom.getDependencyManagement();
+        if (dm == null) {
+            dm = new DependencyManagement();
+            pom.setDependencyManagement(dm);
+        }
+        final Artifact quarkusBom = quarkusCore.generatedBomCoords();
+        final Dependency quarkusBomImport = new Dependency();
+        quarkusBomImport.setGroupId(quarkusBom.getGroupId());
+        quarkusBomImport.setArtifactId(quarkusBom.getArtifactId());
+        quarkusBomImport.setType(ArtifactCoords.TYPE_POM);
+        quarkusBomImport.setVersion(quarkusBom.getVersion());
+        quarkusBomImport.setScope("import");
+        dm.addDependency(quarkusBomImport);
+
         final Build build = new Build();
         pom.setBuild(build);
         Plugin plugin = new Plugin();

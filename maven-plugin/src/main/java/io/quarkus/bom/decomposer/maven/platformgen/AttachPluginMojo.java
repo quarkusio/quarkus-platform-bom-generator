@@ -4,11 +4,16 @@ import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.bootstrap.util.IoUtils;
 import io.quarkus.bootstrap.util.ZipUtils;
 import io.quarkus.maven.ArtifactCoords;
+import io.quarkus.maven.ArtifactKey;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import org.apache.maven.model.DependencyManagement;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -100,6 +105,7 @@ public class AttachPluginMojo extends AbstractMojo {
             throw new MojoExecutionException("Failed to read " + originalPom, e);
         }
 
+        final Set<ArtifactKey> managedKeys = getManagedKeys();
         final ArtifactDescriptorResult descr = describe(mainArtifact);
         for (Dependency d : descr.getDependencies()) {
             if ("test".equals(d.getScope())) {
@@ -115,7 +121,10 @@ public class AttachPluginMojo extends AbstractMojo {
             if (!a.getExtension().isEmpty() && !"jar".equals(a.getExtension())) {
                 modelDep.setType(a.getExtension());
             }
-            modelDep.setVersion(a.getVersion());
+            if (!managedKeys.contains(new ArtifactKey(modelDep.getGroupId(), modelDep.getArtifactId(), modelDep.getClassifier(),
+                    modelDep.getType()))) {
+                modelDep.setVersion(a.getVersion());
+            }
             if (!d.getScope().isEmpty() && !"compile".equals(d.getScope())) {
                 modelDep.setScope(d.getScope());
             }
@@ -161,4 +170,19 @@ public class AttachPluginMojo extends AbstractMojo {
         }
     }
 
+    private Set<ArtifactKey> getManagedKeys() {
+        final DependencyManagement dm = project.getDependencyManagement();
+        if (dm == null) {
+            return Collections.emptySet();
+        }
+        final List<org.apache.maven.model.Dependency> deps = dm.getDependencies();
+        if (deps.isEmpty()) {
+            return Collections.emptySet();
+        }
+        final Set<ArtifactKey> keys = new HashSet<>(deps.size());
+        for (org.apache.maven.model.Dependency d : deps) {
+            keys.add(new ArtifactKey(d.getGroupId(), d.getArtifactId(), d.getClassifier(), d.getType()));
+        }
+        return keys;
+    }
 }
