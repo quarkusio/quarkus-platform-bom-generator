@@ -3,6 +3,7 @@ package io.quarkus.bom.resolver;
 import io.quarkus.bootstrap.model.AppArtifactCoords;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
+import io.quarkus.bootstrap.resolver.maven.workspace.LocalWorkspace;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -118,11 +119,22 @@ public class DefaultArtifactResolver implements ArtifactResolver {
             throw new ArtifactNotFoundException("Failed to describe " + a, e);
         }
         // if it didn't throw an exception it still might not exist in the local repo
-        final File file = a.getFile() == null ? new File(resolver.getSession().getLocalRepository().getBasedir(),
-                resolver.getSession().getLocalRepositoryManager().getPathForLocalArtifact(a)) : a.getFile();
-        if (!file.exists()) {
+        final boolean pomExists;
+        if (a.getFile() == null) {
+            if (new File(resolver.getSession().getLocalRepository().getBasedir(),
+                    resolver.getSession().getLocalRepositoryManager().getPathForLocalArtifact(a)).exists()) {
+                pomExists = true;
+            } else {
+                final LocalWorkspace workspace = resolver.getMavenContext().getWorkspace();
+                pomExists = workspace != null && workspace.getProject(a.getGroupId(), a.getArtifactId()) != null;
+            }
+        } else {
+            pomExists = a.getFile().exists();
+        }
+        if (!pomExists) {
             persistNotFoundArtifacts(coords);
-            throw new ArtifactNotFoundException(a + " was not found in the local repository at " + file);
+            throw new ArtifactNotFoundException(
+                    a + " was found in neither the Maven local repository nor in the project's workspace");
         }
         return result;
     }
