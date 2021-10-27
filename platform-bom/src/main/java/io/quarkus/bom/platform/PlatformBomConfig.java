@@ -7,6 +7,7 @@ import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.registry.util.PlatformArtifacts;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -57,10 +58,6 @@ public class PlatformBomConfig {
             return this;
         }
 
-        public Builder enforce(String groupId, String artifactId, String version) {
-            return enforce(new DefaultArtifact(groupId, artifactId, null, "jar", version));
-        }
-
         public Builder enforce(Artifact artifact) {
             config.enforced.put(new AppArtifactKey(artifact.getGroupId(), artifact.getArtifactId(), artifact.getClassifier(),
                     artifact.getExtension()), artifact);
@@ -88,6 +85,11 @@ public class PlatformBomConfig {
 
         public Builder artifactResolver(ArtifactResolver resolver) {
             config.artifactResolver = resolver;
+            return this;
+        }
+
+        public Builder versionConstraintPreference(List<String> preferences) {
+            config.versionConstraintPreferences = preferences;
             return this;
         }
 
@@ -193,6 +195,7 @@ public class PlatformBomConfig {
     private Set<String> excludedGroups = new HashSet<>(0);
     private boolean enableNonMemberQuarkiverseExtensions;
     private ArtifactResolver artifactResolver;
+    private List<String> versionConstraintPreferences = Collections.emptyList();
 
     private PlatformBomConfig() {
     }
@@ -243,6 +246,10 @@ public class PlatformBomConfig {
 
     public ArtifactResolver artifactResolver() {
         return artifactResolver;
+    }
+
+    public List<String> versionConstraintPreferences() {
+        return versionConstraintPreferences;
     }
 
     boolean excluded(AppArtifactKey key) {
