@@ -1,20 +1,25 @@
 package io.quarkus.bom.decomposer.maven.platformgen;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import org.apache.maven.plugins.annotations.Parameter;
 
 public class PlatformBomGeneratorConfig {
 
     @Parameter
-    protected Set<String> enforcedDependencies = new HashSet<>(0);
+    Set<String> enforcedDependencies = new HashSet<>(0);
 
     @Parameter
-    protected Set<String> excludedDependencies = new HashSet<>(0);
+    Set<String> excludedDependencies = new HashSet<>(0);
 
     @Parameter
-    protected Set<String> excludedGroups = new HashSet<>(0);
+    Set<String> excludedGroups = new HashSet<>(0);
 
     @Parameter
     boolean enableNonMemberQuarkiverseExtensions;
+
+    @Parameter
+    List<String> versionConstraintPreferences = new ArrayList<>(0);
 }

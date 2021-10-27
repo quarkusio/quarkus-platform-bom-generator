@@ -1773,6 +1773,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         final PlatformBomConfig config = configBuilder
                 .artifactResolver(artifactResolver())
+                .versionConstraintPreference(platformConfig.getBomGenerator() == null ? Collections.emptyList()
+                        : platformConfig.getBomGenerator().versionConstraintPreferences)
                 .build();
 
         PlatformBomComposer bomComposer;
