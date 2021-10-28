@@ -32,4 +32,20 @@ public class VersionConstraintComparator implements Comparator<ArtifactVersion> 
         }
         return o1.compareTo(o2);
     }
+
+    public boolean hasVersionPreferences() {
+        return !versionPreferences.isEmpty();
+    }
+
+    public boolean isPreferredVersion(ArtifactVersion v) {
+        if (versionPreferences.isEmpty()) {
+            return false;
+        }
+        for (Pattern preference : versionPreferences) {
+            if (preference.matcher(v.toString()).matches()) {
+                return true;
+            }
+        }
+        return false;
+    }
 }
