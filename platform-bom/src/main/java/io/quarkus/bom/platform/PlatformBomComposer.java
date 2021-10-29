@@ -4,7 +4,6 @@ import io.quarkus.bom.PomSource;
 import io.quarkus.bom.decomposer.BomDecomposer;
 import io.quarkus.bom.decomposer.BomDecomposerException;
 import io.quarkus.bom.decomposer.DecomposedBom;
-import io.quarkus.bom.decomposer.DecomposedBomHtmlReportGenerator;
 import io.quarkus.bom.decomposer.DecomposedBomTransformer;
 import io.quarkus.bom.decomposer.DecomposedBomVisitor;
 import io.quarkus.bom.decomposer.ProjectDependency;
@@ -20,11 +19,9 @@ import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.registry.util.GlobUtil;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -75,7 +72,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
 
     private PlatformBomConfig config;
 
-    private Comparator<ArtifactVersion> versionComparator;
+    private VersionConstraintComparator versionComparator;
 
     public PlatformBomComposer(PlatformBomConfig config) throws BomDecomposerException {
         this(config, MessageWriter.info());
@@ -103,7 +100,6 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         filteredQuarkusBom.releases().forEach(r -> {
             final AtomicReference<ProjectRelease.Builder> rbRef = new AtomicReference<>();
             r.dependencies().forEach(d -> {
-                quarkusBomDeps.put(d.key(), d);
                 final ProjectDependency effectiveDep = effectiveDep(d);
                 if (effectiveDep != null) {
                     ProjectRelease.Builder rb = rbRef.get();
@@ -112,6 +108,9 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                         rbRef.set(rb);
                     }
                     rb.add(effectiveDep);
+                    quarkusBomDeps.put(effectiveDep.key(), effectiveDep);
+                } else {
+                    quarkusBomDeps.put(d.key(), d);
                 }
             });
             final ProjectRelease.Builder rb = rbRef.get();
@@ -185,19 +184,6 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             releaseBuilders.clear();
 
             final DecomposedBom importedBomMinusQuarkusBom = importedBoms.get(i);
-            /* @formatter:off exclude quarkus-bom from the platform member boms
-            if (!bomsNotImportingQuarkusBom.contains(importedBomMinusQuarkusBom.bomArtifact())) {
-                quarkusBom.releases().forEach(r -> {
-                    r.dependencies().forEach(d -> {
-                        if (!config.excluded(d.key())) {
-                            bomDeps.add(d.key());
-                            releaseBuilders.computeIfAbsent(d.releaseId(), id -> ProjectRelease.builder(id)).add(d);
-                        }
-                    });
-                });
-            }
-            @formatter:on */
-
             for (ProjectRelease release : importedBomMinusQuarkusBom.releases()) {
                 for (ProjectDependency dep : release.dependencies()) {
                     if (!bomDeps.add(dep.key()) || config.excluded(dep.key())) {
@@ -307,7 +293,6 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                             for (Map.Entry<String, ReleaseId> preferredVersion : preferredVersions.entrySet()) {
                                 final Artifact artifact = dep.artifact().setVersion(preferredVersion.getKey());
                                 if (resolver().resolveOrNull(artifact) != null) {
-                                    // logger.info(" EXISTS IN " + preferredVersion);
                                     dep = ProjectDependency.create(preferredVersion.getValue(),
                                             dep.dependency().setArtifact(artifact));
                                     break;
@@ -342,10 +327,13 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         return ProjectDependency.create(dep.releaseId(), dep.dependency().setArtifact(enforced));
     }
 
-    private void mergeExtensionDeps(ProjectRelease release, Map<AppArtifactKey, ProjectDependency> extensionDeps) {
+    private void mergeExtensionDeps(ProjectRelease release, Map<AppArtifactKey, ProjectDependency> extensionDeps)
+            throws BomDecomposerException {
         for (ProjectDependency dep : release.dependencies()) {
             // the origin may have changed in the release of the dependency
-            if (quarkusBomDeps.containsKey(dep.key())) {
+            final ProjectDependency quarkusBomDep = quarkusBomDeps.get(dep.key());
+            if (quarkusBomDep != null) {
+                quarkusBomDependencyInMemberBom(quarkusBomDep, dep);
                 return;
             }
             addNonQuarkusDep(dep, extensionDeps);
@@ -415,27 +403,52 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         }
         if (quarkusVersions.contains(release.id().version())) {
             for (ProjectDependency dep : release.dependencies()) {
-                quarkusBomDeps.putIfAbsent(dep.key(), dep);
+                final ProjectDependency quarkusBomDep = quarkusBomDeps.putIfAbsent(dep.key(), dep);
+                if (quarkusBomDep != null) {
+                    quarkusBomDependencyInMemberBom(quarkusBomDep, dep);
+                }
             }
             return;
         }
-        //logger.error("CONFLICT: " + extBom + " includes " + release.id() + " while Quarkus includes " + quarkusVersions);
         final LinkedHashMap<String, ReleaseId> preferredVersions = this.preferredVersions == null
                 ? this.preferredVersions = preferredVersions(filteredQuarkusBom.releases(release.id().origin()))
                 : this.preferredVersions;
-        for (ProjectDependency dep : release.dependencies()) {
-            final String depVersion = dep.artifact().getVersion();
-            if (!preferredVersions.containsKey(depVersion)) {
+        for (final ProjectDependency memberDep : release.dependencies()) {
+            ProjectDependency preferredDep = memberDep;
+            if (!preferredVersions.containsKey(memberDep.artifact().getVersion())) {
                 for (Map.Entry<String, ReleaseId> preferredVersion : preferredVersions.entrySet()) {
-                    final Artifact artifact = dep.artifact().setVersion(preferredVersion.getKey());
+                    final Artifact artifact = memberDep.artifact().setVersion(preferredVersion.getKey());
                     if (resolver().resolveOrNull(artifact) != null) {
-                        //logger.info("  EXISTS IN " + preferredVersion);
-                        dep = ProjectDependency.create(preferredVersion.getValue(), dep.dependency().setArtifact(artifact));
+                        preferredDep = ProjectDependency.create(preferredVersion.getValue(),
+                                memberDep.dependency().setArtifact(artifact));
                         break;
                     }
                 }
             }
-            quarkusBomDeps.putIfAbsent(dep.key(), dep);
+            final ProjectDependency quarkusBomDep = quarkusBomDeps.putIfAbsent(preferredDep.key(), preferredDep);
+            if (quarkusBomDep != null) {
+                quarkusBomDependencyInMemberBom(quarkusBomDep, memberDep);
+            }
+        }
+    }
+
+    private void quarkusBomDependencyInMemberBom(ProjectDependency quarkusBomDep, ProjectDependency memberDep)
+            throws BomDecomposerException {
+        if (!quarkusBomDep.artifact().getVersion().equals(memberDep.artifact().getVersion())
+                && versionConstraintComparator().hasVersionPreferences()
+                && versionConstraintComparator()
+                        .isPreferredVersion(new DefaultArtifactVersion(memberDep.artifact().getVersion()))
+                && !versionConstraintComparator()
+                        .isPreferredVersion(new DefaultArtifactVersion(quarkusBomDep.artifact().getVersion()))) {
+            final StringBuilder buf = new StringBuilder();
+            buf.append("Preferred constraint ").append(memberDep.artifact()).append(" was rejected in favor of ")
+                    .append(quarkusBomDep.artifact()).append(" managed by the quarkus-bom");
+            if (config.notPreferredQuarkusBomConstraint() == NotPreferredQuarkusBomConstraint.ERROR) {
+                throw new BomDecomposerException(buf.toString());
+            }
+            if (config.notPreferredQuarkusBomConstraint() == NotPreferredQuarkusBomConstraint.WARN) {
+                logger.warn(buf.toString());
+            }
         }
     }
 
@@ -443,7 +456,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
     public void leaveBom() throws BomDecomposerException {
     }
 
-    private Comparator<ArtifactVersion> versionConstraintComparator() {
+    private VersionConstraintComparator versionConstraintComparator() {
         if (versionComparator == null) {
             final List<Pattern> preferences;
             if (config.versionConstraintPreferences().isEmpty()) {
@@ -532,16 +545,5 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
 
     private ArtifactResolver resolver() {
         return resolver == null ? resolver = ArtifactResolverProvider.get() : resolver;
-    }
-
-    private static Path generateReleasesHtml(DecomposedBom generatedBom, Path outputDir) throws BomDecomposerException {
-        final Path generatedReleasesFile = outputDir.resolve("generated-releases.html");
-        generatedBom.visit(DecomposedBomHtmlReportGenerator.builder(generatedReleasesFile)
-                .skipOriginsWithSingleRelease().build());
-        return generatedReleasesFile;
-    }
-
-    private static String bomDirName(Artifact a) {
-        return a.getGroupId() + "." + a.getArtifactId() + "-" + a.getVersion();
     }
 }

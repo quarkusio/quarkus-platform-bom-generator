@@ -1744,6 +1744,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Artifact bomArtifact = getUniversalBomArtifact();
         final PlatformBomGeneratorConfig bomGen = platformConfig.getBomGenerator();
         final PlatformBomConfig.Builder configBuilder = PlatformBomConfig.builder()
+                .artifactResolver(artifactResolver())
                 .pomResolver(PomSource.of(bomArtifact))
                 .includePlatformProperties(platformConfig.getUniversal().isGeneratePlatformProperties())
                 .platformBom(bomArtifact)
@@ -1753,29 +1754,30 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             configBuilder.importBom(member.bomGeneratorMemberConfig());
         }
 
-        if (bomGen != null && bomGen.enforcedDependencies != null) {
-            for (String enforced : bomGen.enforcedDependencies) {
-                final AppArtifactCoords coords = AppArtifact.fromString(enforced);
-                configBuilder.enforce(new DefaultArtifact(coords.getGroupId(), coords.getArtifactId(), coords.getClassifier(),
-                        coords.getType(), coords.getVersion()));
+        if (bomGen != null) {
+            if (bomGen.enforcedDependencies != null) {
+                for (String enforced : bomGen.enforcedDependencies) {
+                    final AppArtifactCoords coords = AppArtifact.fromString(enforced);
+                    configBuilder
+                            .enforce(new DefaultArtifact(coords.getGroupId(), coords.getArtifactId(), coords.getClassifier(),
+                                    coords.getType(), coords.getVersion()));
+                }
             }
-        }
-        if (bomGen != null && bomGen.excludedDependencies != null) {
-            for (String excluded : bomGen.excludedDependencies) {
-                configBuilder.exclude(AppArtifactKey.fromString(excluded));
+            if (bomGen.excludedDependencies != null) {
+                for (String excluded : bomGen.excludedDependencies) {
+                    configBuilder.exclude(AppArtifactKey.fromString(excluded));
+                }
             }
-        }
-        if (bomGen != null && bomGen.excludedGroups != null) {
-            for (String excluded : bomGen.excludedGroups) {
-                configBuilder.excludeGroupId(excluded);
+            if (bomGen.excludedGroups != null) {
+                for (String excluded : bomGen.excludedGroups) {
+                    configBuilder.excludeGroupId(excluded);
+                }
             }
+            configBuilder.versionConstraintPreference(bomGen.versionConstraintPreferences);
+            configBuilder.notPreferredQuarkusBomConstraint(bomGen.notPreferredQuarkusBomConstraint);
         }
 
-        final PlatformBomConfig config = configBuilder
-                .artifactResolver(artifactResolver())
-                .versionConstraintPreference(platformConfig.getBomGenerator() == null ? Collections.emptyList()
-                        : platformConfig.getBomGenerator().versionConstraintPreferences)
-                .build();
+        final PlatformBomConfig config = configBuilder.build();
 
         PlatformBomComposer bomComposer;
         try {
