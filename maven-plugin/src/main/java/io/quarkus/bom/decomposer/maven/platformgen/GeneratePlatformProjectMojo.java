@@ -847,12 +847,24 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             PlatformMemberTestConfig testConfig,
             Model parentPom)
             throws MojoExecutionException {
-        final String moduleName = testArtifact.getArtifactId();
+
+        final String moduleName;
+        if (parentPom.getModules().contains(testArtifact.getArtifactId())) {
+            String tmp = testArtifact.getArtifactId() + "-" + testArtifact.getVersion();
+            if (parentPom.getModules().contains(tmp)) {
+                throw new MojoExecutionException("The same test " + testArtifact + " appears to be added twice");
+            }
+            moduleName = tmp;
+            getLog().warn("Using " + moduleName + " as the module name for " + testArtifact + " since "
+                    + testArtifact.getArtifactId() + " module name already exists");
+        } else {
+            moduleName = testArtifact.getArtifactId();
+        }
+        parentPom.addModule(moduleName);
 
         final Model pom = newModel();
         pom.setArtifactId(moduleName);
         pom.setName(getNameBase(parentPom) + " " + moduleName);
-        parentPom.addModule(moduleName);
 
         final File pomXml = new File(new File(parentPom.getProjectDirectory(), moduleName), "pom.xml");
         pom.setPomFile(pomXml);
