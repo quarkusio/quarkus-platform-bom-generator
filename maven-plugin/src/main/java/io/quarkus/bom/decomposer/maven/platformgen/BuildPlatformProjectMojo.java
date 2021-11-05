@@ -34,7 +34,12 @@ public class BuildPlatformProjectMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project}")
     protected MavenProject project;
 
-    @Parameter
+    /**
+     * Skip the execution of this mojo.
+     *
+     * @since 0.0.33
+     */
+    @Parameter(property = "quarkus.invoke-platform-project.skip", defaultValue = "false")
     boolean skip;
 
     @Component
