@@ -1078,7 +1078,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
      */
     private String getTestArtifactVersion(String artifactGroupId, String version) throws MojoExecutionException {
         if (pomPropsByValues.isEmpty()) {
-            for (Map.Entry<?, ?> prop : project.getOriginalModel().getProperties().entrySet()) {
+            for (Map.Entry<?, ?> prop : project.getProperties().entrySet()) {
                 final String name = prop.getKey().toString();
                 final String value = prop.getValue().toString();
                 final String previous = pomPropsByValues.putIfAbsent(value, name);
