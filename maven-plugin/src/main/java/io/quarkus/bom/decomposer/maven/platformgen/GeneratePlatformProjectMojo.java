@@ -1090,28 +1090,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
      */
     private String getTestArtifactVersion(String artifactGroupId, String version) throws MojoExecutionException {
         if (pomPropsByValues.isEmpty()) {
-            for (Map.Entry<?, ?> prop : project.getProperties().entrySet()) {
-                final String name = prop.getKey().toString();
-                final String value = prop.getValue().toString();
-                final String previous = pomPropsByValues.putIfAbsent(value, name);
-                if (previous != null) {
-                    final String groupId = getTestArtifactGroupIdForProperty(name);
-                    if (groupId == null) {
-                        continue;
-                    }
-                    if (previous.isEmpty()) {
-                        pomPropsByValues.putIfAbsent(groupId + ":" + value, name);
-                        continue;
-                    }
-                    final String previousGroupId = getTestArtifactGroupIdForProperty(previous);
-                    if (previousGroupId == null) {
-                        pomPropsByValues.putIfAbsent(value, name);
-                    }
-
-                    pomPropsByValues.put(value, "");
-                    pomPropsByValues.put(previousGroupId + ":" + value, previous);
-                    pomPropsByValues.putIfAbsent(groupId + ":" + value, name);
-                }
+            mapProjectProperties(project.getOriginalModel().getProperties());
+            for (Profile p : project.getActiveProfiles()) {
+                mapProjectProperties(p.getProperties());
             }
         }
         String versionProp = pomPropsByValues.get(version);
@@ -1120,8 +1101,37 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
         if (versionProp.isEmpty()) {
             versionProp = pomPropsByValues.get(artifactGroupId + ":" + version);
+            if (versionProp == null) {
+                return version;
+            }
         }
         return "${" + versionProp + "}";
+    }
+
+    private void mapProjectProperties(Properties props) throws MojoExecutionException {
+        for (Map.Entry<?, ?> prop : props.entrySet()) {
+            final String name = prop.getKey().toString();
+            final String value = prop.getValue().toString();
+            final String previous = pomPropsByValues.putIfAbsent(value, name);
+            if (previous != null) {
+                final String groupId = getTestArtifactGroupIdForProperty(name);
+                if (groupId == null) {
+                    continue;
+                }
+                if (previous.isEmpty()) {
+                    pomPropsByValues.putIfAbsent(groupId + ":" + value, name);
+                    continue;
+                }
+                final String previousGroupId = getTestArtifactGroupIdForProperty(previous);
+                if (previousGroupId == null) {
+                    pomPropsByValues.putIfAbsent(value, name);
+                }
+
+                pomPropsByValues.put(value, "");
+                pomPropsByValues.put(previousGroupId + ":" + value, previous);
+                pomPropsByValues.putIfAbsent(groupId + ":" + value, name);
+            }
+        }
     }
 
     private String getTestArtifactGroupIdForProperty(final String versionProperty)
