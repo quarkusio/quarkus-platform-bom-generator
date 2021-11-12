@@ -24,6 +24,8 @@ public class PlatformMemberConfig {
     private List<String> metadataOverrideFiles = new ArrayList<>(0);
     private List<String> metadataOverrideArtifacts = new ArrayList<>(0);
 
+    private List<String> extensionGroupIds = new ArrayList<>(0);
+
     void applyOverrides(PlatformMemberConfig overrides) {
         if (overrides.bom != null) {
             bom = overrides.bom;
@@ -77,6 +79,9 @@ public class PlatformMemberConfig {
         }
         if (!overrides.metadataOverrideArtifacts.isEmpty()) {
             metadataOverrideArtifacts.addAll(overrides.metadataOverrideArtifacts);
+        }
+        if (!overrides.extensionGroupIds.isEmpty()) {
+            extensionGroupIds.addAll(overrides.extensionGroupIds);
         }
     }
 
@@ -184,5 +189,19 @@ public class PlatformMemberConfig {
      */
     public List<String> getMetadataOverrideArtifacts() {
         return metadataOverrideArtifacts;
+    }
+
+    /**
+     * A list of artifact aroupIds of the member extensions which should be
+     * included in the generated member descriptor.
+     * 
+     * @return list of extension artifact groupIds
+     */
+    public List<String> getExtensionGroupIds() {
+        return extensionGroupIds;
+    }
+
+    public void setExtensionGroupIds(List<String> extensionGroupIds) {
+        this.extensionGroupIds = extensionGroupIds;
     }
 }
