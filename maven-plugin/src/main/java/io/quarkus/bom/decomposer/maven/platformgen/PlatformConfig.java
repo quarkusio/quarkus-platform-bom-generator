@@ -23,6 +23,10 @@ public class PlatformConfig {
 
     private String upstreamQuarkusCoreVersion;
 
+    private boolean generateBomReports = true;
+
+    private String generateBomReportsZip;
+
     private GenerateMavenRepoZip generateMavenRepoZip;
 
     public PlatformReleaseConfig getRelease() {
@@ -98,6 +102,22 @@ public class PlatformConfig {
 
     public boolean hasUpstreamQuarkusCoreVersion() {
         return upstreamQuarkusCoreVersion != null && !upstreamQuarkusCoreVersion.isBlank();
+    }
+
+    public boolean isGenerateBomReports() {
+        return generateBomReports;
+    }
+
+    public void setGenerateBomReports(boolean generateBomReports) {
+        this.generateBomReports = generateBomReports;
+    }
+
+    public String getGenerateBomReportsZip() {
+        return generateBomReportsZip;
+    }
+
+    public void setGenerateBomReportsZip(String generateBomReportsZip) {
+        this.generateBomReportsZip = generateBomReportsZip;
     }
 
     public GenerateMavenRepoZip getGenerateMavenRepoZip() {

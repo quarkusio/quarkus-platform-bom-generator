@@ -29,6 +29,7 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.bootstrap.util.IoUtils;
+import io.quarkus.bootstrap.util.ZipUtils;
 import io.quarkus.maven.ArtifactCoords;
 import io.quarkus.maven.ArtifactKey;
 import io.quarkus.registry.Constants;
@@ -243,26 +244,41 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         recordUpdatedBoms();
 
-        final Path reportsOutputDir = reportsDir.toPath();
-        // reset the resolver to pick up all the generated platform modules
-        //resetResolver();
-        try (ReportIndexPageGenerator index = new ReportIndexPageGenerator(
-                reportsOutputDir.resolve("index.html"))) {
+        if (platformConfig.isGenerateBomReports() || platformConfig.getGenerateBomReportsZip() != null) {
+            final Path reportsOutputDir = reportsDir.toPath();
+            // reset the resolver to pick up all the generated platform modules
+            //resetResolver();
+            try (ReportIndexPageGenerator index = new ReportIndexPageGenerator(
+                    reportsOutputDir.resolve("index.html"))) {
 
-            final Path releasesReport = reportsOutputDir.resolve("main").resolve("generated-releases.html");
-            GeneratePlatformBomMojo.generateReleasesReport(universalGeneratedBom, releasesReport);
-            index.universalBom(universalPlatformBomXml.toUri().toURL(), universalGeneratedBom, releasesReport);
+                final Path releasesReport = reportsOutputDir.resolve("main").resolve("generated-releases.html");
+                GeneratePlatformBomMojo.generateReleasesReport(universalGeneratedBom, releasesReport);
+                index.universalBom(universalPlatformBomXml.toUri().toURL(), universalGeneratedBom, releasesReport);
 
-            for (PlatformMember member : members.values()) {
-                if (member.originalBomCoords() == null) {
-                    continue;
+                for (PlatformMember member : members.values()) {
+                    if (member.originalBomCoords() == null) {
+                        continue;
+                    }
+                    GeneratePlatformBomMojo.generateBomReports(member.originalBom, member.generatedBom,
+                            reportsOutputDir.resolve(member.config.getName().toLowerCase()), index,
+                            member.generatedPomFile, artifactResolver());
                 }
-                GeneratePlatformBomMojo.generateBomReports(member.originalBom, member.generatedBom,
-                        reportsOutputDir.resolve(member.config.getName().toLowerCase()), index,
-                        member.generatedPomFile, artifactResolver());
+            } catch (Exception e) {
+                throw new MojoExecutionException("Failed to generate platform member BOM reports", e);
             }
-        } catch (Exception e) {
-            throw new MojoExecutionException("Failed to generate platform member BOM reports", e);
+
+            if (platformConfig.getGenerateBomReportsZip() != null) {
+                Path zip = Paths.get(platformConfig.getGenerateBomReportsZip());
+                if (!zip.isAbsolute()) {
+                    zip = reportsOutputDir.getParent().resolve(zip);
+                }
+                try {
+                    Files.createDirectories(zip.getParent());
+                    ZipUtils.zip(reportsOutputDir, zip);
+                } catch (Exception e) {
+                    throw new MojoExecutionException("Failed to ZIP platform member BOM reports", e);
+                }
+            }
         }
     }
 
