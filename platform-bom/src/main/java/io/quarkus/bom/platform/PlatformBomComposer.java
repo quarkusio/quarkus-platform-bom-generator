@@ -18,7 +18,9 @@ import io.quarkus.bom.resolver.ArtifactResolverProvider;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.devtools.messagewriter.MessageWriter;
+import io.quarkus.maven.ArtifactCoords;
 import io.quarkus.registry.util.GlobUtil;
+import io.quarkus.registry.util.PlatformArtifacts;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -496,15 +498,19 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             throws BomDecomposerException {
         final Artifact bom = member.originalBomArtifact();
         final ArtifactDescriptorResult bomDescr = describe(bom);
-        Artifact quarkusCore = null;
+        List<Artifact> importedPlatformBoms = null;
         final List<Dependency> allDeps = bomDescr.getManagedDependencies();
         final Map<AppArtifactKey, Dependency> result = new HashMap<>(allDeps.size());
         final ExtensionCoordsFilter extCoordsFilter = extCoordsFilterFactory.forMember(member);
         for (Dependency dep : allDeps) {
             final Artifact artifact = dep.getArtifact();
-            if (quarkusCore == null && artifact.getArtifactId().equals("quarkus-core")
-                    && artifact.getGroupId().equals("io.quarkus")) {
-                quarkusCore = artifact;
+            if (PlatformArtifacts.isCatalogArtifactId(artifact.getArtifactId())) {
+                if (importedPlatformBoms == null) {
+                    importedPlatformBoms = new ArrayList<>(2);
+                }
+                importedPlatformBoms.add(new DefaultArtifact(artifact.getGroupId(),
+                        PlatformArtifacts.ensureBomArtifactId(artifact.getArtifactId()), ArtifactCoords.TYPE_POM,
+                        artifact.getVersion()));
             }
             if (extCoordsFilter.isExcludeFromBom(artifact)) {
                 continue;
@@ -512,9 +518,10 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             result.put(key(artifact), dep);
         }
 
-        if (quarkusCore != null) {
-            subtractQuarkusBom(result,
-                    new DefaultArtifact("io.quarkus", "quarkus-bom", null, "pom", quarkusCore.getVersion()));
+        if (importedPlatformBoms != null) {
+            for (Artifact importedPlatformBom : importedPlatformBoms) {
+                subtractPlatformBom(result, importedPlatformBom);
+            }
         } else {
             bomsNotImportingQuarkusBom.add(bom);
         }
@@ -526,7 +533,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                 artifact.getExtension());
     }
 
-    private void subtractQuarkusBom(Map<AppArtifactKey, Dependency> result, Artifact quarkusCoreBom)
+    private void subtractPlatformBom(Map<AppArtifactKey, Dependency> result, Artifact quarkusCoreBom)
             throws BomDecomposerException {
         try {
             final ArtifactDescriptorResult quarkusBomDescr = describe(quarkusCoreBom);
