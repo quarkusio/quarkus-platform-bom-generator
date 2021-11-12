@@ -1485,6 +1485,22 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
             final ObjectNode on = (ObjectNode) metadata;
             on.set(LAST_BOM_UPDATE, on.textNode("${" + MEMBER_LAST_BOM_UPDATE_PROP + "}"));
+
+            if (!member.config.getExtensionGroupIds().isEmpty()) {
+                final Xpp3Dom processGroupIds = new Xpp3Dom("processGroupIds");
+                config.addChild(processGroupIds);
+                for (String groupId : member.config.getExtensionGroupIds()) {
+                    final Xpp3Dom processGroupId = new Xpp3Dom("groupId");
+                    processGroupId.setValue(groupId);
+                    processGroupIds.addChild(processGroupId);
+                }
+            } else if (member.originalBomCoords() != null) {
+                final Xpp3Dom processGroupIds = new Xpp3Dom("processGroupIds");
+                config.addChild(processGroupIds);
+                final Xpp3Dom processGroupId = new Xpp3Dom("groupId");
+                processGroupId.setValue(member.originalBomCoords().getGroupId());
+                processGroupIds.addChild(processGroupId);
+            }
         }
 
         // METADATA OVERRIDES
