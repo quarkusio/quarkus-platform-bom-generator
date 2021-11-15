@@ -14,6 +14,7 @@ public class PlatformMemberConfig {
     private List<String> dependencyManagement = Collections.emptyList();
     private Boolean enabled;
     private Boolean hidden;
+    private Boolean alignOwnConstraints;
 
     private PlatformMemberReleaseConfig release;
 
@@ -43,6 +44,9 @@ public class PlatformMemberConfig {
         }
         if (overrides.hidden != null) {
             hidden = overrides.hidden;
+        }
+        if (overrides.alignOwnConstraints != null) {
+            alignOwnConstraints = overrides.alignOwnConstraints;
         }
         if (overrides.release != null) {
             release.applyOverrides(overrides.release);
@@ -161,6 +165,17 @@ public class PlatformMemberConfig {
      */
     public boolean isHidden() {
         return hidden == null ? false : hidden.booleanValue();
+    }
+
+    /**
+     * By default, only conflicting dependency constraints coming from
+     * different members are aligned. This option allows to trigger alignment
+     * of member own constraints.
+     * 
+     * @return true if the member should not be installed and deployed
+     */
+    public boolean isAlignOwnConstraints() {
+        return alignOwnConstraints == null ? false : alignOwnConstraints.booleanValue();
     }
 
     public void setMetadataOverrideFiles(List<String> metadataOverrideFiles) {

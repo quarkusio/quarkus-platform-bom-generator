@@ -214,7 +214,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         pm.addPlugin(plugin);
         plugin.setGroupId(pluginDescriptor().getGroupId());
         plugin.setArtifactId(pluginDescriptor().getArtifactId());
-        plugin.setVersion(pluginDescriptor().getVersion());
+        plugin.setVersion(getTestArtifactVersion(pluginDescriptor().getGroupId(), pluginDescriptor().getVersion()));
         plugin.setExtensions(true);
 
         generateUniversalPlatformModule(pom);
@@ -2046,6 +2046,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                         new org.eclipse.aether.graph.Dependency(originalBomCoords(), "import"));
             }
             bomMember.setGeneratedBomArtifact(generatedBomCoords());
+            bomMember.setAlignOwnConstraints(config.isAlignOwnConstraints());
             return bomMember;
         }
 

@@ -14,6 +14,7 @@ public class PlatformBomMemberConfig {
     private String key;
     private Artifact generatedBomArtifact;
     private Collection<AppArtifactKey> extensionCatalog = Collections.emptyList();
+    private boolean alignOwnConstraints;
 
     public PlatformBomMemberConfig(Dependency bomDep) {
         this.bomDep = bomDep;
@@ -61,5 +62,13 @@ public class PlatformBomMemberConfig {
 
     public Collection<AppArtifactKey> getExtensionCatalog() {
         return extensionCatalog;
+    }
+
+    public boolean isAlignOwnConstraints() {
+        return alignOwnConstraints;
+    }
+
+    public void setAlignOwnConstraints(boolean alignOwnConstraints) {
+        this.alignOwnConstraints = alignOwnConstraints;
     }
 }
