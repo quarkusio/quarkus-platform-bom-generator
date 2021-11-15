@@ -12,7 +12,6 @@ import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.decomposer.ReleaseIdFactory;
 import io.quarkus.bom.decomposer.ReleaseOrigin;
 import io.quarkus.bom.decomposer.ReleaseVersion;
-import io.quarkus.bom.decomposer.UpdateAvailabilityTransformer;
 import io.quarkus.bom.resolver.ArtifactResolver;
 import io.quarkus.bom.resolver.ArtifactResolverProvider;
 import io.quarkus.bootstrap.BootstrapConstants;
@@ -60,7 +59,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
 
     private Map<AppArtifactKey, ProjectDependency> quarkusBomDeps = new HashMap<>();
 
-    private Map<ReleaseOrigin, Map<ReleaseVersion, ProjectRelease.Builder>> externalReleaseDeps = new HashMap<>();
+    private final ProjectReleaseCollector extReleaseCollector = new ProjectReleaseCollector();
 
     final Map<AppArtifactKey, ProjectDependency> externalExtensionDeps = new HashMap<>();
 
@@ -75,6 +74,8 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
     private PlatformBomConfig config;
 
     private VersionConstraintComparator versionComparator;
+
+    private PlatformBomMemberConfig memberBeingProcessed;
 
     public PlatformBomComposer(PlatformBomConfig config) throws BomDecomposerException {
         this(config, MessageWriter.info());
@@ -122,10 +123,10 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         });
         generatedQuarkusBom = quarkusBomBuilder.build();
 
-        final UpdateAvailabilityTransformer updateCheckingTransformer = new UpdateAvailabilityTransformer(resolver, logger);
         for (PlatformBomMemberConfig memberConfig : config.directDeps()) {
             logger.info("Processing " + (memberConfig.originalBomArtifact() == null ? memberConfig.generatedBomArtifact()
                     : memberConfig.originalBomArtifact()));
+            memberBeingProcessed = memberConfig;
             memberConfigs.put(memberConfig.key(), memberConfig);
             final Iterable<Dependency> bomDeps;
             transformingBom = memberConfig.isBom() || memberConfig.asDependencyConstraints().size() > 1;
@@ -142,7 +143,6 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                             : memberConfig.originalBomArtifact())
                     .decompose();
             originalBom = ExtensionFilter.getInstance(resolver(), logger, memberConfig).transform(originalBom);
-            originalBom = updateCheckingTransformer.transform(originalBom);
             if (memberConfig.isBom()) {
                 originalImportedBoms.put(originalBom.bomArtifact(), originalBom);
             } else if (memberConfig.asDependencyConstraints().size() > 1) {
@@ -270,12 +270,10 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             platformReleaseBuilders.computeIfAbsent(dep.releaseId(), id -> ProjectRelease.builder(id)).add(dep);
         }
 
-        for (Map<ReleaseVersion, ProjectRelease.Builder> extReleaseBuilders : externalReleaseDeps.values()) {
-            final List<ProjectRelease> releases = new ArrayList<>(extReleaseBuilders.size());
-            extReleaseBuilders.values().forEach(b -> releases.add(b.build()));
+        for (Collection<ProjectRelease> releases : extReleaseCollector.getOriginReleaseBuilders()) {
 
-            if (extReleaseBuilders.size() == 1) {
-                mergeExtensionDeps(releases.get(0), externalExtensionDeps);
+            if (releases.size() == 1) {
+                mergeExtensionDeps(releases.iterator().next(), externalExtensionDeps);
                 continue;
             }
 
@@ -395,9 +393,8 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
     @Override
     public void visitProjectRelease(ProjectRelease release) throws BomDecomposerException {
         if (quarkusVersions.isEmpty()) {
-            final ProjectRelease.Builder releaseBuilder = externalReleaseDeps
-                    .computeIfAbsent(release.id().origin(), id -> new HashMap<>())
-                    .computeIfAbsent(release.id().version(), id -> ProjectRelease.builder(release.id()));
+            final ProjectRelease.Builder releaseBuilder = extReleaseCollector.getOrCreateReleaseBuilder(release.id(),
+                    memberBeingProcessed);
             for (ProjectDependency dep : release.dependencies()) {
                 releaseBuilder.add(dep);
             }
