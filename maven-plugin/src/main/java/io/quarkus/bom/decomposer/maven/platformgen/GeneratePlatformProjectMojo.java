@@ -40,11 +40,15 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -117,6 +121,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
     private List<RemoteRepository> repos;
 
+    @Parameter(defaultValue = "${project.remotePluginRepositories}", readonly = true, required = true)
+    private List<RemoteRepository> pluginRepos;
+
     @Parameter(defaultValue = "${repositorySystemSession}", readonly = true)
     private RepositorySystemSession repoSession;
 
@@ -169,10 +176,23 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
     private Profile generatedBomReleaseProfile;
 
+    private boolean isClean() {
+        final List<String> goals;
+        if (session.getGoals().isEmpty()) {
+            if (project.getDefaultGoal() == null) {
+                return false;
+            }
+            goals = Arrays.asList(project.getDefaultGoal().split("\\s+"));
+        } else {
+            goals = session.getGoals();
+        }
+        return goals.contains("clean");
+    }
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
 
-        if (session.getRequest().getGoals().contains("clean")) {
+        if (isClean()) {
             getLog().info("Deleting " + outputDir);
             IoUtils.recursiveDelete(outputDir.toPath());
         }
@@ -372,10 +392,186 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private void generateMavenPluginModule(Model parentPom) throws MojoExecutionException {
+
         final ArtifactCoords targetCoords = ArtifactCoords
                 .fromString(platformConfig.getAttachedMavenPlugin().getTargetPluginCoords());
 
         final String moduleName = targetCoords.getArtifactId();
+        parentPom.addModule(moduleName);
+
+        final ArtifactCoords originalCoords = ArtifactCoords
+                .fromString(platformConfig.getAttachedMavenPlugin().getOriginalPluginCoords());
+
+        if (platformConfig.getAttachedMavenPlugin().isImportSources()) {
+            importOriginalPluginSources(parentPom, moduleName, originalCoords, targetCoords);
+        } else {
+            republishOriginalPluginBinary(parentPom, moduleName, targetCoords, originalCoords);
+        }
+    }
+
+    private void importOriginalPluginSources(Model parentPom, final String moduleName,
+            final ArtifactCoords originalCoords, final ArtifactCoords targetCoords)
+            throws MojoExecutionException {
+        final Path sourcesJar;
+        try {
+            sourcesJar = nonWorkspaceResolver().resolve(new DefaultArtifact(originalCoords.getGroupId(),
+                    originalCoords.getArtifactId(), "sources", ArtifactCoords.TYPE_JAR, originalCoords.getVersion()))
+                    .getArtifact().getFile().toPath();
+        } catch (Exception e) {
+            throw new MojoExecutionException("Failed to resolve the sources JAR of " + originalCoords, e);
+        }
+
+        final File pomXml = getPomFile(parentPom, moduleName);
+
+        final Path baseDir = pomXml.getParentFile().toPath();
+        final Path javaSources = baseDir.resolve("src").resolve("main").resolve("java");
+        final Path resourcesDir = javaSources.getParent().resolve("resources");
+        try {
+            ZipUtils.unzip(sourcesJar, javaSources);
+        } catch (IOException e) {
+            throw new MojoExecutionException("Failed to unzip " + sourcesJar + " to " + javaSources, e);
+        }
+
+        // MOVE RESOURCES
+        try {
+            Files.list(javaSources).forEach(p -> {
+                if (p.getFileName().toString().equals("io")) {
+                    return;
+                }
+                try {
+                    IoUtils.copy(p, resourcesDir.resolve(p.getFileName()));
+                    IoUtils.recursiveDelete(p);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            final Path mavenDir = resourcesDir.resolve("META-INF").resolve("maven");
+            IoUtils.copy(
+                    mavenDir.resolve(originalCoords.getGroupId()).resolve(originalCoords.getArtifactId()).resolve("pom.xml"),
+                    baseDir.resolve("pom.xml"));
+            IoUtils.recursiveDelete(mavenDir);
+        } catch (IOException e) {
+            throw new MojoExecutionException("Failed to import original plugin sources", e);
+        }
+
+        // Delete the generated HelpMojo
+        try {
+            Files.walkFileTree(javaSources, new SimpleFileVisitor<Path>() {
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
+                        throws IOException {
+                    if (file.getFileName().toString().equals("HelpMojo.java")) {
+                        try {
+                            Files.delete(file);
+                        } catch (IOException ex) {
+                        }
+                        return FileVisitResult.TERMINATE;
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (IOException e) {
+            throw new MojoExecutionException("Failed to process " + javaSources, e);
+        }
+
+        final Model pom;
+        try {
+            pom = ModelUtils.readModel(pomXml.toPath());
+        } catch (IOException e) {
+            throw new MojoExecutionException("Failed to parse " + pomXml, e);
+        }
+        pom.setPomFile(pomXml);
+        pom.setName(getNameBase(parentPom) + " " + artifactIdToName(targetCoords.getArtifactId()));
+
+        final Parent parent = new Parent();
+        parent.setGroupId(ModelUtils.getGroupId(parentPom));
+        parent.setArtifactId(parentPom.getArtifactId());
+        parent.setVersion(ModelUtils.getVersion(parentPom));
+        parent.setRelativePath(pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
+        pom.setParent(parent);
+
+        DependencyManagement dm = pom.getDependencyManagement();
+        if (dm == null) {
+            dm = new DependencyManagement();
+            pom.setDependencyManagement(dm);
+        }
+        final Artifact quarkusBom = quarkusCore.generatedBomCoords();
+        final Dependency quarkusBomImport = new Dependency();
+        quarkusBomImport.setGroupId(quarkusBom.getGroupId());
+        quarkusBomImport.setArtifactId(quarkusBom.getArtifactId());
+        quarkusBomImport.setType(ArtifactCoords.TYPE_POM);
+        quarkusBomImport.setVersion(quarkusBom.getVersion());
+        quarkusBomImport.setScope("import");
+        dm.addDependency(quarkusBomImport);
+
+        final List<org.eclipse.aether.graph.Dependency> originalDeps;
+        try {
+            originalDeps = nonWorkspaceResolver()
+                    .resolveDescriptor(new DefaultArtifact(originalCoords.getGroupId(), originalCoords.getArtifactId(),
+                            ArtifactCoords.TYPE_JAR, originalCoords.getVersion()))
+                    .getDependencies();
+        } catch (Exception e) {
+            throw new MojoExecutionException("Failed to resolve the artifact descriptor of " + originalCoords, e);
+        }
+
+        final Map<ArtifactKey, String> originalDepVersions = new HashMap<>(originalDeps.size());
+        for (org.eclipse.aether.graph.Dependency d : originalDeps) {
+            final Artifact a = d.getArtifact();
+            originalDepVersions.put(new ArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension()),
+                    a.getVersion());
+        }
+        final List<Dependency> managedDeps = quarkusCore.generatedBomModel.getDependencyManagement().getDependencies();
+        final Map<ArtifactKey, String> managedDepVersions = new HashMap<>(managedDeps.size());
+        for (Dependency d : managedDeps) {
+            managedDepVersions.put(getKey(d), d.getVersion());
+        }
+
+        final List<Dependency> pluginDeps = pom.getDependencies();
+        pom.setDependencies(new ArrayList<>(pluginDeps.size()));
+        for (Dependency d : pluginDeps) {
+            if ("test".equals(d.getScope())) {
+                continue;
+            }
+            if (d.getVersion() == null) {
+                final ArtifactKey key = getKey(d);
+                if (!managedDepVersions.containsKey(key)) {
+                    final String originalVersion = originalDepVersions.get(key);
+                    if (originalVersion == null) {
+                        throw new IllegalStateException("Failed to determine version for dependency " + d
+                                + " of the Maven plugin " + originalCoords);
+                    }
+                    // not using a property here to make sure it works in different profiles
+                    d.setVersion(originalVersion);
+                }
+            } else if (d.getVersion().startsWith("${")) {
+                final ArtifactKey key = getKey(d);
+                final String originalVersion = originalDepVersions.get(key);
+                if (originalVersion == null) {
+                    throw new IllegalStateException(
+                            "Failed to determine version for dependency " + d + " of the Maven plugin " + originalCoords);
+                }
+                if (originalVersion.equals(managedDepVersions.get(key))) {
+                    d.setVersion(null);
+                } else {
+                    // not using a property here to make sure it works in different profiles
+                    d.setVersion(originalVersion);
+                }
+            }
+            pom.addDependency(d);
+        }
+        persistPom(pom);
+    }
+
+    private ArtifactKey getKey(Dependency d) {
+        return new ArtifactKey(d.getGroupId(), d.getArtifactId(), d.getClassifier(), d.getType());
+    }
+
+    private static File getPomFile(Model parentPom, final String moduleName) {
+        return new File(new File(parentPom.getProjectDirectory(), moduleName), "pom.xml");
+    }
+
+    private void republishOriginalPluginBinary(Model parentPom, final String moduleName,
+            final ArtifactCoords targetCoords, final ArtifactCoords originalCoords) throws MojoExecutionException {
         final Model pom = newModel();
         if (!targetCoords.getGroupId().equals(project.getGroupId())) {
             pom.setGroupId(targetCoords.getGroupId());
@@ -387,9 +583,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         pom.setPackaging("maven-plugin");
         pom.setName(getNameBase(parentPom) + " " + artifactIdToName(targetCoords.getArtifactId()));
-        parentPom.addModule(moduleName);
 
-        final File pomXml = new File(new File(parentPom.getProjectDirectory(), moduleName), "pom.xml");
+        final File pomXml = getPomFile(parentPom, moduleName);
         pom.setPomFile(pomXml);
 
         final Parent parent = new Parent();
@@ -449,8 +644,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         el.setValue("${project.build.outputDirectory}/META-INF/maven/" + targetCoords.getGroupId() + "/"
                 + targetCoords.getArtifactId() + "/plugin-help.xml");
         config.addChild(el);
-        final ArtifactCoords originalCoords = ArtifactCoords
-                .fromString(platformConfig.getAttachedMavenPlugin().getOriginalPluginCoords());
         el = new Xpp3Dom("destinationFile");
         el.setValue("${project.build.outputDirectory}/META-INF/maven/" + originalCoords.getGroupId() + "/"
                 + originalCoords.getArtifactId() + "/plugin-help.xml");
@@ -466,7 +659,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         pom.setPackaging("pom");
         pom.setName(getNameBase(parentPom) + " " + artifactIdToName(artifactId));
         parentPom.addModule(artifactId);
-        final File pomXml = new File(new File(parentPom.getProjectDirectory(), artifactId), "pom.xml");
+        final File pomXml = getPomFile(parentPom, artifactId);
         pom.setPomFile(pomXml);
         final Parent parent = new Parent();
         parent.setGroupId(ModelUtils.getGroupId(parentPom));
@@ -578,7 +771,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         pom.setName(getNameBase(parentPom) + " " + member.config.getName() + " - Parent");
         parentPom.addModule(moduleName);
 
-        final File pomXml = new File(new File(parentPom.getProjectDirectory(), moduleName), "pom.xml");
+        final File pomXml = getPomFile(parentPom, moduleName);
         pom.setPomFile(pomXml);
 
         final Parent parent = new Parent();
@@ -761,7 +954,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         pom.setName(getNameBase(parentPom) + " " + artifactIdToName(moduleName) + " - Parent");
         parentPom.addModule(moduleName);
 
-        final File pomXml = new File(new File(parentPom.getProjectDirectory(), moduleName), "pom.xml");
+        final File pomXml = getPomFile(parentPom, moduleName);
         pom.setPomFile(pomXml);
 
         final Parent parent = new Parent();
@@ -882,7 +1075,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         pom.setArtifactId(moduleName);
         pom.setName(getNameBase(parentPom) + " " + moduleName);
 
-        final File pomXml = new File(new File(parentPom.getProjectDirectory(), moduleName), "pom.xml");
+        final File pomXml = getPomFile(parentPom, moduleName);
         pom.setPomFile(pomXml);
 
         final Parent parent = new Parent();
@@ -1315,7 +1508,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         pom.setName(getNameBase(parentPom) + " " + artifactIdToName(moduleName) + " - Parent");
         parentPom.addModule(moduleName);
 
-        final File pomXml = new File(new File(parentPom.getProjectDirectory(), moduleName), "pom.xml");
+        final File pomXml = getPomFile(parentPom, moduleName);
         pom.setPomFile(pomXml);
 
         final Parent parent = new Parent();
