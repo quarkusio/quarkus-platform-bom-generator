@@ -540,8 +540,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                         throw new IllegalStateException("Failed to determine version for dependency " + d
                                 + " of the Maven plugin " + originalCoords);
                     }
-                    // not using a property here to make sure it works in different profiles
-                    d.setVersion(originalVersion);
+                    d.setVersion(getTestArtifactVersion(originalCoords.getGroupId(), originalVersion));
                 }
             } else if (d.getVersion().startsWith("${")) {
                 final ArtifactKey key = getKey(d);
@@ -553,12 +552,24 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 if (originalVersion.equals(managedDepVersions.get(key))) {
                     d.setVersion(null);
                 } else {
-                    // not using a property here to make sure it works in different profiles
-                    d.setVersion(originalVersion);
+                    d.setVersion(getTestArtifactVersion(originalCoords.getGroupId(), originalVersion));
                 }
             }
             pom.addDependency(d);
         }
+
+        // make sure the original properties do not override the platform ones
+        final Properties originalProps = pom.getProperties();
+        if (!originalProps.isEmpty()) {
+            pom.setProperties(new Properties());
+            for (Map.Entry<?, ?> originalProp : originalProps.entrySet()) {
+                final String propName = originalProp.getKey().toString();
+                if (getTestArtifactGroupIdForProperty(propName) == null) {
+                    pom.getProperties().setProperty(propName, originalProp.getValue().toString());
+                }
+            }
+        }
+
         persistPom(pom);
     }
 
