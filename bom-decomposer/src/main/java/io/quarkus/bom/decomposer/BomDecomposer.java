@@ -154,6 +154,15 @@ public class BomDecomposer {
         final Iterable<Dependency> artifacts = this.artifacts == null ? bomManagedDeps() : this.artifacts;
         for (Dependency dep : artifacts) {
             try {
+                // filter out dependencies that can't be resolved
+                // if an artifact has a classifier we resolve the artifact itself
+                // if an artifact does not have a classifier we will try resolving its pom
+                final String classifier = dep.getArtifact().getClassifier();
+                if (!classifier.isEmpty() &&
+                        !classifier.equals("sources") &&
+                        !classifier.equals("javadoc")) {
+                    resolve(dep.getArtifact());
+                }
                 bomBuilder.bomDependency(releaseId(dep.getArtifact()), dep);
             } catch (BomDecomposerException e) {
                 throw e;

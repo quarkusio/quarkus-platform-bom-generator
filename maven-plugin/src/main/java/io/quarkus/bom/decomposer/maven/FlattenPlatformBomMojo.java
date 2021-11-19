@@ -35,6 +35,8 @@ import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.resolution.ArtifactDescriptorException;
 import org.eclipse.aether.resolution.ArtifactDescriptorRequest;
 import org.eclipse.aether.resolution.ArtifactDescriptorResult;
+import org.eclipse.aether.resolution.ArtifactRequest;
+import org.eclipse.aether.resolution.ArtifactResolutionException;
 
 /**
  * This goal flattens the BOM, i.e. generates its effective content, and replaces the original POM
@@ -82,6 +84,9 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
     @Parameter(required = true, defaultValue = "${project.build.directory}/flattened-${project.artifactId}-${project.version}.pom")
     File outputFile;
 
+    @Parameter(required = false, property = "filterInvalidConstraints")
+    boolean filterInvalidConstraints;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
 
@@ -112,6 +117,12 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
                 : null;
         for (Dependency d : managedDeps) {
             final org.eclipse.aether.artifact.Artifact a = d.getArtifact();
+
+            if (filterInvalidConstraints && !exists(a)) {
+                getLog().warn(a + " could not be resolved and was removed from the BOM");
+                continue;
+            }
+
             final String type = a.getProperties().getOrDefault("type", a.getExtension());
             final AppArtifactKey key = new AppArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(),
                     type);
@@ -164,6 +175,20 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
             throw new MojoExecutionException("Failed to persist flattened platform bom to " + outputFile, e);
         }
         project.setPomFile(outputFile);
+    }
+
+    private boolean exists(final org.eclipse.aether.artifact.Artifact a) {
+        return a.getClassifier().isEmpty()
+                && resolve(new DefaultArtifact(a.getGroupId(), a.getArtifactId(), "pom", a.getVersion())) || resolve(a);
+    }
+
+    private boolean resolve(final org.eclipse.aether.artifact.Artifact a) {
+        try {
+            return repoSystem.resolveArtifact(repoSession, new ArtifactRequest().setArtifact(a).setRepositories(repos))
+                    .isResolved();
+        } catch (ArtifactResolutionException e) {
+            return false;
+        }
     }
 
     private static org.apache.maven.model.Dependency toModelDep(Dependency d) {

@@ -445,11 +445,14 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                     throw new RuntimeException(e);
                 }
             });
-            final Path mavenDir = resourcesDir.resolve("META-INF").resolve("maven");
+            Path metainfDir = resourcesDir.resolve("META-INF");
+            final Path mavenDir = metainfDir.resolve("maven");
             IoUtils.copy(
                     mavenDir.resolve(originalCoords.getGroupId()).resolve(originalCoords.getArtifactId()).resolve("pom.xml"),
                     baseDir.resolve("pom.xml"));
             IoUtils.recursiveDelete(mavenDir);
+            IoUtils.recursiveDelete(metainfDir.resolve("INDEX.LIST"));
+            IoUtils.recursiveDelete(metainfDir.resolve("MANIFEST.MF"));
         } catch (IOException e) {
             throw new MojoExecutionException("Failed to import original plugin sources", e);
         }
@@ -481,6 +484,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             throw new MojoExecutionException("Failed to parse " + pomXml, e);
         }
         pom.setPomFile(pomXml);
+        pom.setGroupId(targetCoords.getGroupId());
         pom.setName(getNameBase(parentPom) + " " + artifactIdToName(targetCoords.getArtifactId()));
 
         final Parent parent = new Parent();
