@@ -1,6 +1,6 @@
 package io.quarkus.bom.test;
 
-import io.quarkus.bootstrap.model.AppArtifactCoords;
+import io.quarkus.maven.ArtifactCoords;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.model.DependencyManagement;
 import org.apache.maven.model.Model;
@@ -13,7 +13,7 @@ public class ModelComposer<T extends ModelComposer<T>> {
 
     public ModelComposer(String coordsStr) {
         this();
-        final AppArtifactCoords coords = AppArtifactCoords.fromString(coordsStr);
+        final ArtifactCoords coords = ArtifactCoords.fromString(coordsStr);
         groupId(coords.getGroupId());
         artifactId(coords.getArtifactId());
         version(coords.getVersion());
@@ -57,7 +57,7 @@ public class ModelComposer<T extends ModelComposer<T>> {
     }
 
     public T managedDep(String coordsStr) {
-        final AppArtifactCoords coords = AppArtifactCoords.fromString(coordsStr);
+        final ArtifactCoords coords = ArtifactCoords.fromString(coordsStr);
         final Dependency d = new Dependency();
         d.setGroupId(coords.getGroupId());
         d.setArtifactId(coords.getArtifactId());

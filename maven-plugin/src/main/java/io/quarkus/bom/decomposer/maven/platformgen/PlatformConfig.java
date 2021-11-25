@@ -1,6 +1,7 @@
 package io.quarkus.bom.decomposer.maven.platformgen;
 
 import io.quarkus.bom.decomposer.maven.GenerateMavenRepoZip;
+import io.quarkus.bom.platform.PlatformMemberConfig;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;

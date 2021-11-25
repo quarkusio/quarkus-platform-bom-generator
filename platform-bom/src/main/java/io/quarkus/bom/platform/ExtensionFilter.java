@@ -8,10 +8,10 @@ import io.quarkus.bom.decomposer.ProjectRelease;
 import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.resolver.ArtifactResolver;
 import io.quarkus.bootstrap.BootstrapConstants;
-import io.quarkus.bootstrap.model.AppArtifactCoords;
-import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.devtools.messagewriter.MessageWriter;
+import io.quarkus.maven.ArtifactCoords;
+import io.quarkus.maven.ArtifactKey;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.file.FileSystem;
@@ -38,11 +38,11 @@ public class ExtensionFilter implements DecomposedBomTransformer {
 
     private static ExtensionFilter noop;
 
-    static ExtensionFilter getInstance(ArtifactResolver resolver, MessageWriter log, PlatformBomMemberConfig memberConfig) {
-        if (memberConfig.getExtensionCatalog().isEmpty()) {
+    static ExtensionFilter getInstance(ArtifactResolver resolver, MessageWriter log, PlatformMember member) {
+        if (member.extensionCatalog().isEmpty()) {
             return noop();
         }
-        return new ExtensionFilter(resolver, log, memberConfig);
+        return new ExtensionFilter(resolver, log, member);
     }
 
     static ExtensionFilter noop() {
@@ -59,39 +59,39 @@ public class ExtensionFilter implements DecomposedBomTransformer {
 
     private final ArtifactResolver resolver;
     private final MessageWriter log;
-    private final PlatformBomMemberConfig memberConfig;
-    private Set<AppArtifactKey> filteredOutDeps = Collections.emptySet();
+    private final PlatformMember member;
+    private Set<ArtifactKey> filteredOutDeps = Collections.emptySet();
 
-    public ExtensionFilter(ArtifactResolver resolver, MessageWriter log, PlatformBomMemberConfig memberConfig) {
+    public ExtensionFilter(ArtifactResolver resolver, MessageWriter log, PlatformMember member) {
         this.resolver = resolver;
         this.log = log;
-        this.memberConfig = memberConfig;
+        this.member = member;
     }
 
     @Override
     public DecomposedBom transform(DecomposedBom decomposed) throws BomDecomposerException {
 
         final List<Dependency> allDepList = new ArrayList<>();
-        final Map<AppArtifactKey, ProjectDependency> allDepMap = new HashMap<>();
-        final Map<AppArtifactKey, ProjectRelease> releaseMap = new HashMap<>();
+        final Map<ArtifactKey, ProjectDependency> allDepMap = new HashMap<>();
+        final Map<ArtifactKey, ProjectRelease> releaseMap = new HashMap<>();
         final Map<ReleaseId, ProjectRelease> releases = new HashMap<>();
 
         for (ProjectRelease r : decomposed.releases()) {
             releases.put(r.id(), r);
             for (ProjectDependency d : r.dependencies()) {
                 allDepList.add(d.dependency());
-                final AppArtifactKey key = d.key();
+                final ArtifactKey key = d.key();
                 allDepMap.put(key, d);
                 releaseMap.put(key, r);
             }
         }
 
-        final Map<AppArtifactKey, AtomicInteger> depCounter = new HashMap<>();
-        final PlatformMemberExtensions memberExt = new PlatformMemberExtensions(memberConfig);
+        final Map<ArtifactKey, AtomicInteger> depCounter = new HashMap<>();
+        final PlatformMemberExtensions memberExt = new PlatformMemberExtensions(member);
         for (ProjectRelease r : decomposed.releases()) {
             for (ProjectDependency d : r.dependencies()) {
                 final Artifact a = d.artifact();
-                final AppArtifactKey extKey = d.key();
+                final ArtifactKey extKey = d.key();
                 final Path p;
                 try {
                     p = resolver.resolve(a).getArtifact().getFile().toPath();
@@ -122,11 +122,11 @@ public class ExtensionFilter implements DecomposedBomTransformer {
                     throw new BomDecomposerException("Failed to read " + BootstrapConstants.DESCRIPTOR_PATH + " from " + p, e);
                 }
 
-                final AppArtifactCoords deploymentCoords = AppArtifactCoords.fromString(deploymentStr);
+                final ArtifactCoords deploymentCoords = ArtifactCoords.fromString(deploymentStr);
                 final ExtensionDeps ext = new ExtensionDeps(extKey);
                 ext.addDeploymentDep(deploymentCoords.getKey());
                 final AtomicInteger count = depCounter.computeIfAbsent(deploymentCoords.getKey(), k -> new AtomicInteger(0));
-                if (memberConfig.getExtensionCatalog().contains(extKey)) {
+                if (member.extensionCatalog().contains(extKey)) {
                     count.incrementAndGet();
                 }
 
@@ -142,7 +142,7 @@ public class ExtensionFilter implements DecomposedBomTransformer {
                             return true;
                         }
                         final Artifact a = node.getDependency().getArtifact();
-                        final AppArtifactKey key = key(a);
+                        final ArtifactKey key = key(a);
                         depCounter.computeIfAbsent(key, k -> new AtomicInteger(0)).incrementAndGet();
                         allDepMap.remove(key);
 
@@ -191,13 +191,13 @@ public class ExtensionFilter implements DecomposedBomTransformer {
         }
 
         for (ExtensionDeps ext : memberExt.getFilteredOutExtensions()) {
-            for (AppArtifactKey key : ext.getRuntimeDeps()) {
+            for (ArtifactKey key : ext.getRuntimeDeps()) {
                 final AtomicInteger c = depCounter.get(key);
                 if (c.get() > 0) {
                     c.decrementAndGet();
                 }
             }
-            for (AppArtifactKey key : ext.getDeploymentDeps()) {
+            for (ArtifactKey key : ext.getDeploymentDeps()) {
                 final AtomicInteger c = depCounter.get(key);
                 if (c.get() > 0) {
                     c.decrementAndGet();
@@ -206,7 +206,7 @@ public class ExtensionFilter implements DecomposedBomTransformer {
         }
 
         filteredOutDeps = new HashSet<>();
-        for (Map.Entry<AppArtifactKey, AtomicInteger> e : depCounter.entrySet()) {
+        for (Map.Entry<ArtifactKey, AtomicInteger> e : depCounter.entrySet()) {
             if (e.getValue().get() == 0) {
                 filteredOutDeps.add(e.getKey());
             }
@@ -221,7 +221,7 @@ public class ExtensionFilter implements DecomposedBomTransformer {
             }
         }
 
-        for (AppArtifactKey extKey : memberConfig.getExtensionCatalog()) {
+        for (ArtifactKey extKey : member.extensionCatalog()) {
             final ExtensionDeps ext = memberExt.getExtension(extKey);
             for (ProjectRelease r : ext.getProjectDeps()) {
                 if (releases.remove(r.id()) != null) {
@@ -243,11 +243,11 @@ public class ExtensionFilter implements DecomposedBomTransformer {
         builder.addRelease(prb.build());
     }
 
-    boolean isFilteredOut(AppArtifactKey key) {
+    boolean isFilteredOut(ArtifactKey key) {
         return filteredOutDeps.contains(key);
     }
 
-    private static AppArtifactKey key(final Artifact a) {
-        return new AppArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension());
+    private static ArtifactKey key(final Artifact a) {
+        return new ArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension());
     }
 }

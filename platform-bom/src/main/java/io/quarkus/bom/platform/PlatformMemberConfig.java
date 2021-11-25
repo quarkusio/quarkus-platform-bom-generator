@@ -1,4 +1,4 @@
-package io.quarkus.bom.decomposer.maven.platformgen;
+package io.quarkus.bom.platform;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -27,7 +27,7 @@ public class PlatformMemberConfig {
 
     private List<String> extensionGroupIds = new ArrayList<>(0);
 
-    void applyOverrides(PlatformMemberConfig overrides) {
+    public void applyOverrides(PlatformMemberConfig overrides) {
         if (overrides.bom != null) {
             bom = overrides.bom;
         }

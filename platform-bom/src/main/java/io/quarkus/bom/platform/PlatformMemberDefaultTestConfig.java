@@ -1,4 +1,4 @@
-package io.quarkus.bom.decomposer.maven.platformgen;
+package io.quarkus.bom.platform;
 
 import java.util.Collections;
 import java.util.List;

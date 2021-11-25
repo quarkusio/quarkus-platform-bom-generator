@@ -1,6 +1,6 @@
 package io.quarkus.bom.decomposer;
 
-import io.quarkus.bootstrap.model.AppArtifactKey;
+import io.quarkus.maven.ArtifactKey;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -18,7 +18,7 @@ public class ProjectRelease {
         private Builder() {
         }
 
-        private LinkedHashMap<AppArtifactKey, ProjectDependency> deps = new LinkedHashMap<>();
+        private LinkedHashMap<ArtifactKey, ProjectDependency> deps = new LinkedHashMap<>();
 
         public ReleaseId id() {
             return id;
@@ -43,7 +43,7 @@ public class ProjectRelease {
             return add(ProjectDependency.create(id, d));
         }
 
-        public boolean includes(AppArtifactKey key) {
+        public boolean includes(ArtifactKey key) {
             return deps.containsKey(key);
         }
 

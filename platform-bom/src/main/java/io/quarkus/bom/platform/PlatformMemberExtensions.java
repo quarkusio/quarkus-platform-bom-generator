@@ -1,6 +1,6 @@
 package io.quarkus.bom.platform;
 
-import io.quarkus.bootstrap.model.AppArtifactKey;
+import io.quarkus.maven.ArtifactKey;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -12,11 +12,11 @@ import java.util.TreeMap;
 
 public class PlatformMemberExtensions {
 
-    private final PlatformBomMemberConfig config;
-    private final Map<AppArtifactKey, ExtensionDeps> extDeps = new HashMap<>();
+    private final PlatformMember member;
+    private final Map<ArtifactKey, ExtensionDeps> extDeps = new HashMap<>();
 
-    PlatformMemberExtensions(PlatformBomMemberConfig config) {
-        this.config = config;
+    PlatformMemberExtensions(PlatformMember member) {
+        this.member = member;
     }
 
     void addExtension(ExtensionDeps ext) {
@@ -30,29 +30,29 @@ public class PlatformMemberExtensions {
         extDeps.put(ext.key(), ext);
     }
 
-    ExtensionDeps getExtension(AppArtifactKey extKey) {
+    ExtensionDeps getExtension(ArtifactKey extKey) {
         final ExtensionDeps ext = extDeps.get(extKey);
         if (ext == null) {
-            throw new IllegalArgumentException(config.key() + " does not include extension " + extKey);
+            throw new IllegalArgumentException(member.key() + " does not include extension " + extKey);
         }
         return ext;
     }
 
     Collection<ExtensionDeps> getFilteredOutExtensions() {
-        final Collection<AppArtifactKey> extCatalog = config.getExtensionCatalog();
+        final Collection<ArtifactKey> extCatalog = member.extensionCatalog();
         if (extCatalog.isEmpty()) {
             return Collections.emptyList();
         }
         final List<ExtensionDeps> list = new ArrayList<>(extDeps.size() - extCatalog.size());
-        Map<AppArtifactKey, List<AppArtifactKey>> nonProdDeps = null;
+        Map<ArtifactKey, List<ArtifactKey>> nonProdDeps = null;
         for (ExtensionDeps e : extDeps.values()) {
             if (!extCatalog.contains(e.key())) {
                 list.add(e);
             } else {
-                for (AppArtifactKey d : e.getExtensionDeps()) {
+                for (ArtifactKey d : e.getExtensionDeps()) {
                     if (!extCatalog.contains(d)) {
                         if (nonProdDeps == null) {
-                            nonProdDeps = new TreeMap<>(AppArtifactKeyComparator.getInstance());
+                            nonProdDeps = new TreeMap<>(ArtifactKeyComparator.getInstance());
                         }
                         nonProdDeps.computeIfAbsent(d, k -> new ArrayList<>()).add(e.key());
                     }
@@ -61,10 +61,10 @@ public class PlatformMemberExtensions {
         }
 
         if (nonProdDeps != null) {
-            for (Map.Entry<AppArtifactKey, List<AppArtifactKey>> e : nonProdDeps.entrySet()) {
+            for (Map.Entry<ArtifactKey, List<ArtifactKey>> e : nonProdDeps.entrySet()) {
                 System.out.println("Not supported extension " + e.getKey() + " is a dependency of supported extensions:");
-                Collections.sort(e.getValue(), AppArtifactKeyComparator.getInstance());
-                for (AppArtifactKey k : e.getValue()) {
+                Collections.sort(e.getValue(), ArtifactKeyComparator.getInstance());
+                for (ArtifactKey k : e.getValue()) {
                     System.out.println(" - " + k);
                 }
             }
@@ -72,16 +72,16 @@ public class PlatformMemberExtensions {
         return list;
     }
 
-    private static class AppArtifactKeyComparator implements Comparator<AppArtifactKey> {
+    private static class ArtifactKeyComparator implements Comparator<ArtifactKey> {
 
-        private static AppArtifactKeyComparator instance;
+        private static ArtifactKeyComparator instance;
 
-        static AppArtifactKeyComparator getInstance() {
-            return instance == null ? instance = new AppArtifactKeyComparator() : instance;
+        static ArtifactKeyComparator getInstance() {
+            return instance == null ? instance = new ArtifactKeyComparator() : instance;
         }
 
         @Override
-        public int compare(AppArtifactKey o1, AppArtifactKey o2) {
+        public int compare(ArtifactKey o1, ArtifactKey o2) {
             int i = o1.getGroupId().compareTo(o2.getGroupId());
             if (i != 0) {
                 return i;
