@@ -1,4 +1,4 @@
-package io.quarkus.bom.decomposer.maven.platformgen;
+package io.quarkus.bom.platform;
 
 import java.util.Map;
 
@@ -30,7 +30,7 @@ public class PlatformMemberTestConfig extends PlatformMemberDefaultTestConfig {
         }
     }
 
-    void applyDefaults(PlatformMemberDefaultTestConfig defaults) {
+    public void applyDefaults(PlatformMemberDefaultTestConfig defaults) {
         if (skip == null) {
             skip = defaults.skip;
         }

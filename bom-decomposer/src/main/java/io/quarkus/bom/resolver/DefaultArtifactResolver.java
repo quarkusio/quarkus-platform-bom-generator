@@ -1,9 +1,9 @@
 package io.quarkus.bom.resolver;
 
-import io.quarkus.bootstrap.model.AppArtifactCoords;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalWorkspace;
+import io.quarkus.maven.ArtifactCoords;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -34,7 +34,7 @@ public class DefaultArtifactResolver implements ArtifactResolver {
     private final MavenArtifactResolver resolver;
     private final Path baseDir;
     private final Path notFoundArtifactsPath;
-    private final Set<AppArtifactCoords> notFoundArtifacts = new HashSet<>(0);
+    private final Set<ArtifactCoords> notFoundArtifacts = new HashSet<>(0);
 
     private DefaultArtifactResolver(MavenArtifactResolver resolver, Path baseDir) {
         this.resolver = Objects.requireNonNull(resolver);
@@ -53,7 +53,7 @@ public class DefaultArtifactResolver implements ArtifactResolver {
                 try (BufferedReader reader = Files.newBufferedReader(notFoundArtifactsPath)) {
                     String s;
                     while ((s = reader.readLine()) != null) {
-                        notFoundArtifacts.add(AppArtifactCoords.fromString(s));
+                        notFoundArtifacts.add(ArtifactCoords.fromString(s));
                     }
                 } catch (IOException e) {
                     throw new RuntimeException("Failed to read " + notFoundArtifactsPath, e);
@@ -71,7 +71,7 @@ public class DefaultArtifactResolver implements ArtifactResolver {
 
     @Override
     public ArtifactResult resolve(Artifact a) {
-        final AppArtifactCoords coords = toCoords(a);
+        final ArtifactCoords coords = toCoords(a);
         if (isRecordedAsNonExisting(coords)) {
             throw recordedAsNonExistingError(coords);
         }
@@ -87,7 +87,7 @@ public class DefaultArtifactResolver implements ArtifactResolver {
 
     @Override
     public ArtifactResult resolveOrNull(Artifact a) {
-        final AppArtifactCoords coords = toCoords(a);
+        final ArtifactCoords coords = toCoords(a);
         if (isRecordedAsNonExisting(coords)) {
             return null;
         }
@@ -108,7 +108,7 @@ public class DefaultArtifactResolver implements ArtifactResolver {
 
     @Override
     public ArtifactDescriptorResult describe(Artifact a) {
-        final AppArtifactCoords coords = toCoords(a);
+        final ArtifactCoords coords = toCoords(a);
         if (isRecordedAsNonExisting(coords)) {
             throw recordedAsNonExistingError(coords);
         }
@@ -139,7 +139,7 @@ public class DefaultArtifactResolver implements ArtifactResolver {
         return result;
     }
 
-    private void persistNotFoundArtifacts(AppArtifactCoords coords) {
+    private void persistNotFoundArtifacts(ArtifactCoords coords) {
         if (notFoundArtifactsPath == null) {
             return;
         }
@@ -153,7 +153,7 @@ public class DefaultArtifactResolver implements ArtifactResolver {
         }
     }
 
-    private boolean isRecordedAsNonExisting(AppArtifactCoords coords) {
+    private boolean isRecordedAsNonExisting(ArtifactCoords coords) {
         return notFoundArtifacts.contains(coords);
     }
 
@@ -168,11 +168,11 @@ public class DefaultArtifactResolver implements ArtifactResolver {
         return false;
     }
 
-    private static AppArtifactCoords toCoords(Artifact a) {
-        return new AppArtifactCoords(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(), a.getVersion());
+    private static ArtifactCoords toCoords(Artifact a) {
+        return new ArtifactCoords(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(), a.getVersion());
     }
 
-    private ArtifactNotFoundException recordedAsNonExistingError(final AppArtifactCoords coords) {
+    private ArtifactNotFoundException recordedAsNonExistingError(final ArtifactCoords coords) {
         return new ArtifactNotFoundException("Artifact " + coords + " was previously recorded as non-existing");
     }
 }

@@ -6,8 +6,8 @@ import io.quarkus.bom.decomposer.ReleaseIdFactory;
 import io.quarkus.bom.decomposer.ReleaseOrigin;
 import io.quarkus.bom.decomposer.ReleaseOrigin.ScmConnectionOrigin;
 import io.quarkus.bom.decomposer.ReleaseVersion;
-import io.quarkus.bootstrap.model.AppArtifactCoords;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
+import io.quarkus.maven.ArtifactCoords;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
@@ -32,7 +32,7 @@ public class ProjectReleaseInstaller {
     }
 
     public static ProjectReleaseInstaller forParentPom(String coordsString) {
-        final AppArtifactCoords coords = AppArtifactCoords.fromString(coordsString);
+        final ArtifactCoords coords = ArtifactCoords.fromString(coordsString);
         final ProjectReleaseInstaller installer = forGa(coords.getGroupId(), coords.getArtifactId())
                 .version(coords.getVersion())
                 .parentPomArtifactId(coords.getArtifactId());
@@ -86,7 +86,7 @@ public class ProjectReleaseInstaller {
 
     public ProjectReleaseInstaller artifactCoords(String coordsStr) {
         assertProjectBuilder();
-        final AppArtifactCoords coords = AppArtifactCoords.fromString(coordsStr);
+        final ArtifactCoords coords = ArtifactCoords.fromString(coordsStr);
         final Artifact a = new DefaultArtifact(coords.getGroupId(), coords.getArtifactId(),
                 coords.getClassifier(), coords.getType(), coords.getVersion());
         artifact(a);

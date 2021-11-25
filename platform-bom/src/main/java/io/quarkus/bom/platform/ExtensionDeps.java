@@ -2,7 +2,7 @@ package io.quarkus.bom.platform;
 
 import io.quarkus.bom.decomposer.ProjectRelease;
 import io.quarkus.bom.decomposer.ReleaseId;
-import io.quarkus.bootstrap.model.AppArtifactKey;
+import io.quarkus.maven.ArtifactKey;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -11,17 +11,17 @@ import java.util.Set;
 
 public class ExtensionDeps {
 
-    private final AppArtifactKey runtimeKey;
-    private final Set<AppArtifactKey> runtimeDeps = new HashSet<>();
-    private final Set<AppArtifactKey> deploymentDeps = new HashSet<>();
+    private final ArtifactKey runtimeKey;
+    private final Set<ArtifactKey> runtimeDeps = new HashSet<>();
+    private final Set<ArtifactKey> deploymentDeps = new HashSet<>();
     private final Map<ReleaseId, ProjectRelease> projectDeps = new HashMap<>();
-    private final Map<AppArtifactKey, ExtensionDeps> extensionDeps = new HashMap<>();
+    private final Map<ArtifactKey, ExtensionDeps> extensionDeps = new HashMap<>();
 
-    ExtensionDeps(AppArtifactKey runtimeKey) {
+    ExtensionDeps(ArtifactKey runtimeKey) {
         this.runtimeKey = runtimeKey;
     }
 
-    AppArtifactKey key() {
+    ArtifactKey key() {
         return runtimeKey;
     }
 
@@ -33,23 +33,23 @@ public class ExtensionDeps {
         return projectDeps.values();
     }
 
-    void addRuntimeDep(AppArtifactKey dep) {
+    void addRuntimeDep(ArtifactKey dep) {
         runtimeDeps.add(dep);
     }
 
-    Collection<AppArtifactKey> getRuntimeDeps() {
+    Collection<ArtifactKey> getRuntimeDeps() {
         return runtimeDeps;
     }
 
-    boolean isRuntimeDep(AppArtifactKey key) {
+    boolean isRuntimeDep(ArtifactKey key) {
         return runtimeDeps.contains(key);
     }
 
-    void addDeploymentDep(AppArtifactKey dep) {
+    void addDeploymentDep(ArtifactKey dep) {
         deploymentDeps.add(dep);
     }
 
-    Collection<AppArtifactKey> getDeploymentDeps() {
+    Collection<ArtifactKey> getDeploymentDeps() {
         return deploymentDeps;
     }
 
@@ -57,7 +57,7 @@ public class ExtensionDeps {
         extensionDeps.put(ext.key(), ext);
     }
 
-    Collection<AppArtifactKey> getExtensionDeps() {
+    Collection<ArtifactKey> getExtensionDeps() {
         return extensionDeps.keySet();
     }
 }

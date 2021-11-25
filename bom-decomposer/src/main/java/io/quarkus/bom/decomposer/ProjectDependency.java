@@ -1,6 +1,6 @@
 package io.quarkus.bom.decomposer;
 
-import io.quarkus.bootstrap.model.AppArtifactKey;
+import io.quarkus.maven.ArtifactKey;
 import java.util.Objects;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.graph.Dependency;
@@ -27,7 +27,7 @@ public class ProjectDependency {
     protected UpdateStatus updateStatus = UpdateStatus.UNKNOWN;
     protected ProjectDependency availableUpdate;
     protected boolean preferredVersion;
-    private AppArtifactKey key;
+    private ArtifactKey key;
 
     private ProjectDependency(ReleaseId releaseId, Dependency dep) {
         this.releaseId = Objects.requireNonNull(releaseId);
@@ -75,9 +75,9 @@ public class ProjectDependency {
         this.availableUpdate = null;
     }
 
-    public AppArtifactKey key() {
+    public ArtifactKey key() {
         return key == null
-                ? key = new AppArtifactKey(artifact.getGroupId(), artifact.getArtifactId(), artifact.getClassifier(),
+                ? key = new ArtifactKey(artifact.getGroupId(), artifact.getArtifactId(), artifact.getClassifier(),
                         artifact.getExtension())
                 : key;
     }

@@ -10,11 +10,11 @@ import io.quarkus.bom.decomposer.ProjectDependency;
 import io.quarkus.bom.decomposer.ProjectRelease;
 import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.resolver.ArtifactResolverProvider;
-import io.quarkus.bootstrap.model.AppArtifactCoords;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.util.IoUtils;
 import io.quarkus.devtools.messagewriter.MessageWriter;
+import io.quarkus.maven.ArtifactCoords;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
@@ -74,7 +74,7 @@ public class ProjectInstallerTestSupport {
     }
 
     protected Artifact resolve(String coordsStr) {
-        final AppArtifactCoords coords = AppArtifactCoords.fromString(coordsStr);
+        final ArtifactCoords coords = ArtifactCoords.fromString(coordsStr);
         return resolve(new DefaultArtifact(coords.getGroupId(), coords.getArtifactId(), coords.getClassifier(),
                 coords.getType(), coords.getVersion()));
     }
@@ -112,7 +112,7 @@ public class ProjectInstallerTestSupport {
     }
 
     public static Artifact aetherArtifact(String coordsStr) {
-        final AppArtifactCoords c = AppArtifactCoords.fromString(coordsStr);
+        final ArtifactCoords c = ArtifactCoords.fromString(coordsStr);
         return new DefaultArtifact(c.getGroupId(), c.getArtifactId(), c.getClassifier(), c.getType(), c.getVersion());
     }
 

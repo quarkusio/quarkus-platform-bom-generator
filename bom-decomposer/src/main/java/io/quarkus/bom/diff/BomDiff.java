@@ -2,11 +2,11 @@ package io.quarkus.bom.diff;
 
 import io.quarkus.bom.resolver.ArtifactResolver;
 import io.quarkus.bom.resolver.ArtifactResolverProvider;
-import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
+import io.quarkus.maven.ArtifactKey;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.Path;
@@ -179,8 +179,8 @@ public class BomDiff {
         toUrl = config.toUrl;
         mainSize = config.mainDeps.size();
         toSize = config.toDeps.size();
-        final Map<AppArtifactKey, Dependency> mainDeps = toMap(config.mainDeps);
-        final Map<AppArtifactKey, Dependency> toDeps = toMap(config.toDeps);
+        final Map<ArtifactKey, Dependency> mainDeps = toMap(config.mainDeps);
+        final Map<ArtifactKey, Dependency> toDeps = toMap(config.toDeps);
 
         final Map<String, Dependency> missing = new HashMap<>();
         final Map<String, Dependency> extra = new HashMap<>();
@@ -188,7 +188,7 @@ public class BomDiff {
         final Map<String, VersionChange> upgraded = new HashMap<>();
         final Map<String, VersionChange> downgraded = new HashMap<>();
 
-        for (Map.Entry<AppArtifactKey, Dependency> main : mainDeps.entrySet()) {
+        for (Map.Entry<ArtifactKey, Dependency> main : mainDeps.entrySet()) {
             final Dependency toDep = toDeps.remove(main.getKey());
             if (toDep == null) {
                 missing.put(main.getKey().toString(), main.getValue());
@@ -293,14 +293,14 @@ public class BomDiff {
         return downgraded;
     }
 
-    private static Map<AppArtifactKey, Dependency> toMap(List<Dependency> deps) {
-        final Map<AppArtifactKey, Dependency> map = new HashMap<>(deps.size());
+    private static Map<ArtifactKey, Dependency> toMap(List<Dependency> deps) {
+        final Map<ArtifactKey, Dependency> map = new HashMap<>(deps.size());
         deps.forEach(d -> map.put(key(d), d));
         return map;
     }
 
-    private static AppArtifactKey key(Dependency dep) {
-        return new AppArtifactKey(dep.getArtifact().getGroupId(), dep.getArtifact().getArtifactId(),
+    private static ArtifactKey key(Dependency dep) {
+        return new ArtifactKey(dep.getArtifact().getGroupId(), dep.getArtifact().getArtifactId(),
                 dep.getArtifact().getClassifier(), dep.getArtifact().getExtension());
     }
 }

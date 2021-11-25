@@ -1,6 +1,5 @@
 package io.quarkus.bom.decomposer;
 
-import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import java.io.BufferedInputStream;
 import java.io.File;
@@ -16,11 +15,6 @@ import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 
 public class Util {
-
-    public static AppArtifactKey key(Artifact artifact) {
-        return new AppArtifactKey(artifact.getGroupId(), artifact.getArtifactId(), artifact.getClassifier(),
-                artifact.getExtension());
-    }
 
     public static Artifact pom(Artifact artifact) {
         if ("pom".equals(artifact.getExtension())) {

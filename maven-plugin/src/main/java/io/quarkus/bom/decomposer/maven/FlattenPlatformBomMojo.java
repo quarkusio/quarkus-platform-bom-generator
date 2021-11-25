@@ -2,8 +2,8 @@ package io.quarkus.bom.decomposer.maven;
 
 import io.quarkus.bom.decomposer.PomUtils;
 import io.quarkus.bootstrap.BootstrapConstants;
-import io.quarkus.bootstrap.model.AppArtifactKey;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
+import io.quarkus.maven.ArtifactKey;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -105,10 +105,10 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
 
         final DependencyManagement dm = new DependencyManagement();
 
-        final Set<AppArtifactKey> excludedKeys = new HashSet<>(excludeArtifactKeys.size());
+        final Set<ArtifactKey> excludedKeys = new HashSet<>(excludeArtifactKeys.size());
         if (!excludeArtifactKeys.isEmpty()) {
             for (String keyStr : excludeArtifactKeys) {
-                excludedKeys.add(AppArtifactKey.fromString(keyStr));
+                excludedKeys.add(ArtifactKey.fromString(keyStr));
             }
         }
 
@@ -124,7 +124,7 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
             }
 
             final String type = a.getProperties().getOrDefault("type", a.getExtension());
-            final AppArtifactKey key = new AppArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(),
+            final ArtifactKey key = new ArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(),
                     type);
             if (excludedKeys.contains(key)) {
                 continue;
@@ -150,7 +150,7 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
                 org.apache.maven.model.Dependency noClassifier = modelDep.clone();
                 noClassifier.setClassifier(null);
                 if (modelDeps != null) {
-                    modelDeps.put(new AppArtifactKey(a.getGroupId(), a.getArtifactId(), null, type).toString(), noClassifier);
+                    modelDeps.put(new ArtifactKey(a.getGroupId(), a.getArtifactId(), null, type).toString(), noClassifier);
                 } else {
                     dm.addDependency(noClassifier);
                 }

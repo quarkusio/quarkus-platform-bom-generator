@@ -1,7 +1,7 @@
 package io.quarkus.bom.decomposer;
 
 import io.quarkus.bom.PomResolver;
-import io.quarkus.bootstrap.model.AppArtifactKey;
+import io.quarkus.maven.ArtifactKey;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -13,7 +13,7 @@ public class DefaultDecomposedBomBuilder implements DecomposedBomBuilder {
 
     private PomResolver bomSource;
     private Artifact bomArtifact;
-    private Map<ReleaseId, Map<AppArtifactKey, ProjectDependency>> releases = new HashMap<>();
+    private Map<ReleaseId, Map<ArtifactKey, ProjectDependency>> releases = new HashMap<>();
 
     @Override
     public void bomSource(PomResolver bomSource) {
@@ -36,7 +36,7 @@ public class DefaultDecomposedBomBuilder implements DecomposedBomBuilder {
         final DecomposedBom.Builder bomBuilder = DecomposedBom.builder();
         bomBuilder.bomArtifact(bomArtifact);
         bomBuilder.bomSource(bomSource);
-        for (Map.Entry<ReleaseId, Map<AppArtifactKey, ProjectDependency>> entry : releases.entrySet()) {
+        for (Map.Entry<ReleaseId, Map<ArtifactKey, ProjectDependency>> entry : releases.entrySet()) {
             bomBuilder.addRelease(ProjectRelease.create(entry.getKey(), new ArrayList<>(entry.getValue().values())));
         }
         return bomBuilder.build();

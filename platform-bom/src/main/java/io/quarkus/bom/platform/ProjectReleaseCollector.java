@@ -4,6 +4,7 @@ import io.quarkus.bom.decomposer.ProjectRelease;
 import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.decomposer.ReleaseOrigin;
 import io.quarkus.bom.decomposer.ReleaseVersion;
+import io.quarkus.maven.ArtifactKey;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -14,10 +15,10 @@ class ProjectReleaseCollector {
 
     private Map<ReleaseOrigin, ReleaseOriginBuilder> originBuilders = new HashMap<>();
 
-    ProjectRelease.Builder getOrCreateReleaseBuilder(ReleaseId releaseId, PlatformBomMemberConfig member) {
+    ProjectRelease.Builder getOrCreateReleaseBuilder(ReleaseId releaseId, PlatformMember member) {
         final ReleaseOriginBuilder releaseBuilder = originBuilders
                 .computeIfAbsent(releaseId.origin(), id -> new ReleaseOriginBuilder());
-        releaseBuilder.members.putIfAbsent(member.key(), member);
+        releaseBuilder.members.putIfAbsent(member.key(), member.bomGeneratorMemberConfig());
         return releaseBuilder.builders.computeIfAbsent(releaseId.version(), id -> ProjectRelease.builder(releaseId));
     }
 
@@ -40,7 +41,7 @@ class ProjectReleaseCollector {
     }
 
     private static class ReleaseOriginBuilder {
-        final Map<String, PlatformBomMemberConfig> members = new HashMap<>();
+        final Map<ArtifactKey, PlatformBomMemberConfig> members = new HashMap<>();
         final Map<ReleaseVersion, ProjectRelease.Builder> builders = new HashMap<>();
 
         boolean isAlignConstraints() {
