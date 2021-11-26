@@ -114,14 +114,6 @@ public class BomDecomposer {
         }
     }
 
-    public static DecomposedBom decompose(String groupId, String artifactId, String version)
-            throws BomDecomposerException {
-        final BomDecomposer decomposer = new BomDecomposer();
-        decomposer.bomArtifact = new DefaultArtifact(groupId, artifactId, "", "pom", version);
-        decomposer.bomSource = PomSource.of(decomposer.bomArtifact);
-        return decomposer.decompose();
-    }
-
     private BomDecomposer() {
     }
 

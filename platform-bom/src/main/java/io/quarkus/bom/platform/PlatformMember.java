@@ -6,6 +6,7 @@ import io.quarkus.maven.ArtifactKey;
 import java.util.Collection;
 import java.util.List;
 import org.eclipse.aether.artifact.Artifact;
+import org.eclipse.aether.graph.Dependency;
 
 public interface PlatformMember {
 
@@ -23,7 +24,7 @@ public interface PlatformMember {
 
     PlatformMemberConfig config();
 
-    PlatformBomMemberConfig bomGeneratorMemberConfig();
+    List<Dependency> inputConstraints();
 
     ArtifactCoords stackDescriptorCoords();
 

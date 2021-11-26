@@ -15,11 +15,11 @@ public class ExtensionCoordsFilterFactory {
         this.enableNonMemberQuarkiverseExtensions = enableNonMemberQuarkiverseExtensions;
     }
 
-    public ExtensionCoordsFilter forMember(final PlatformBomMemberConfig member) {
+    public ExtensionCoordsFilter forMember(final PlatformMember member) {
         return new ExtensionCoordsFilter() {
             @Override
             public boolean isExcludeFromBom(Artifact a) {
-                if (member.originalBomArtifact().getGroupId().equals(a.getGroupId())) {
+                if (member.originalBomCoords().getGroupId().equals(a.getGroupId())) {
                     return false;
                 }
                 if (!enableNonMemberQuarkiverseExtensions && a.getGroupId().startsWith("io.quarkiverse")) {
