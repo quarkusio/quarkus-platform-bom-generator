@@ -17,7 +17,6 @@ import io.quarkus.bom.diff.BomDiff;
 import io.quarkus.bom.diff.HtmlBomDiffReportGenerator;
 import io.quarkus.bom.platform.PlatformBomComposer;
 import io.quarkus.bom.platform.PlatformBomConfig;
-import io.quarkus.bom.platform.PlatformBomMemberConfig;
 import io.quarkus.bom.platform.PlatformBomUtils;
 import io.quarkus.bom.platform.PlatformCatalogResolver;
 import io.quarkus.bom.platform.PlatformMember;
@@ -2202,24 +2201,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         private Path generatedPomFile;
         private String versionProperty;
         private Artifact prevBomRelease;
-        public boolean bomChanged;
+        private boolean bomChanged;
+        private List<org.eclipse.aether.graph.Dependency> inputConstraints;
 
         PlatformMemberImpl(PlatformMemberConfig config) {
             this.config = config;
-            if (config.getBom() == null) {
-                originalBomCoords = null;
-                if (config.getDependencyManagement().isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "Neither BOM coordinates nor dependencyManagement have been configured for member "
-                                    + config.getName());
-                }
-            } else {
-                if (!config.getDependencyManagement().isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "Either BOM or dependencyManagement are allowed for a platform member: " + config.getName());
-                }
-                originalBomCoords = toPomArtifact(config.getBom());
-            }
+            originalBomCoords = config.getBom() == null ? null : toPomArtifact(config.getBom());
         }
 
         @Override
@@ -2282,23 +2269,21 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         @Override
-        public PlatformBomMemberConfig bomGeneratorMemberConfig() {
-            final PlatformBomMemberConfig bomMember;
-            if (originalBomCoords == null) {
-                final List<org.eclipse.aether.graph.Dependency> dm = new ArrayList<>(config.getDependencyManagement().size());
+        public List<org.eclipse.aether.graph.Dependency> inputConstraints() {
+            if (inputConstraints == null) {
+                final List<org.eclipse.aether.graph.Dependency> tmp = new ArrayList<>(
+                        (originalBomCoords() == null ? 0 : 1) + config.getDependencyManagement().size());
                 for (String coordsStr : config.getDependencyManagement()) {
                     final ArtifactCoords coords = ArtifactCoords.fromString(coordsStr);
-                    dm.add(new org.eclipse.aether.graph.Dependency(new DefaultArtifact(coords.getGroupId(),
+                    tmp.add(new org.eclipse.aether.graph.Dependency(new DefaultArtifact(coords.getGroupId(),
                             coords.getArtifactId(), coords.getClassifier(), coords.getType(), coords.getVersion()), "compile"));
                 }
-                bomMember = new PlatformBomMemberConfig(dm);
-            } else {
-                bomMember = new PlatformBomMemberConfig(
-                        new org.eclipse.aether.graph.Dependency(originalBomCoords(), "import"));
+                if (originalBomCoords() != null) {
+                    tmp.add(new org.eclipse.aether.graph.Dependency(originalBomCoords(), "import"));
+                }
+                inputConstraints = tmp;
             }
-            bomMember.setGeneratedBomArtifact(generatedBomCoords());
-            bomMember.setAlignOwnConstraints(config.isAlignOwnConstraints());
-            return bomMember;
+            return inputConstraints;
         }
 
         @Override

@@ -73,8 +73,6 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
 
     final Map<ArtifactKey, ProjectDependency> externalExtensionDeps = new HashMap<>();
 
-    private Set<Artifact> bomsNotImportingQuarkusBom = new HashSet<>();
-
     private final DecomposedBom platformBom;
 
     private Map<ArtifactKey, PlatformMember> members = new HashMap<>();
@@ -101,16 +99,18 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         this.originalQuarkusBom = BomDecomposer.config()
                 .logger(logger)
                 .mavenArtifactResolver(resolver())
-                .bomArtifact(config.quarkusBom().bomGeneratorMemberConfig().originalBomArtifact())
+                .dependencies(getOriginalConstraints(config.quarkusBom(), false))
+                .bomArtifact(config.quarkusBom().originalBomCoords() == null ? config.quarkusBom().generatedBomCoords()
+                        : config.quarkusBom().originalBomCoords())
                 .decompose();
 
         final ExtensionFilter coreFilter = ExtensionFilter.getInstance(resolver(), logger, config.quarkusBom());
         filteredQuarkusBom = coreFilter.transform(originalQuarkusBom);
 
         final DecomposedBom.Builder quarkusBomBuilder = DecomposedBom.builder()
-                .bomArtifact(config.quarkusBom().bomGeneratorMemberConfig().generatedBomArtifact())
-                .bomSource(PomSource.of(config.quarkusBom().bomGeneratorMemberConfig().generatedBomArtifact()));
-        addPlatformArtifacts(config.quarkusBom().bomGeneratorMemberConfig(), quarkusBomBuilder);
+                .bomArtifact(config.quarkusBom().generatedBomCoords())
+                .bomSource(PomSource.of(config.quarkusBom().generatedBomCoords()));
+        addPlatformArtifacts(config.quarkusBom(), quarkusBomBuilder);
         filteredQuarkusBom.releases().forEach(r -> {
             final AtomicReference<ProjectRelease.Builder> rbRef = new AtomicReference<>();
             r.dependencies().forEach(d -> {
@@ -137,24 +137,15 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         config.quarkusBom().setAlignedDecomposedBom(generatedQuarkusBom);
 
         for (PlatformMember member : config.externalMembers()) {
-            logger.info("Processing " + (member.bomGeneratorMemberConfig().originalBomArtifact() == null
-                    ? member.bomGeneratorMemberConfig().generatedBomArtifact()
-                    : member.bomGeneratorMemberConfig().originalBomArtifact()));
+            logger.info("Processing "
+                    + (member.originalBomCoords() == null ? member.generatedBomCoords() : member.originalBomCoords()));
             memberBeingProcessed = member;
             members.put(member.key(), member);
-            final Iterable<Dependency> bomDeps;
-            if (member.bomGeneratorMemberConfig().isBom()) {
-                bomDeps = managedDepsExcludingQuarkusBom(member.bomGeneratorMemberConfig());
-            } else {
-                bomDeps = member.bomGeneratorMemberConfig().asDependencyConstraints();
-            }
             DecomposedBom originalBom = BomDecomposer.config()
-                    .mavenArtifactResolver(resolver())
-                    .dependencies(bomDeps)
                     .logger(logger)
-                    .bomArtifact(member.bomGeneratorMemberConfig().originalBomArtifact() == null
-                            ? member.bomGeneratorMemberConfig().generatedBomArtifact()
-                            : member.bomGeneratorMemberConfig().originalBomArtifact())
+                    .mavenArtifactResolver(resolver())
+                    .dependencies(getOriginalConstraints(member, true))
+                    .bomArtifact(member.originalBomCoords() == null ? member.generatedBomCoords() : member.originalBomCoords())
                     .decompose();
             originalBom = ExtensionFilter.getInstance(resolver(), logger, member)
                     .transform(originalBom);
@@ -221,26 +212,25 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                 }
             }
 
-            final PlatformBomMemberConfig memberConfig = members
+            final PlatformMember memberConfig = members
                     .get(new ArtifactKey(importedBomMinusQuarkusBom.bomArtifact().getGroupId(),
-                            importedBomMinusQuarkusBom.bomArtifact().getArtifactId()))
-                    .bomGeneratorMemberConfig();
-            final Artifact generatedBomArtifact = memberConfig.generatedBomArtifact();
+                            importedBomMinusQuarkusBom.bomArtifact().getArtifactId()));
+            final Artifact generatedBomArtifact = memberConfig.generatedBomCoords();
             final DecomposedBom.Builder updatedBom = DecomposedBom.builder()
                     .bomArtifact(generatedBomArtifact)
                     .bomSource(PomSource.of(generatedBomArtifact));
             for (ProjectRelease.Builder releaseBuilder : releaseBuilders.values()) {
                 updatedBom.addRelease(releaseBuilder.build());
             }
-            addPlatformArtifacts(memberConfig, updatedBom);
+            addPlatformArtifacts(member, updatedBom);
             member.setAlignedDecomposedBom(updatedBom.build());
         }
     }
 
-    private void addPlatformArtifacts(PlatformBomMemberConfig memberConfig,
+    private void addPlatformArtifacts(PlatformMember memberConfig,
             final DecomposedBom.Builder updatedBom) {
-        final Artifact generatedBomArtifact = memberConfig.generatedBomArtifact();
-        if (!generatedBomArtifact.equals(memberConfig.originalBomArtifact())) {
+        final Artifact generatedBomArtifact = memberConfig.generatedBomCoords();
+        if (!generatedBomArtifact.equals(memberConfig.originalBomCoords())) {
             // member platform descriptor artifact
             final ReleaseId memberReleaseId = ReleaseIdFactory.create(
                     ReleaseOrigin.Factory.ga(generatedBomArtifact.getGroupId(), generatedBomArtifact.getArtifactId()),
@@ -607,36 +597,47 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         return result;
     }
 
-    private Collection<Dependency> managedDepsExcludingQuarkusBom(PlatformBomMemberConfig member)
+    private Collection<Dependency> getOriginalConstraints(PlatformMember member, boolean filtered)
             throws BomDecomposerException {
-        final Artifact bom = member.originalBomArtifact();
-        final ArtifactDescriptorResult bomDescr = describe(bom);
-        List<Artifact> importedPlatformBoms = null;
-        final List<Dependency> allDeps = bomDescr.getManagedDependencies();
-        final Map<ArtifactKey, Dependency> result = new HashMap<>(allDeps.size());
+        Map<ArtifactKey, Dependency> result = null;
+        final List<Artifact> importedPlatformBoms = new ArrayList<>(0);
         final ExtensionCoordsFilter extCoordsFilter = extCoordsFilterFactory.forMember(member);
-        for (Dependency dep : allDeps) {
-            final Artifact artifact = dep.getArtifact();
-            if (PlatformArtifacts.isCatalogArtifactId(artifact.getArtifactId())) {
-                if (importedPlatformBoms == null) {
-                    importedPlatformBoms = new ArrayList<>(2);
+        for (Dependency d : member.inputConstraints()) {
+            if ("import".equals(d.getScope())) {
+                final Artifact bom = d.getArtifact();
+                final ArtifactDescriptorResult bomDescr = describe(bom);
+                importedPlatformBoms.clear();
+                final List<Dependency> allDeps = bomDescr.getManagedDependencies();
+                final Map<ArtifactKey, Dependency> bomConstraints = new HashMap<>(allDeps.size());
+                for (Dependency dep : allDeps) {
+                    final Artifact artifact = dep.getArtifact();
+                    if (filtered && PlatformArtifacts.isCatalogArtifactId(artifact.getArtifactId())) {
+                        importedPlatformBoms.add(new DefaultArtifact(artifact.getGroupId(),
+                                PlatformArtifacts.ensureBomArtifactId(artifact.getArtifactId()),
+                                ArtifactCoords.TYPE_POM, artifact.getVersion()));
+                    }
+                    if (filtered && extCoordsFilter.isExcludeFromBom(artifact)) {
+                        continue;
+                    }
+                    bomConstraints.put(key(artifact), dep);
                 }
-                importedPlatformBoms.add(new DefaultArtifact(artifact.getGroupId(),
-                        PlatformArtifacts.ensureBomArtifactId(artifact.getArtifactId()), ArtifactCoords.TYPE_POM,
-                        artifact.getVersion()));
-            }
-            if (extCoordsFilter.isExcludeFromBom(artifact)) {
-                continue;
-            }
-            result.put(key(artifact), dep);
-        }
 
-        if (importedPlatformBoms != null) {
-            for (Artifact importedPlatformBom : importedPlatformBoms) {
-                subtractPlatformBom(result, importedPlatformBom);
+                for (Artifact importedPlatformBom : importedPlatformBoms) {
+                    subtractPlatformBom(bomConstraints, importedPlatformBom);
+                }
+                if (result == null) {
+                    result = bomConstraints;
+                } else {
+                    for (Map.Entry<ArtifactKey, Dependency> dep : bomConstraints.entrySet()) {
+                        result.putIfAbsent(dep.getKey(), dep.getValue());
+                    }
+                }
+            } else {
+                if (result == null) {
+                    result = new HashMap<>(member.inputConstraints().size());
+                }
+                result.put(key(d.getArtifact()), d);
             }
-        } else {
-            bomsNotImportingQuarkusBom.add(bom);
         }
         return result.values();
     }

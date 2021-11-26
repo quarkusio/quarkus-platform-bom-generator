@@ -18,7 +18,7 @@ class ProjectReleaseCollector {
     ProjectRelease.Builder getOrCreateReleaseBuilder(ReleaseId releaseId, PlatformMember member) {
         final ReleaseOriginBuilder releaseBuilder = originBuilders
                 .computeIfAbsent(releaseId.origin(), id -> new ReleaseOriginBuilder());
-        releaseBuilder.members.putIfAbsent(member.key(), member.bomGeneratorMemberConfig());
+        releaseBuilder.members.putIfAbsent(member.key(), member);
         return releaseBuilder.builders.computeIfAbsent(releaseId.version(), id -> ProjectRelease.builder(releaseId));
     }
 
@@ -41,11 +41,11 @@ class ProjectReleaseCollector {
     }
 
     private static class ReleaseOriginBuilder {
-        final Map<ArtifactKey, PlatformBomMemberConfig> members = new HashMap<>();
+        final Map<ArtifactKey, PlatformMember> members = new HashMap<>();
         final Map<ReleaseVersion, ProjectRelease.Builder> builders = new HashMap<>();
 
         boolean isAlignConstraints() {
-            return members.size() > 1 || members.values().iterator().next().isAlignOwnConstraints();
+            return members.size() > 1 || members.values().iterator().next().config().isAlignOwnConstraints();
         }
     }
 }
