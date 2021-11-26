@@ -281,17 +281,23 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                     if (ext == null) {
                         continue;
                     }
-                    final DependencyNode root;
-                    try {
-                        root = resolver()
-                                .underlyingResolver().collectManagedDependencies(a, Collections.emptyList(),
-                                        constraints, Collections.emptyList(), Collections.emptyList(), "test", "provided")
-                                .getRoot();
-                    } catch (BootstrapMavenException e) {
-                        throw new RuntimeException("Failed to collect dependencies of " + a, e);
-                    }
-                    collectNotManagedDependencies(root.getChildren(), constraintKeys);
+                    collectNotManagedDependencies(collectDependencies(a, constraints).getChildren(), constraintKeys);
+                    collectNotManagedDependencies(collectDependencies(ext.getDeployment(), constraints).getChildren(),
+                            constraintKeys);
                 }
+            }
+
+            private DependencyNode collectDependencies(Artifact a, final List<Dependency> constraints) {
+                final DependencyNode root;
+                try {
+                    root = resolver()
+                            .underlyingResolver().collectManagedDependencies(a, Collections.emptyList(),
+                                    constraints, Collections.emptyList(), Collections.emptyList(), "test", "provided")
+                            .getRoot();
+                } catch (BootstrapMavenException e) {
+                    throw new RuntimeException("Failed to collect dependencies of " + a, e);
+                }
+                return root;
             }
         });
     }
