@@ -2,6 +2,7 @@ package io.quarkus.bom.platform;
 
 import io.quarkus.bom.PomResolver;
 import io.quarkus.bom.resolver.ArtifactResolver;
+import io.quarkus.maven.ArtifactCoords;
 import io.quarkus.maven.ArtifactKey;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -60,11 +61,15 @@ public class PlatformBomConfig {
         }
 
         public Builder exclude(String groupId, String artifactId) {
-            return exclude(new ArtifactKey(groupId, artifactId, null, "jar"));
+            return exclude(new ArtifactKey(groupId, artifactId, null, ArtifactCoords.TYPE_JAR));
         }
 
         public Builder exclude(ArtifactKey key) {
-            config.excluded.add(key);
+            if (key.getClassifier().equals("*")) {
+                config.excluded.put(getNonClassifiedKey(key), true);
+            } else {
+                config.excluded.put(key, false);
+            }
             return this;
         }
 
@@ -110,7 +115,7 @@ public class PlatformBomConfig {
     private PlatformMember quarkusBom;
     private List<PlatformMember> directDeps = new ArrayList<>();
     private Map<ArtifactKey, Artifact> enforced = new HashMap<>(0);
-    private Set<ArtifactKey> excluded = new HashSet<>(0);
+    private Map<ArtifactKey, Boolean> excluded = new HashMap<>();
     private Set<String> excludedGroups = new HashSet<>(0);
     private boolean enableNonMemberQuarkiverseExtensions;
     private ArtifactResolver artifactResolver;
@@ -156,10 +161,6 @@ public class PlatformBomConfig {
         return !excluded.isEmpty();
     }
 
-    public Set<ArtifactKey> excluded() {
-        return excluded;
-    }
-
     public boolean isEnableNonMemberQuarkiverseExtensions() {
         return enableNonMemberQuarkiverseExtensions;
     }
@@ -177,6 +178,24 @@ public class PlatformBomConfig {
     }
 
     boolean excluded(ArtifactKey key) {
-        return excluded.contains(key) ? true : excludedGroups.contains(key.getGroupId());
+        Boolean wildcard = excluded.get(key);
+        // if the key is found in the excluded set, it's excluded
+        if (wildcard != null) {
+            return true;
+        }
+        // if the classifier is empty, it's not excluded
+        if (key.getClassifier().isEmpty() || Boolean.TRUE.equals(wildcard)) {
+            return false;
+        }
+        // if the maven G:A is either not excluded or excluded but not with a wildcard, the key shouldn't be excluded
+        wildcard = excluded.get(getNonClassifiedKey(key));
+        if (wildcard == null || Boolean.FALSE.equals(wildcard)) {
+            return false;
+        }
+        return true;
+    }
+
+    private static ArtifactKey getNonClassifiedKey(ArtifactKey key) {
+        return new ArtifactKey(key.getGroupId(), key.getArtifactId(), null, ArtifactCoords.TYPE_JAR);
     }
 }
