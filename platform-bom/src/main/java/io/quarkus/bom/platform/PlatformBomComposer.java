@@ -52,6 +52,8 @@ import org.eclipse.aether.resolution.ArtifactDescriptorResult;
 
 public class PlatformBomComposer implements DecomposedBomTransformer, DecomposedBomVisitor {
 
+    private static final String LOG_COMMON_NOT_MANAGED_DEPS = "logCommonNotManagedDeps";
+
     public static DecomposedBom compose(PlatformBomConfig config) throws BomDecomposerException {
         return new PlatformBomComposer(config).platformBom();
     }
@@ -83,8 +85,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
 
     private PlatformMember memberBeingProcessed;
 
-    private boolean logCommonNotManagedDeps = false;
-    private Map<ArtifactKey, Set<String>> commonNotManagedDeps;
+    private Map<ArtifactKey, Map<String, Set<String>>> commonNotManagedDeps;
 
     public PlatformBomComposer(PlatformBomConfig config) throws BomDecomposerException {
         this(config, MessageWriter.info());
@@ -159,7 +160,10 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
 
         updateMemberBoms();
 
-        if (logCommonNotManagedDeps) {
+        final String logCommonNotManagedDeps = System.getProperty(LOG_COMMON_NOT_MANAGED_DEPS);
+        if (logCommonNotManagedDeps != null
+                && (logCommonNotManagedDeps.isEmpty() || Boolean.parseBoolean(logCommonNotManagedDeps))) {
+            logger.info("Collecting extension common not managed dependencies");
             commonNotManagedDeps = new HashMap<>();
 
             final Set<ArtifactKey> universeConstraints = new HashSet<>();
@@ -172,13 +176,21 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             for (PlatformMember member : config.externalMembers()) {
                 collectNotManagedExtensionDeps(member.originalDecomposedBom(), member);
             }
-            for (Map.Entry<ArtifactKey, Set<String>> e : commonNotManagedDeps.entrySet()) {
+            for (Map.Entry<ArtifactKey, Map<String, Set<String>>> e : commonNotManagedDeps.entrySet()) {
                 if (e.getValue().size() == 1 || universeConstraints.contains(e.getKey())) {
                     continue;
                 }
                 System.out.println(e.getKey());
-                for (String s : e.getValue()) {
-                    System.out.println("  " + s);
+                for (Map.Entry<String, Set<String>> s : e.getValue().entrySet()) {
+                    final StringBuilder buf = new StringBuilder();
+                    buf.append("  ").append(s.getKey()).append(": ");
+                    final List<String> list = new ArrayList<>(s.getValue());
+                    Collections.sort(list);
+                    buf.append(list.get(0));
+                    for (int i = 1; i < list.size(); ++i) {
+                        buf.append(", ").append(list.get(i));
+                    }
+                    System.out.println(buf.toString());
                 }
             }
         }
@@ -251,7 +263,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         }
     }
 
-    private void collectNotManagedExtensionDeps(DecomposedBom decomposed, PlatformMember config)
+    private void collectNotManagedExtensionDeps(DecomposedBom decomposed, PlatformMember member)
             throws BomDecomposerException {
         final List<Dependency> constraints = new ArrayList<>();
         final Set<ArtifactKey> constraintKeys = new HashSet<>();
@@ -262,7 +274,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                         d.artifact().getClassifier(), d.artifact().getExtension()));
             });
         }
-        final List<String> extensionGroupIds = config.getExtensionGroupIds();
+        final List<String> extensionGroupIds = member.getExtensionGroupIds();
         decomposed.visit(new NoopDecomposedBomVisitor() {
             @Override
             public void visitProjectRelease(ProjectRelease release) {
@@ -281,9 +293,9 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                     if (ext == null) {
                         continue;
                     }
-                    collectNotManagedDependencies(collectDependencies(a, constraints).getChildren(), constraintKeys);
+                    collectNotManagedDependencies(collectDependencies(a, constraints).getChildren(), constraintKeys, member);
                     collectNotManagedDependencies(collectDependencies(ext.getDeployment(), constraints).getChildren(),
-                            constraintKeys);
+                            constraintKeys, member);
                 }
             }
 
@@ -302,15 +314,17 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         });
     }
 
-    private void collectNotManagedDependencies(Collection<DependencyNode> depNodes, Set<ArtifactKey> constraints) {
+    private void collectNotManagedDependencies(Collection<DependencyNode> depNodes, Set<ArtifactKey> constraints,
+            PlatformMember member) {
         for (DependencyNode node : depNodes) {
-            collectNotManagedDependencies(node.getChildren(), constraints);
+            collectNotManagedDependencies(node.getChildren(), constraints, member);
             final Artifact a = node.getArtifact();
             final ArtifactKey key = new ArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension());
             if (a == null || constraints.contains(key)) {
                 continue;
             }
-            commonNotManagedDeps.computeIfAbsent(key, k -> new HashSet<>()).add(a.getVersion());
+            commonNotManagedDeps.computeIfAbsent(key, k -> new HashMap<>())
+                    .computeIfAbsent(a.getVersion(), k -> new HashSet<>()).add(member.config().getName());
         }
     }
 
