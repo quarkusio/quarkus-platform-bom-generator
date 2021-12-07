@@ -1711,8 +1711,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
         }
 
-        // Update last-bom-update
+        final PlatformDescriptorGeneratorConfig descrGen = platformConfig.getDescriptorGenerator();
+
         if (member != null) {
+            // Update last-bom-update
             pom.getProperties().setProperty(MEMBER_LAST_BOM_UPDATE_PROP, member.lastUpdatedBom().getGroupId() + ":"
                     + member.lastUpdatedBom().getArtifactId() + ":" + member.lastUpdatedBom().getVersion());
             if (overrides == null) {
@@ -1737,6 +1739,18 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
         }
 
+        if (descrGen != null) {
+            if (!descrGen.ignoredArtifacts.isEmpty()) {
+                final Xpp3Dom ignoredArtifacts = new Xpp3Dom("ignoredArtifacts");
+                config.addChild(ignoredArtifacts);
+                for (String coords : descrGen.ignoredArtifacts) {
+                    final Xpp3Dom artifact = new Xpp3Dom("artifact");
+                    artifact.setValue(coords);
+                    ignoredArtifacts.addChild(artifact);
+                }
+            }
+        }
+
         // METADATA OVERRIDES
         final StringJoiner metadataOverrideFiles = new StringJoiner(",");
         if (overrides != null) {
@@ -1750,7 +1764,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             metadataOverrideFiles.add("${project.basedir}/" + moduleDir.relativize(overridesFile));
         }
 
-        final PlatformDescriptorGeneratorConfig descrGen = platformConfig.getDescriptorGenerator();
         if (descrGen != null && descrGen.overridesFile != null) {
             for (String path : descrGen.overridesFile.split(",")) {
                 metadataOverrideFiles.add("${project.basedir}/" + moduleDir.relativize(Paths.get(path.trim())));

@@ -22,6 +22,7 @@ import io.quarkus.registry.catalog.json.JsonCategory;
 import io.quarkus.registry.catalog.json.JsonExtension;
 import io.quarkus.registry.catalog.json.JsonExtensionCatalog;
 import io.quarkus.registry.catalog.json.JsonExtensionOrigin;
+import io.quarkus.registry.util.GlobUtil;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -37,6 +38,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.AbstractMojo;
@@ -124,6 +126,9 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
      */
     @Parameter
     private Set<String> ignoredGroupIds = new HashSet<>(0);
+
+    @Parameter
+    private Set<String> ignoredArtifacts = new HashSet<>(0);
 
     /**
      * A set of group IDs artifacts of which should be checked to be extensions and if so, included into the
@@ -281,6 +286,24 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
             platformJson.setMetadata(baseCatalog.getMetadata());
         }
 
+        Set<ArtifactKey> ignoredKeys = Collections.emptySet();
+        List<Pattern> ignoredPatterns = Collections.emptyList();
+        if (!ignoredArtifacts.isEmpty()) {
+            for (String coordsStr : ignoredArtifacts) {
+                if (coordsStr.contains("*")) {
+                    if (ignoredPatterns.isEmpty()) {
+                        ignoredPatterns = new ArrayList<>();
+                    }
+                    ignoredPatterns.add(Pattern.compile(GlobUtil.toRegexPattern(coordsStr)));
+                } else {
+                    if (ignoredKeys.isEmpty()) {
+                        ignoredKeys = new HashSet<>();
+                    }
+                    ignoredKeys.add(ArtifactKey.fromString(coordsStr));
+                }
+            }
+        }
+
         // Create a JSON array of extension descriptors
         final Set<String> referencedCategories = new HashSet<>();
         final List<Extension> extListJson = new ArrayList<>();
@@ -313,6 +336,24 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
                 }
             } else if (!processGroupIds.contains(artifact.getGroupId())) {
                 continue;
+            }
+
+            if (!ignoredKeys.isEmpty() && ignoredKeys.contains(getKey(artifact))) {
+                continue;
+            }
+            if (!ignoredPatterns.isEmpty()) {
+                boolean ignore = false;
+                for (int i = 0; i < ignoredPatterns.size() && !ignore; ++i) {
+                    if (ignoredPatterns
+                            .get(i).matcher(artifact.getGroupId() + ":" + artifact.getArtifactId() + ":"
+                                    + artifact.getClassifier() + ":" + artifact.getExtension() + ":" + artifact.getVersion())
+                            .matches()) {
+                        ignore = true;
+                    }
+                }
+                if (ignore) {
+                    continue;
+                }
             }
 
             if (quarkusCoreVersion == null && artifact.getArtifactId().equals(quarkusCoreArtifactId)
@@ -746,5 +787,9 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
         public JsonExtensionCatalog getTheRest() {
             return theRest;
         }
+    }
+
+    private static ArtifactKey getKey(Artifact a) {
+        return new ArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension());
     }
 }
