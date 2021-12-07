@@ -1,6 +1,8 @@
 package io.quarkus.bom.decomposer.maven.platformgen;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import org.apache.maven.plugins.annotations.Parameter;
 
@@ -11,6 +13,8 @@ public class PlatformDescriptorGeneratorConfig {
     String overridesFile;
 
     Set<String> ignoredGroupIds = new HashSet<>(0);
+
+    List<String> ignoredArtifacts = new ArrayList<>(0);
 
     Set<String> processGroupIds = new HashSet<>(1);
 
