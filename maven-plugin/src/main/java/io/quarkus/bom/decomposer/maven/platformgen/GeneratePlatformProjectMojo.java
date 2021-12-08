@@ -22,6 +22,7 @@ import io.quarkus.bom.platform.PlatformCatalogResolver;
 import io.quarkus.bom.platform.PlatformMember;
 import io.quarkus.bom.platform.PlatformMemberConfig;
 import io.quarkus.bom.platform.PlatformMemberTestConfig;
+import io.quarkus.bom.platform.PlatformMemberTestConfig.Copy;
 import io.quarkus.bom.platform.ReportIndexPageGenerator;
 import io.quarkus.bom.resolver.ArtifactResolver;
 import io.quarkus.bom.resolver.ArtifactResolverProvider;
@@ -1333,6 +1334,22 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
         } catch (IOException e) {
             throw new MojoExecutionException("Failed to create file " + seed, e);
+        }
+
+        if (!testConfig.getCopyTasks().isEmpty()) {
+            for (Copy copy : testConfig.getCopyTasks()) {
+                final Path src = Path.of(copy.getSrc());
+                if (!Files.exists(src)) {
+                    throw new MojoExecutionException(
+                            "Failed to generate test module for " + testConfig.getArtifact() + ": couldn't copy "
+                                    + copy.getSrc() + " to " + copy.getDestination() + " because " + src + " does not exist");
+                }
+                try {
+                    IoUtils.copy(src, Path.of(copy.getDestination()));
+                } catch (IOException e) {
+                    throw new MojoExecutionException("Failed to copy " + src + " to " + Path.of(copy.getDestination()), e);
+                }
+            }
         }
     }
 

@@ -1,11 +1,14 @@
 package io.quarkus.bom.platform;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public class PlatformMemberTestConfig extends PlatformMemberDefaultTestConfig {
 
     private String artifact;
     private Boolean excluded;
+    private List<Copy> copyTasks = new ArrayList<>(0);
 
     public void setArtifact(String artifact) {
         this.artifact = artifact;
@@ -21,6 +24,14 @@ public class PlatformMemberTestConfig extends PlatformMemberDefaultTestConfig {
 
     public boolean isExcluded() {
         return excluded == null ? false : excluded.booleanValue();
+    }
+
+    public void setCopyTasks(List<Copy> copyTasks) {
+        this.copyTasks = copyTasks;
+    }
+
+    public List<Copy> getCopyTasks() {
+        return copyTasks;
     }
 
     void applyOverrides(PlatformMemberTestConfig overrides) {
@@ -138,6 +149,27 @@ public class PlatformMemberTestConfig extends PlatformMemberDefaultTestConfig {
             } else {
                 nativeIncludes.addAll(defaults.nativeIncludes);
             }
+        }
+    }
+
+    public static class Copy {
+        private String src;
+        private String destination;
+
+        public String getSrc() {
+            return src;
+        }
+
+        public void setSrc(String src) {
+            this.src = src;
+        }
+
+        public String getDestination() {
+            return destination;
+        }
+
+        public void setDestination(String destination) {
+            this.destination = destination;
         }
     }
 }
