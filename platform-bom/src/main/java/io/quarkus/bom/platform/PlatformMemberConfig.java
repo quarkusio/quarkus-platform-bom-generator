@@ -2,7 +2,6 @@ package io.quarkus.bom.platform;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -11,7 +10,7 @@ public class PlatformMemberConfig {
 
     private String name;
     private String bom;
-    private List<String> dependencyManagement = Collections.emptyList();
+    private DependencyManagementConfig dependencyManagement = new DependencyManagementConfig();
     private Boolean enabled;
     private Boolean hidden;
     private Boolean alignOwnConstraints;
@@ -31,12 +30,11 @@ public class PlatformMemberConfig {
         if (overrides.bom != null) {
             bom = overrides.bom;
         }
-        if (!overrides.dependencyManagement.isEmpty()) {
-            if (dependencyManagement.isEmpty()) {
+        if (overrides.dependencyManagement != null) {
+            if (dependencyManagement == null) {
                 dependencyManagement = overrides.dependencyManagement;
             } else {
-                overrides.dependencyManagement.stream().filter(s -> dependencyManagement.contains(s))
-                        .forEach(dependencyManagement::add);
+                dependencyManagement.applyOverrides(overrides.dependencyManagement);
             }
         }
         if (overrides.enabled != null) {
@@ -105,11 +103,11 @@ public class PlatformMemberConfig {
         return bom;
     }
 
-    public void setDependencyManagement(List<String> dependencyManagement) {
+    public void setDependencyManagement(DependencyManagementConfig dependencyManagement) {
         this.dependencyManagement = dependencyManagement;
     }
 
-    public List<String> getDependencyManagement() {
+    public DependencyManagementConfig getDependencyManagement() {
         return dependencyManagement;
     }
 

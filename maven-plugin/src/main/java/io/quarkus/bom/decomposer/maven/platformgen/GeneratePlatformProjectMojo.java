@@ -2301,17 +2301,18 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         @Override
         public List<org.eclipse.aether.graph.Dependency> inputConstraints() {
             if (inputConstraints == null) {
-                final List<org.eclipse.aether.graph.Dependency> tmp = new ArrayList<>(
-                        (originalBomCoords() == null ? 0 : 1) + config.getDependencyManagement().size());
-                for (String coordsStr : config.getDependencyManagement()) {
-                    final ArtifactCoords coords = ArtifactCoords.fromString(coordsStr);
-                    tmp.add(new org.eclipse.aether.graph.Dependency(new DefaultArtifact(coords.getGroupId(),
-                            coords.getArtifactId(), coords.getClassifier(), coords.getType(), coords.getVersion()), "compile"));
+                final List<org.eclipse.aether.graph.Dependency> dm = config.getDependencyManagement().toAetherDependencies();
+                if (originalBomCoords() == null) {
+                    inputConstraints = dm;
+                } else if (dm.isEmpty()) {
+                    inputConstraints = Collections
+                            .singletonList(new org.eclipse.aether.graph.Dependency(originalBomCoords(), "import"));
+                } else {
+                    if (originalBomCoords() != null) {
+                        dm.add(new org.eclipse.aether.graph.Dependency(originalBomCoords(), "import"));
+                    }
+                    inputConstraints = dm;
                 }
-                if (originalBomCoords() != null) {
-                    tmp.add(new org.eclipse.aether.graph.Dependency(originalBomCoords(), "import"));
-                }
-                inputConstraints = tmp;
             }
             return inputConstraints;
         }
