@@ -606,7 +606,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
         return deps;
     }
 
-    private JsonExtension processDependency(Artifact artifact) throws IOException {
+    private JsonExtension processDependency(Artifact artifact) throws IOException, MojoExecutionException {
         final Path path = artifact.getFile().toPath();
         if (Files.isDirectory(path)) {
             return processMetaInfDir(artifact, path.resolve(BootstrapConstants.META_INF));
@@ -624,9 +624,10 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
      * @param metaInfDir
      * @return
      * @throws IOException
+     * @throws MojoExecutionException
      */
     private JsonExtension processMetaInfDir(Artifact artifact, Path metaInfDir)
-            throws IOException {
+            throws IOException, MojoExecutionException {
 
         ObjectMapper mapper = null;
 
@@ -658,10 +659,14 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
     }
 
     private JsonExtension processPlatformArtifact(Artifact artifact, Path descriptor, ObjectMapper mapper)
-            throws IOException {
+            throws IOException, MojoExecutionException {
         try (InputStream is = Files.newInputStream(descriptor)) {
             final JsonExtension legacy = mapper.readValue(is, JsonExtension.class);
             final JsonExtension object = transformLegacyToNew(legacy);
+            if (object.getArtifact() == null) {
+                throw new MojoExecutionException(descriptor + " of " + artifact
+                        + " is missing the artifact coordinates, please make sure the extension metadata is complete");
+            }
             debug("Adding Quarkus extension %s", object.getArtifact());
             return object;
         } catch (IOException io) {
