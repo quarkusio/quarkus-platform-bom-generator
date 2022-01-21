@@ -150,6 +150,9 @@ public class PlatformMemberTestConfig extends PlatformMemberDefaultTestConfig {
                 nativeIncludes.addAll(defaults.nativeIncludes);
             }
         }
+        if (packageApplication == null) {
+            packageApplication = defaults.packageApplication;
+        }
     }
 
     public static class Copy {

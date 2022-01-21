@@ -1143,24 +1143,24 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         final String testArtifactVersion = getTestArtifactVersion(testArtifact.getGroupId(), testArtifact.getVersion());
 
-        Dependency dep = new Dependency();
-        dep.setGroupId(testArtifact.getGroupId());
-        dep.setArtifactId(testArtifact.getArtifactId());
+        final Dependency appArtifactDep = new Dependency();
+        appArtifactDep.setGroupId(testArtifact.getGroupId());
+        appArtifactDep.setArtifactId(testArtifact.getArtifactId());
         if (!testArtifact.getClassifier().isEmpty()) {
-            dep.setClassifier(testArtifact.getClassifier());
+            appArtifactDep.setClassifier(testArtifact.getClassifier());
         }
-        dep.setType(testArtifact.getType());
-        dep.setVersion(testArtifactVersion);
-        pom.addDependency(dep);
+        appArtifactDep.setType(testArtifact.getType());
+        appArtifactDep.setVersion(testArtifactVersion);
+        pom.addDependency(appArtifactDep);
 
-        dep = new Dependency();
-        dep.setGroupId(testArtifact.getGroupId());
-        dep.setArtifactId(testArtifact.getArtifactId());
-        dep.setClassifier("tests");
-        dep.setType("test-jar");
-        dep.setVersion(testArtifactVersion);
-        dep.setScope("test");
-        pom.addDependency(dep);
+        final Dependency testArtifactDep = new Dependency();
+        testArtifactDep.setGroupId(testArtifact.getGroupId());
+        testArtifactDep.setArtifactId(testArtifact.getArtifactId());
+        testArtifactDep.setClassifier("tests");
+        testArtifactDep.setType("test-jar");
+        testArtifactDep.setVersion(testArtifactVersion);
+        testArtifactDep.setScope("test");
+        pom.addDependency(testArtifactDep);
 
         addDependencies(pom, testConfig.getDependencies(), false);
         addDependencies(pom, testConfig.getTestDependencies(), true);
@@ -1295,6 +1295,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         Utils.disablePlugin(pom, "maven-jar-plugin", "default-jar");
         Utils.disablePlugin(pom, "maven-source-plugin", "attach-sources");
+        if (testConfig.isPackageApplication()) {
+            addQuarkusBuildConfig(pom, appArtifactDep);
+        }
         persistPom(pom);
 
         if (testConfig.getTransformWith() != null) {
@@ -1351,6 +1354,33 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 }
             }
         }
+    }
+
+    private void addQuarkusBuildConfig(Model pom, Dependency appArtifactDep) {
+        Build build = pom.getBuild();
+        if (build == null) {
+            build = new Build();
+            pom.setBuild(build);
+        }
+        Plugin plugin = new Plugin();
+        build.addPlugin(plugin);
+        plugin.setGroupId(quarkusCore.originalBomCoords().getGroupId());
+        plugin.setArtifactId("quarkus-maven-plugin");
+        plugin.setVersion(quarkusCore.getVersionProperty());
+        PluginExecution e = new PluginExecution();
+        plugin.addExecution(e);
+        e.addGoal("build");
+        final Xpp3Dom config = new Xpp3Dom("configuration");
+        e.setConfiguration(config);
+        final Xpp3Dom appArtifact = new Xpp3Dom("appArtifact");
+        final StringBuilder sb = new StringBuilder();
+        sb.append(appArtifactDep.getGroupId()).append(':').append(appArtifactDep.getArtifactId()).append(':');
+        if (appArtifactDep.getClassifier() != null && !appArtifactDep.getClassifier().isEmpty()) {
+            sb.append(appArtifactDep.getClassifier()).append(':').append(appArtifactDep.getType()).append(':');
+        }
+        sb.append(appArtifactDep.getVersion());
+        appArtifact.setValue(sb.toString());
+        config.addChild(appArtifact);
     }
 
     /**
