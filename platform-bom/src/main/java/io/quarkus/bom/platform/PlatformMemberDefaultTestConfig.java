@@ -24,6 +24,7 @@ public class PlatformMemberDefaultTestConfig {
     protected List<String> jvmExcludes = Collections.emptyList();
     protected List<String> nativeIncludes = Collections.emptyList();
     protected List<String> nativeExcludes = Collections.emptyList();
+    protected Boolean packageApplication;
 
     public PlatformMemberDefaultTestConfig() {
         super();
@@ -120,6 +121,9 @@ public class PlatformMemberDefaultTestConfig {
             } else {
                 nativeExcludes.addAll(overrides.jvmExcludes);
             }
+        }
+        if (overrides.packageApplication != null) {
+            packageApplication = overrides.packageApplication;
         }
     }
 
@@ -257,5 +261,13 @@ public class PlatformMemberDefaultTestConfig {
 
     public void setNativeExcludes(List<String> nativeExcludes) {
         this.nativeExcludes = nativeExcludes;
+    }
+
+    public void setPackageApplication(boolean packageApplication) {
+        this.packageApplication = packageApplication;
+    }
+
+    public boolean isPackageApplication() {
+        return packageApplication == null ? false : packageApplication;
     }
 }
