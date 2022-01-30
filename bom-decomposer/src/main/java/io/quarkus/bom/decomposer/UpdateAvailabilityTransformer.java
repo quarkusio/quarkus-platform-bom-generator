@@ -38,7 +38,7 @@ public class UpdateAvailabilityTransformer implements DecomposedBomTransformer {
                 final List<ArtifactVersion> releaseVersions = new ArrayList<>();
                 final Map<ArtifactVersion, ReleaseId> versionToReleaseId = new HashMap<>();
                 for (ProjectRelease release : releases) {
-                    for (String versionStr : release.artifactVersions) {
+                    for (String versionStr : release.artifactVersions()) {
                         final ArtifactVersion version = new DefaultArtifactVersion(versionStr);
                         releaseVersions.add(version);
                         final ReleaseId prevReleaseId = versionToReleaseId.put(version, release.id());

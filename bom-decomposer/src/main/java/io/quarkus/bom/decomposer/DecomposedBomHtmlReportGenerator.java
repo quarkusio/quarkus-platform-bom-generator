@@ -5,6 +5,7 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -221,7 +222,7 @@ public class DecomposedBomHtmlReportGenerator extends DecomposedBomReportFileWri
 
     @Override
     protected void writeProjectRelease(BufferedWriter writer, ProjectRelease release) throws IOException {
-        final List<ProjectDependency> deps = release.dependencies();
+        final Collection<ProjectDependency> deps = release.dependencies();
         releaseVersions.add(new DefaultArtifactVersion(release.id().version().asString()));
         final Map<String, ProjectDependency> releaseDeps = new HashMap<>(deps.size());
         allDeps.put(release.id().version().asString(), releaseDeps);

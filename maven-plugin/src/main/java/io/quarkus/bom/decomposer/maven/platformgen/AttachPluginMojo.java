@@ -2,7 +2,7 @@ package io.quarkus.bom.decomposer.maven.platformgen;
 
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.bootstrap.util.IoUtils;
-import io.quarkus.bootstrap.util.ZipUtils;
+import io.quarkus.fs.util.ZipUtils;
 import io.quarkus.maven.ArtifactCoords;
 import io.quarkus.maven.ArtifactKey;
 import java.io.IOException;
