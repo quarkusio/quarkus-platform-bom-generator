@@ -31,11 +31,11 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.bootstrap.util.IoUtils;
-import io.quarkus.bootstrap.util.ZipUtils;
+import io.quarkus.fs.util.ZipUtils;
 import io.quarkus.maven.ArtifactCoords;
 import io.quarkus.maven.ArtifactKey;
 import io.quarkus.registry.Constants;
-import io.quarkus.registry.catalog.json.JsonCatalogMapperHelper;
+import io.quarkus.registry.catalog.CatalogMapperHelper;
 import io.quarkus.registry.util.PlatformArtifacts;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -1720,14 +1720,14 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         ObjectNode overrides = null;
         if (copyQuarkusCoreMetadata) {
             // copy the quarkus-bom metadata
-            overrides = JsonCatalogMapperHelper.mapper().createObjectNode();
+            overrides = CatalogMapperHelper.mapper().createObjectNode();
             final Artifact bom = quarkusCore.originalBomCoords();
             final Path jsonPath = artifactResolver().resolve(new DefaultArtifact(bom.getGroupId(),
                     bom.getArtifactId() + Constants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX, bom.getVersion(), "json",
                     bom.getVersion())).getArtifact().getFile().toPath();
             final JsonNode descriptorNode;
             try (BufferedReader reader = Files.newBufferedReader(jsonPath)) {
-                descriptorNode = JsonCatalogMapperHelper.mapper().readTree(reader);
+                descriptorNode = CatalogMapperHelper.mapper().readTree(reader);
             } catch (IOException e1) {
                 throw new MojoExecutionException("Failed to deserialize " + jsonPath, e1);
             }
@@ -1765,7 +1765,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             pom.getProperties().setProperty(MEMBER_LAST_BOM_UPDATE_PROP, member.lastUpdatedBom().getGroupId() + ":"
                     + member.lastUpdatedBom().getArtifactId() + ":" + member.lastUpdatedBom().getVersion());
             if (overrides == null) {
-                overrides = JsonCatalogMapperHelper.mapper().createObjectNode();
+                overrides = CatalogMapperHelper.mapper().createObjectNode();
             }
             JsonNode metadata = overrides.get("metadata");
             if (metadata == null) {
@@ -1803,7 +1803,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         if (overrides != null) {
             Path overridesFile = moduleDir.resolve("src").resolve("main").resolve("resources").resolve("overrides.json");
             try {
-                JsonCatalogMapperHelper.serialize(overrides, overridesFile);
+                CatalogMapperHelper.serialize(overrides, overridesFile);
             } catch (Exception ex) {
                 throw new MojoExecutionException("Failed to serialize metadata to " + overridesFile, ex);
             }
@@ -2263,6 +2263,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         private Artifact prevBomRelease;
         private boolean bomChanged;
         private List<org.eclipse.aether.graph.Dependency> inputConstraints;
+        private Set<ArtifactKey> constraintKeys = new HashSet<>();
 
         PlatformMemberImpl(PlatformMemberConfig config) {
             this.config = config;
@@ -2411,12 +2412,27 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         @Override
+        public DecomposedBom getAlignedDecomposedBom() {
+            return generatedBom;
+        }
+
+        @Override
         public Collection<ArtifactKey> extensionCatalog() {
             return Collections.emptyList();
         }
 
         @Override
         public void setExtensionCatalog(Collection<ArtifactKey> extensionCatalog) {
+        }
+
+        @Override
+        public void addConstraintKey(ArtifactKey key) {
+            constraintKeys.add(key);
+        }
+
+        @Override
+        public Collection<ArtifactKey> getConstraintKeys() {
+            return constraintKeys;
         }
     }
 

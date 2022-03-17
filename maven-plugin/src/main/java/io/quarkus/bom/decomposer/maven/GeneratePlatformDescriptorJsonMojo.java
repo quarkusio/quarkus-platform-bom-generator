@@ -1,7 +1,5 @@
 package io.quarkus.bom.decomposer.maven;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.quarkus.bom.decomposer.maven.platformgen.PlatformReleaseWithMembersConfig;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
@@ -9,23 +7,17 @@ import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalWorkspace;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.bootstrap.util.IoUtils;
-import io.quarkus.bootstrap.util.ZipUtils;
+import io.quarkus.fs.util.ZipUtils;
 import io.quarkus.maven.ArtifactCoords;
 import io.quarkus.maven.ArtifactKey;
+import io.quarkus.registry.CatalogMergeUtility;
 import io.quarkus.registry.catalog.Category;
 import io.quarkus.registry.catalog.Extension;
 import io.quarkus.registry.catalog.ExtensionCatalog;
 import io.quarkus.registry.catalog.ExtensionOrigin;
-import io.quarkus.registry.catalog.json.JsonCatalogMapperHelper;
-import io.quarkus.registry.catalog.json.JsonCatalogMerger;
-import io.quarkus.registry.catalog.json.JsonCategory;
-import io.quarkus.registry.catalog.json.JsonExtension;
-import io.quarkus.registry.catalog.json.JsonExtensionCatalog;
-import io.quarkus.registry.catalog.json.JsonExtensionOrigin;
 import io.quarkus.registry.util.GlobUtil;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -233,7 +225,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
             allOverrides.add(getOverrideInfo(f));
         }
 
-        final JsonExtensionCatalog platformJson = new JsonExtensionCatalog();
+        final ExtensionCatalog.Mutable platformJson = ExtensionCatalog.builder();
         final String platformId = jsonArtifact.getGroupId() + ":" + jsonArtifact.getArtifactId() + ":"
                 + jsonArtifact.getClassifier()
                 + ":" + jsonArtifact.getExtension() + ":" + jsonArtifact.getVersion();
@@ -250,36 +242,35 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
                         d.getArtifact().getClassifier(), d.getArtifact().getExtension(), d.getArtifact().getVersion()))
                 .collect(Collectors.toList());
 
-        Map<ArtifactKey, JsonExtension> inheritedExtensions = Collections.emptyMap();
+        Map<ArtifactKey, Extension> inheritedExtensions = Collections.emptyMap();
         if (!importedDescriptors.isEmpty()) {
             final MavenArtifactResolver mvnResolver = getResolver();
             final List<ExtensionCatalog> importedCatalogs = new ArrayList<>(importedDescriptors.size());
             try {
                 for (Artifact a : importedDescriptors) {
-                    importedCatalogs.add(JsonCatalogMapperHelper
-                            .deserialize(mvnResolver.resolve(a).getArtifact().getFile().toPath(), JsonExtensionCatalog.class));
+                    importedCatalogs.add(ExtensionCatalog.fromFile(mvnResolver.resolve(a).getArtifact().getFile().toPath()));
                 }
             } catch (Exception e) {
                 throw new MojoExecutionException("Failed to resolver inherited platform descriptor", e);
             }
-            final ExtensionCatalog baseCatalog = JsonCatalogMerger.merge(importedCatalogs);
+            final ExtensionCatalog baseCatalog = CatalogMergeUtility.merge(importedCatalogs);
             List<ExtensionOrigin> derivedFrom = baseCatalog.getDerivedFrom();
             if (baseCatalog.getId() != null) {
                 derivedFrom = new ArrayList<>(derivedFrom);
-                final JsonExtensionOrigin origin = new JsonExtensionOrigin();
+                final ExtensionOrigin.Mutable origin = ExtensionOrigin.builder();
                 origin.setId(baseCatalog.getId());
                 origin.setPlatform(baseCatalog.isPlatform());
                 origin.setBom(baseCatalog.getBom());
                 derivedFrom.add(origin);
             }
             platformJson.setDerivedFrom(derivedFrom);
-            platformJson.setCategories(baseCatalog.getCategories());
+            baseCatalog.getCategories().forEach(c -> platformJson.addCategory(c.mutable()));
 
             final Collection<Extension> extensions = baseCatalog.getExtensions();
             if (!extensions.isEmpty()) {
                 inheritedExtensions = new HashMap<>(extensions.size());
                 for (Extension e : extensions) {
-                    inheritedExtensions.put(e.getArtifact().getKey(), (JsonExtension) e);
+                    inheritedExtensions.put(e.getArtifact().getKey(), (Extension) e);
                 }
             }
 
@@ -306,8 +297,6 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
 
         // Create a JSON array of extension descriptors
         final Set<String> referencedCategories = new HashSet<>();
-        final List<Extension> extListJson = new ArrayList<>();
-        platformJson.setExtensions(extListJson);
         boolean jsonFoundInBom = false;
         for (Dependency dep : deps) {
             final Artifact artifact = dep.getArtifact();
@@ -361,9 +350,9 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
                 quarkusCoreVersion = artifact.getVersion();
             }
 
-            JsonExtension extension = inheritedExtensions.isEmpty() ? null
+            Extension.Mutable extension = inheritedExtensions.isEmpty() ? null
                     : inheritedExtensions.get(new ArtifactKey(artifact.getGroupId(), artifact.getArtifactId(),
-                            artifact.getClassifier(), artifact.getExtension()));
+                            artifact.getClassifier(), artifact.getExtension())).mutable();
             final List<ExtensionOrigin> origins;
             if (extension == null) {
                 try {
@@ -393,7 +382,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
                     extension = mergeObject(extension, extOverride);
                 }
             }
-            extListJson.add(extension);
+            platformJson.addExtension(extension);
 
             if (!skipCategoryCheck) {
                 try {
@@ -432,7 +421,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
                             for (Category platformC : platformJson.getCategories()) {
                                 if (platformC.getId().equals(c.getId())) {
                                     found = true;
-                                    JsonCategory jsonC = (JsonCategory) platformC;
+                                    Category.Mutable jsonC = (Category.Mutable) platformC;
                                     if (c.getDescription() != null) {
                                         jsonC.setDescription(c.getDescription());
                                     }
@@ -466,9 +455,6 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
         }
 
         if (platformRelease != null) {
-            if (platformJson.getMetadata().isEmpty()) {
-                platformJson.setMetadata(new HashMap<>(1));
-            }
             platformJson.getMetadata().put("platform-release", platformRelease);
         }
 
@@ -501,7 +487,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
             }
         }
         try {
-            JsonCatalogMapperHelper.serialize(platformJson, outputFile.toPath().getParent().resolve(outputFile.getName()));
+            platformJson.build().persist(outputFile.toPath().getParent().resolve(outputFile.getName()));
         } catch (IOException e) {
             throw new MojoExecutionException("Failed to persist the platform descriptor", e);
         }
@@ -606,7 +592,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
         return deps;
     }
 
-    private JsonExtension processDependency(Artifact artifact) throws IOException, MojoExecutionException {
+    private Extension.Mutable processDependency(Artifact artifact) throws IOException, MojoExecutionException {
         final Path path = artifact.getFile().toPath();
         if (Files.isDirectory(path)) {
             return processMetaInfDir(artifact, path.resolve(BootstrapConstants.META_INF));
@@ -626,10 +612,8 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
      * @throws IOException
      * @throws MojoExecutionException
      */
-    private JsonExtension processMetaInfDir(Artifact artifact, Path metaInfDir)
+    private Extension.Mutable processMetaInfDir(Artifact artifact, Path metaInfDir)
             throws IOException, MojoExecutionException {
-
-        ObjectMapper mapper = null;
 
         if (!Files.exists(metaInfDir)) {
             return null;
@@ -637,57 +621,42 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
 
         Path yaml = metaInfDir.resolve(BootstrapConstants.QUARKUS_EXTENSION_FILE_NAME);
         if (Files.exists(yaml)) {
-            mapper = getMapper(true);
-            return processPlatformArtifact(artifact, yaml, mapper);
+            return processPlatformArtifact(artifact, yaml);
         }
 
-        JsonExtension e = null;
-        mapper = getMapper(false);
+        Extension.Mutable e = null;
         Path json = metaInfDir.resolve(BootstrapConstants.EXTENSION_PROPS_JSON_FILE_NAME);
         if (!Files.exists(json)) {
             final Path props = metaInfDir.resolve(BootstrapConstants.DESCRIPTOR_FILE_NAME);
             if (Files.exists(props)) {
-                e = new JsonExtension();
+                e = Extension.builder();
                 e.setArtifact(new ArtifactCoords(artifact.getGroupId(), artifact.getArtifactId(),
                         artifact.getClassifier(), artifact.getExtension(), artifact.getVersion()));
                 e.setName(artifact.getArtifactId());
             }
         } else {
-            e = processPlatformArtifact(artifact, json, mapper);
+            e = processPlatformArtifact(artifact, json);
         }
         return e;
     }
 
-    private JsonExtension processPlatformArtifact(Artifact artifact, Path descriptor, ObjectMapper mapper)
+    private Extension.Mutable processPlatformArtifact(Artifact artifact, Path descriptor)
             throws IOException, MojoExecutionException {
-        try (InputStream is = Files.newInputStream(descriptor)) {
-            final JsonExtension legacy = mapper.readValue(is, JsonExtension.class);
-            final JsonExtension object = transformLegacyToNew(legacy);
-            if (object.getArtifact() == null) {
-                throw new MojoExecutionException(descriptor + " of " + artifact
-                        + " is missing the artifact coordinates, please make sure the extension metadata is complete");
-            }
-            debug("Adding Quarkus extension %s", object.getArtifact());
-            return object;
-        } catch (IOException io) {
-            throw new IOException("Failed to parse " + descriptor, io);
+        final Extension.Mutable legacy = Extension.mutableFromFile(descriptor);
+        final Extension.Mutable object = transformLegacyToNew(legacy);
+        if (object.getArtifact() == null) {
+            throw new MojoExecutionException(descriptor + " of " + artifact
+                    + " is missing the artifact coordinates, please make sure the extension metadata is complete");
         }
-    }
-
-    private ObjectMapper getMapper(boolean yaml) {
-        if (yaml) {
-            YAMLFactory yf = new YAMLFactory();
-            return JsonCatalogMapperHelper.initMapper(new ObjectMapper(yf));
-        } else {
-            return JsonCatalogMapperHelper.mapper();
-        }
+        debug("Adding Quarkus extension %s", object.getArtifact());
+        return object;
     }
 
     private String extensionId(Extension extObject) {
         return extObject.getArtifact().getGroupId() + ":" + extObject.getArtifact().getArtifactId();
     }
 
-    private JsonExtension mergeObject(JsonExtension extObject, Extension extOverride) {
+    private Extension.Mutable mergeObject(Extension.Mutable extObject, Extension extOverride) {
         final ArtifactCoords overrideCoords = extOverride.getArtifact();
         if (overrideCoords != null) {
             if (overrideCoords.getGroupId() != null && overrideCoords.getArtifactId() != null
@@ -742,7 +711,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
         getLog().debug(String.format(msg, args));
     }
 
-    private JsonExtension transformLegacyToNew(JsonExtension extObject) {
+    private Extension.Mutable transformLegacyToNew(Extension.Mutable extObject) {
         final Map<String, Object> metadata = extObject.getMetadata();
         final Object labels = metadata.get("labels");
         if (labels != null) {
@@ -759,10 +728,10 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
         // Read the overrides file for the extensions (if it exists)
         final Map<String, Extension> extOverrides = new HashMap<>();
         info("Loading overrides file %s", overridesFile);
-        final JsonExtensionCatalog overridesObject;
+        final ExtensionCatalog overridesObject;
         try {
-            overridesObject = JsonCatalogMapperHelper.deserialize(overridesFile.toPath(), JsonExtensionCatalog.class);
-            final List<Extension> extensionsOverrides = overridesObject.getExtensions();
+            overridesObject = ExtensionCatalog.fromFile(overridesFile.toPath());
+            final Collection<Extension> extensionsOverrides = overridesObject.getExtensions();
             if (!extensionsOverrides.isEmpty()) {
                 // Put the extension overrides into a map keyed to their GAV
                 for (Extension extOverride : extensionsOverrides) {
@@ -777,10 +746,10 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
 
     private static class OverrideInfo {
         private Map<String, Extension> extOverrides;
-        private JsonExtensionCatalog theRest;
+        private ExtensionCatalog theRest;
 
         public OverrideInfo(Map<String, Extension> extOverrides,
-                JsonExtensionCatalog theRest) {
+                ExtensionCatalog theRest) {
             this.extOverrides = extOverrides;
             this.theRest = theRest;
         }
@@ -789,7 +758,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
             return extOverrides;
         }
 
-        public JsonExtensionCatalog getTheRest() {
+        public ExtensionCatalog getTheRest() {
             return theRest;
         }
     }

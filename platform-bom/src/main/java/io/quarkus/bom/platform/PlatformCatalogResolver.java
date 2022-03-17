@@ -4,8 +4,6 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.maven.ArtifactKey;
 import io.quarkus.registry.catalog.ExtensionCatalog;
-import io.quarkus.registry.catalog.json.JsonCatalogMapperHelper;
-import io.quarkus.registry.catalog.json.JsonExtensionCatalog;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -25,9 +23,9 @@ public class PlatformCatalogResolver {
                 artifact.getExtension());
         ExtensionCatalog catalog = catalogCache.get(key);
         if (catalog == null) {
-            catalog = JsonCatalogMapperHelper.deserialize(resolver
+            catalog = ExtensionCatalog.fromFile(resolver
                     .resolve(artifact)
-                    .getArtifact().getFile().toPath(), JsonExtensionCatalog.class);
+                    .getArtifact().getFile().toPath());
             catalogCache.put(key, catalog);
         }
         return catalog;

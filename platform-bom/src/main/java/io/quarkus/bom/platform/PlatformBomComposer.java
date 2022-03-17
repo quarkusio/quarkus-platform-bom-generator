@@ -6,17 +6,18 @@ import io.quarkus.bom.decomposer.BomDecomposerException;
 import io.quarkus.bom.decomposer.DecomposedBom;
 import io.quarkus.bom.decomposer.DecomposedBomTransformer;
 import io.quarkus.bom.decomposer.DecomposedBomVisitor;
-import io.quarkus.bom.decomposer.NoopDecomposedBomVisitor;
 import io.quarkus.bom.decomposer.ProjectDependency;
 import io.quarkus.bom.decomposer.ProjectRelease;
 import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.decomposer.ReleaseIdFactory;
 import io.quarkus.bom.decomposer.ReleaseOrigin;
 import io.quarkus.bom.decomposer.ReleaseVersion;
+import io.quarkus.bom.resolver.ArtifactNotFoundException;
 import io.quarkus.bom.resolver.ArtifactResolver;
 import io.quarkus.bom.resolver.ArtifactResolverProvider;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
+import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.maven.ArtifactCoords;
 import io.quarkus.maven.ArtifactKey;
@@ -40,7 +41,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 import org.apache.maven.artifact.versioning.ArtifactVersion;
 import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
@@ -58,18 +59,16 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         return new PlatformBomComposer(config).platformBom();
     }
 
-    private final DecomposedBom originalQuarkusBom;
-    private final DecomposedBom filteredQuarkusBom;
-    private final DecomposedBom generatedQuarkusBom;
+    private final Map<ReleaseId, ProjectRelease.Builder> quarkusBomReleaseBuilders = new HashMap<>();
 
     private final MessageWriter logger;
     private final ExtensionCoordsFilterFactory extCoordsFilterFactory;
     private ArtifactResolver resolver;
 
-    private Collection<ReleaseVersion> quarkusVersions;
+    private Collection<ReleaseVersion> versionsInQuarkusBom = new HashSet<>();
     private LinkedHashMap<String, ReleaseId> preferredVersions;
 
-    private Map<ArtifactKey, ProjectDependency> quarkusBomDeps = new HashMap<>();
+    private Map<ArtifactKey, ProjectDependency> depsAlignedWithQuarkusBom = new HashMap<>();
 
     private final ProjectReleaseCollector extReleaseCollector = new ProjectReleaseCollector();
 
@@ -97,45 +96,15 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         this.resolver = config.artifactResolver();
         this.extCoordsFilterFactory = ExtensionCoordsFilterFactory.newInstance(config, logger);
 
-        this.originalQuarkusBom = BomDecomposer.config()
+        final DecomposedBom originalQuarkusBom = BomDecomposer.config()
                 .logger(logger)
                 .mavenArtifactResolver(resolver())
                 .dependencies(getOriginalConstraints(config.quarkusBom(), false))
                 .bomArtifact(config.quarkusBom().originalBomCoords() == null ? config.quarkusBom().generatedBomCoords()
                         : config.quarkusBom().originalBomCoords())
                 .decompose();
-
-        final ExtensionFilter coreFilter = ExtensionFilter.getInstance(resolver(), logger, config.quarkusBom());
-        filteredQuarkusBom = coreFilter.transform(originalQuarkusBom);
-
-        final DecomposedBom.Builder quarkusBomBuilder = DecomposedBom.builder()
-                .bomArtifact(config.quarkusBom().generatedBomCoords())
-                .bomSource(PomSource.of(config.quarkusBom().generatedBomCoords()));
-        addPlatformArtifacts(config.quarkusBom(), quarkusBomBuilder);
-        filteredQuarkusBom.releases().forEach(r -> {
-            final AtomicReference<ProjectRelease.Builder> rbRef = new AtomicReference<>();
-            r.dependencies().forEach(d -> {
-                final ProjectDependency effectiveDep = effectiveDep(d);
-                if (effectiveDep != null) {
-                    ProjectRelease.Builder rb = rbRef.get();
-                    if (rb == null) {
-                        rb = ProjectRelease.builder(r.id());
-                        rbRef.set(rb);
-                    }
-                    rb.add(effectiveDep);
-                    quarkusBomDeps.put(effectiveDep.key(), effectiveDep);
-                } else {
-                    quarkusBomDeps.put(d.key(), d);
-                }
-            });
-            final ProjectRelease.Builder rb = rbRef.get();
-            if (rb != null) {
-                quarkusBomBuilder.addRelease(rb.build());
-            }
-        });
-        generatedQuarkusBom = quarkusBomBuilder.build();
         config.quarkusBom().setOriginalDecomposedBom(originalQuarkusBom);
-        config.quarkusBom().setAlignedDecomposedBom(generatedQuarkusBom);
+        initQuarkusBomReleaseBuilders(originalQuarkusBom);
 
         for (PlatformMember member : config.externalMembers()) {
             logger.info("Processing "
@@ -151,49 +120,48 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             originalBom = ExtensionFilter.getInstance(resolver(), logger, member)
                     .transform(originalBom);
             member.setOriginalDecomposedBom(originalBom);
-
-            transform(originalBom);
+            originalBom.visit(this);
         }
 
         logger.info("Generating " + config.bomArtifact());
         platformBom = generatePlatformBom();
 
+        config.quarkusBom().setAlignedDecomposedBom(generateQuarkusBom());
         updateMemberBoms();
+    }
 
-        final String logCommonNotManagedDeps = System.getProperty(LOG_COMMON_NOT_MANAGED_DEPS);
-        if (logCommonNotManagedDeps != null
-                && (logCommonNotManagedDeps.isEmpty() || Boolean.parseBoolean(logCommonNotManagedDeps))) {
-            logger.info("Collecting extension common not managed dependencies");
-            commonNotManagedDeps = new HashMap<>();
-
-            final Set<ArtifactKey> universeConstraints = new HashSet<>();
-            for (ProjectRelease r : platformBom.releases()) {
-                r.dependencies().forEach(d -> universeConstraints.add(new ArtifactKey(d.artifact().getGroupId(),
-                        d.artifact().getArtifactId(), d.artifact().getClassifier(), d.artifact().getExtension())));
-            }
-
-            collectNotManagedExtensionDeps(generatedQuarkusBom, config.quarkusBom());
-            for (PlatformMember member : config.externalMembers()) {
-                collectNotManagedExtensionDeps(member.originalDecomposedBom(), member);
-            }
-            for (Map.Entry<ArtifactKey, Map<String, Set<String>>> e : commonNotManagedDeps.entrySet()) {
-                if (e.getValue().size() == 1 || universeConstraints.contains(e.getKey())) {
-                    continue;
-                }
-                System.out.println(e.getKey());
-                for (Map.Entry<String, Set<String>> s : e.getValue().entrySet()) {
-                    final StringBuilder buf = new StringBuilder();
-                    buf.append("  ").append(s.getKey()).append(": ");
-                    final List<String> list = new ArrayList<>(s.getValue());
-                    Collections.sort(list);
-                    buf.append(list.get(0));
-                    for (int i = 1; i < list.size(); ++i) {
-                        buf.append(", ").append(list.get(i));
+    private void initQuarkusBomReleaseBuilders(DecomposedBom originalQuarkusBom) throws BomDecomposerException {
+        final PlatformMember quarkusBom = config.quarkusBom();
+        final ExtensionFilter coreFilter = ExtensionFilter.getInstance(resolver(), logger, quarkusBom);
+        final DecomposedBom filteredQuarkusBom = coreFilter.transform(originalQuarkusBom);
+        filteredQuarkusBom.releases().forEach(r -> {
+            ProjectRelease.Builder releaseBuilder = null;
+            for (ProjectDependency d : r.dependencies()) {
+                final ProjectDependency effectiveDep = effectiveDep(d);
+                if (effectiveDep != null) {
+                    if (releaseBuilder == null) {
+                        releaseBuilder = quarkusBomReleaseBuilders.computeIfAbsent(d.releaseId(),
+                                i -> ProjectRelease.builder(i));
                     }
-                    System.out.println(buf.toString());
+                    releaseBuilder.add(effectiveDep);
+                    depsAlignedWithQuarkusBom.put(effectiveDep.key(), effectiveDep);
+                    quarkusBom.addConstraintKey(effectiveDep.key());
+                } else {
+                    depsAlignedWithQuarkusBom.put(d.key(), d);
                 }
             }
+        });
+    }
+
+    private DecomposedBom generateQuarkusBom() throws BomDecomposerException {
+        final DecomposedBom.Builder quarkusBomBuilder = DecomposedBom.builder()
+                .bomArtifact(config.quarkusBom().generatedBomCoords())
+                .bomSource(PomSource.of(config.quarkusBom().generatedBomCoords()));
+        addPlatformArtifacts(config.quarkusBom(), quarkusBomBuilder);
+        for (ProjectRelease.Builder rb : quarkusBomReleaseBuilders.values()) {
+            quarkusBomBuilder.addRelease(rb.build());
         }
+        return quarkusBomBuilder.build();
     }
 
     public DecomposedBom platformBom() {
@@ -201,32 +169,24 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
     }
 
     private void updateMemberBoms() {
-        final Set<ArtifactKey> bomDeps = new HashSet<>();
         final Map<ReleaseId, ProjectRelease.Builder> releaseBuilders = new HashMap<>();
         for (PlatformMember member : members.values()) {
-            bomDeps.clear();
             releaseBuilders.clear();
 
-            final DecomposedBom importedBomMinusQuarkusBom = member.originalDecomposedBom();
-            for (ProjectRelease release : importedBomMinusQuarkusBom.releases()) {
-                for (ProjectDependency dep : release.dependencies()) {
-                    if (!bomDeps.add(dep.key()) || config.excluded(dep.key())) {
-                        continue;
-                    }
-                    ProjectDependency platformDep = quarkusBomDeps.get(dep.key());
-                    if (platformDep == null) {
-                        platformDep = externalExtensionDeps.get(dep.key());
-                    }
-                    if (platformDep == null) {
-                        throw new IllegalStateException("Failed to locate " + dep.key() + " in the generated platform BOM");
-                    }
-                    releaseBuilders.computeIfAbsent(platformDep.releaseId(), id -> ProjectRelease.builder(id)).add(platformDep);
+            acceptOriginalMemberConstraints(member, dep -> {
+                ProjectDependency platformDep = depsAlignedWithQuarkusBom.get(dep.key());
+                if (platformDep == null) {
+                    platformDep = externalExtensionDeps.get(dep.key());
                 }
-            }
+                if (platformDep == null) {
+                    throw new IllegalStateException("Failed to locate " + dep.key() + " in the generated platform BOM");
+                }
+                releaseBuilders.computeIfAbsent(platformDep.releaseId(), id -> ProjectRelease.builder(id)).add(platformDep);
+            });
 
+            final Artifact bomArtifact = member.originalDecomposedBom().bomArtifact();
             final PlatformMember memberConfig = members
-                    .get(new ArtifactKey(importedBomMinusQuarkusBom.bomArtifact().getGroupId(),
-                            importedBomMinusQuarkusBom.bomArtifact().getArtifactId()));
+                    .get(new ArtifactKey(bomArtifact.getGroupId(), bomArtifact.getArtifactId()));
             final Artifact generatedBomArtifact = memberConfig.generatedBomCoords();
             final DecomposedBom.Builder updatedBom = DecomposedBom.builder()
                     .bomArtifact(generatedBomArtifact)
@@ -236,6 +196,26 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             }
             addPlatformArtifacts(member, updatedBom);
             member.setAlignedDecomposedBom(updatedBom.build());
+        }
+    }
+
+    private void acceptOriginalMemberConstraints(PlatformMember member, Consumer<ProjectDependency> consumer) {
+        for (ProjectRelease release : member.originalDecomposedBom().releases()) {
+            for (ProjectDependency dep : release.dependencies()) {
+                if (config.excluded(dep.key())) {
+                    continue;
+                }
+                consumer.accept(dep);
+            }
+        }
+    }
+
+    private void acceptConstraints(Collection<ProjectRelease.Builder> releaseBuilders, Consumer<ProjectDependency> consumer)
+            throws BomDecomposerException {
+        for (ProjectRelease.Builder b : releaseBuilders) {
+            for (ProjectDependency dep : b.dependencies()) {
+                consumer.accept(dep);
+            }
         }
     }
 
@@ -263,75 +243,14 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         }
     }
 
-    private void collectNotManagedExtensionDeps(DecomposedBom decomposed, PlatformMember member)
-            throws BomDecomposerException {
-        final List<Dependency> constraints = new ArrayList<>();
-        final Set<ArtifactKey> constraintKeys = new HashSet<>();
-        for (ProjectRelease r : decomposed.releases()) {
-            r.dependencies().forEach(d -> {
-                constraints.add(d.dependency());
-                constraintKeys.add(new ArtifactKey(d.artifact().getGroupId(), d.artifact().getArtifactId(),
-                        d.artifact().getClassifier(), d.artifact().getExtension()));
-            });
-        }
-        final List<String> extensionGroupIds = member.getExtensionGroupIds();
-        decomposed.visit(new NoopDecomposedBomVisitor() {
-            @Override
-            public void visitProjectRelease(ProjectRelease release) {
-                for (ProjectDependency dep : release.dependencies()) {
-                    Artifact a = dep.artifact();
-                    if (!extensionGroupIds.isEmpty() && !extensionGroupIds.contains(a.getGroupId())
-                            || !a.getExtension().equals("jar")
-                            || a.getArtifactId().endsWith("-deployment")
-                            || a.getClassifier().equals("javadoc")
-                            || a.getClassifier().equals("sources")
-                            || a.getClassifier().equals("tests")
-                            || dep.dependency().getScope().equals("test")) {
-                        continue;
-                    }
-                    final ExtensionInfo ext = getExtensionInfoOrNull(a);
-                    if (ext == null) {
-                        continue;
-                    }
-                    collectNotManagedDependencies(collectDependencies(a, constraints).getChildren(), constraintKeys, member);
-                    collectNotManagedDependencies(collectDependencies(ext.getDeployment(), constraints).getChildren(),
-                            constraintKeys, member);
-                }
-            }
-
-            private DependencyNode collectDependencies(Artifact a, final List<Dependency> constraints) {
-                final DependencyNode root;
-                try {
-                    root = resolver()
-                            .underlyingResolver().collectManagedDependencies(a, Collections.emptyList(),
-                                    constraints, Collections.emptyList(), Collections.emptyList(), "test", "provided")
-                            .getRoot();
-                } catch (BootstrapMavenException e) {
-                    throw new RuntimeException("Failed to collect dependencies of " + a, e);
-                }
-                return root;
-            }
-        });
-    }
-
-    private void collectNotManagedDependencies(Collection<DependencyNode> depNodes, Set<ArtifactKey> constraints,
-            PlatformMember member) {
-        for (DependencyNode node : depNodes) {
-            collectNotManagedDependencies(node.getChildren(), constraints, member);
-            final Artifact a = node.getArtifact();
-            final ArtifactKey key = new ArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension());
-            if (a == null || constraints.contains(key)) {
-                continue;
-            }
-            commonNotManagedDeps.computeIfAbsent(key, k -> new HashMap<>())
-                    .computeIfAbsent(a.getVersion(), k -> new HashSet<>()).add(member.config().getName());
-        }
-    }
-
     private ExtensionInfo getExtensionInfoOrNull(Artifact a) {
         File f = a.getFile();
         if (f == null) {
-            f = resolver().resolve(a).getArtifact().getFile();
+            try {
+                f = resolver().resolve(a).getArtifact().getFile();
+            } catch (ArtifactNotFoundException e) {
+                return null;
+            }
         }
         final Properties props;
         if (f.isDirectory()) {
@@ -391,7 +310,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         }
         platformReleaseBuilders.put(bomReleaseId, bomReleaseBuilder);
 
-        for (ProjectDependency dep : quarkusBomDeps.values()) {
+        for (ProjectDependency dep : depsAlignedWithQuarkusBom.values()) {
             dep = effectiveDep(dep);
             if (dep == null) {
                 continue;
@@ -414,7 +333,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                         break;
                     }
                     for (ProjectDependency dep : release.dependencies()) {
-                        if (quarkusBomDeps.containsKey(dep.key())) {
+                        if (depsAlignedWithQuarkusBom.containsKey(dep.key())) {
                             continue;
                         }
                         final String depVersion = dep.artifact().getVersion();
@@ -437,12 +356,172 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         for (ProjectDependency dep : externalExtensionDeps.values()) {
             platformReleaseBuilders.computeIfAbsent(dep.releaseId(), id -> ProjectRelease.builder(id)).add(dep);
         }
+
+        // TODO align common not managed deps
+        logCommonNotManagedDeps(platformReleaseBuilders);
+
         final DecomposedBom.Builder platformBuilder = DecomposedBom.builder().bomArtifact(config.bomArtifact())
                 .bomSource(config.bomResolver());
         for (ProjectRelease.Builder builder : platformReleaseBuilders.values()) {
             platformBuilder.addRelease(builder.build());
         }
         return platformBuilder.build();
+    }
+
+    private void logCommonNotManagedDeps(Map<ReleaseId, ProjectRelease.Builder> releaseBuilders)
+            throws BomDecomposerException {
+        final String logCommonNotManagedDeps = System.getProperty(LOG_COMMON_NOT_MANAGED_DEPS);
+        if (logCommonNotManagedDeps == null
+                || !logCommonNotManagedDeps.isEmpty() && !Boolean.parseBoolean(logCommonNotManagedDeps)) {
+            return;
+        }
+        logger.info("Collecting extension common not managed dependencies");
+        commonNotManagedDeps = new HashMap<>();
+
+        final Map<ArtifactKey, ProjectDependency> universeConstraints = new HashMap<>();
+        for (ProjectRelease.Builder r : releaseBuilders.values()) {
+            r.dependencies().forEach(d -> universeConstraints.put(new ArtifactKey(d.artifact().getGroupId(),
+                    d.artifact().getArtifactId(), d.artifact().getClassifier(), d.artifact().getExtension()), d));
+        }
+
+        collectNotManagedExtensionDeps(config.quarkusBom(), universeConstraints);
+        for (PlatformMember member : config.externalMembers()) {
+            collectNotManagedExtensionDeps(member, universeConstraints);
+        }
+
+        final Map<ReleaseOrigin, ProjectRelease.Builder> releaseBuildersByOrigin = new HashMap<>(releaseBuilders.size());
+        for (Map.Entry<ReleaseId, ProjectRelease.Builder> e : releaseBuilders.entrySet()) {
+            releaseBuildersByOrigin.put(e.getKey().origin(), e.getValue());
+        }
+
+        for (Map.Entry<ArtifactKey, Map<String, Set<String>>> e : commonNotManagedDeps.entrySet()) {
+            if (e.getValue().size() == 1 || universeConstraints.containsKey(e.getKey())) {
+                continue;
+            }
+
+            final Set<String> strVersions = e.getValue().keySet();
+            final List<ArtifactVersion> versions = new ArrayList<>(strVersions.size());
+            for (String s : strVersions) {
+                versions.add(new DefaultArtifactVersion(s));
+            }
+            Collections.sort(versions);
+
+            for (ArtifactVersion v : versions) {
+                final Path pom = resolver().resolve(new DefaultArtifact(e.getKey().getGroupId(), e.getKey().getArtifactId(),
+                        null, ArtifactCoords.TYPE_POM, v.toString())).getArtifact().getFile().toPath();
+                final ReleaseId releaseId;
+                try {
+                    releaseId = ReleaseIdFactory.forModel(ModelUtils.readModel(pom));
+                } catch (IOException e1) {
+                    throw new BomDecomposerException("Failed to determine the release ID for " + pom, e1);
+                }
+                final ProjectRelease.Builder rb = releaseBuildersByOrigin.get(releaseId.origin());
+                if (rb != null) {
+                    logger.info("NON-MANAGED FAMILY " + e.getKey() + ":" + v);
+                    if (rb.id().equals(releaseId)) {
+                        logger.info("  release id match");
+                        break;
+                    }
+                    if (rb.artifactVersions().contains(v.toString())) {
+                        logger.info("  version match");
+                        break;
+                    }
+                    logger.info("  not matched " + rb.artifactVersions());
+                }
+            }
+
+            logger.info(e.getKey().toGacString());
+            for (Map.Entry<String, Set<String>> s : e.getValue().entrySet()) {
+                final StringBuilder buf = new StringBuilder();
+                buf.append("  ").append(s.getKey()).append(": ");
+                final List<String> list = new ArrayList<>(s.getValue());
+                Collections.sort(list);
+                buf.append(list.get(0));
+                for (int i = 1; i < list.size(); ++i) {
+                    buf.append(", ").append(list.get(i));
+                }
+                logger.info(buf.toString());
+            }
+        }
+    }
+
+    private void collectNotManagedExtensionDeps(PlatformMember member, Map<ArtifactKey, ProjectDependency> universalConstraints)
+            throws BomDecomposerException {
+        final List<Dependency> combinedConstraints = new ArrayList<>();
+        final List<ProjectDependency> memberSpecificConstraints = new ArrayList<>();
+        final Set<ArtifactKey> constraintKeys = new HashSet<>();
+        for (ProjectRelease.Builder r : quarkusBomReleaseBuilders.values()) {
+            r.dependencies().forEach(d -> {
+                combinedConstraints.add(d.dependency());
+                constraintKeys.add(new ArtifactKey(d.artifact().getGroupId(), d.artifact().getArtifactId(),
+                        d.artifact().getClassifier(), d.artifact().getExtension()));
+            });
+        }
+
+        final List<String> extensionGroupIds = member.getExtensionGroupIds();
+        final Consumer<ProjectDependency> c = new Consumer<>() {
+            @Override
+            public void accept(ProjectDependency dep) {
+                final Artifact a = dep.artifact();
+                if (!extensionGroupIds.isEmpty() && !extensionGroupIds.contains(a.getGroupId())
+                        || !a.getExtension().equals(ArtifactCoords.TYPE_JAR)
+                        || a.getArtifactId().endsWith("-deployment")
+                        || a.getClassifier().equals("javadoc")
+                        || a.getClassifier().equals("sources")
+                        || a.getClassifier().equals("tests")
+                        || dep.dependency().getScope().equals("test")) {
+                    return;
+                }
+                final ExtensionInfo ext = getExtensionInfoOrNull(a);
+                if (ext == null) {
+                    return;
+                }
+                collectNotManagedDependencies(collectDependencies(a, combinedConstraints).getChildren(), constraintKeys, member,
+                        a);
+                collectNotManagedDependencies(collectDependencies(ext.getDeployment(), combinedConstraints).getChildren(),
+                        constraintKeys, member, ext.getDeployment());
+            }
+        };
+
+        if (config.quarkusBom() != member) {
+            acceptOriginalMemberConstraints(member, d -> {
+                if (constraintKeys.add(d.key())) {
+                    final ProjectDependency alignedDep = universalConstraints.get(d.key());
+                    combinedConstraints.add(alignedDep.dependency());
+                    memberSpecificConstraints.add(alignedDep);
+                }
+            });
+            memberSpecificConstraints.forEach(c);
+        } else {
+            acceptConstraints(quarkusBomReleaseBuilders.values(), c);
+        }
+    }
+
+    private void collectNotManagedDependencies(Collection<DependencyNode> depNodes, Set<ArtifactKey> constraints,
+            PlatformMember member, Artifact root) {
+        for (DependencyNode node : depNodes) {
+            collectNotManagedDependencies(node.getChildren(), constraints, member, root);
+            final Artifact a = node.getArtifact();
+            final ArtifactKey key = new ArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension());
+            if (a == null || constraints.contains(key)) {
+                continue;
+            }
+            commonNotManagedDeps.computeIfAbsent(key, k -> new HashMap<>())
+                    .computeIfAbsent(a.getVersion(), k -> new HashSet<>()).add(member.config().getName());
+        }
+    }
+
+    private DependencyNode collectDependencies(Artifact a, final List<Dependency> constraints) {
+        final DependencyNode root;
+        try {
+            root = resolver()
+                    .underlyingResolver().collectManagedDependencies(a, Collections.emptyList(),
+                            constraints, Collections.emptyList(), Collections.emptyList(), "test", "provided")
+                    .getRoot();
+        } catch (BootstrapMavenException e) {
+            throw new RuntimeException("Failed to collect dependencies of " + a, e);
+        }
+        return root;
     }
 
     private ProjectDependency effectiveDep(ProjectDependency dep) {
@@ -460,7 +539,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             throws BomDecomposerException {
         for (ProjectDependency dep : release.dependencies()) {
             // the origin may have changed in the release of the dependency
-            final ProjectDependency quarkusBomDep = quarkusBomDeps.get(dep.key());
+            final ProjectDependency quarkusBomDep = depsAlignedWithQuarkusBom.get(dep.key());
             if (quarkusBomDep != null) {
                 quarkusBomDependencyInMemberBom(quarkusBomDep, dep);
                 return;
@@ -508,7 +587,12 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
     @Override
     public boolean enterReleaseOrigin(ReleaseOrigin releaseOrigin, int versions) {
         preferredVersions = null;
-        quarkusVersions = filteredQuarkusBom.releaseVersions(releaseOrigin);
+        versionsInQuarkusBom.clear();
+        for (ReleaseId r : quarkusBomReleaseBuilders.keySet()) {
+            if (r.origin().equals(releaseOrigin)) {
+                versionsInQuarkusBom.add(r.version());
+            }
+        }
         return true;
     }
 
@@ -518,7 +602,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
 
     @Override
     public void visitProjectRelease(ProjectRelease release) throws BomDecomposerException {
-        if (quarkusVersions.isEmpty()) {
+        if (versionsInQuarkusBom.isEmpty()) {
             final ProjectRelease.Builder releaseBuilder = extReleaseCollector.getOrCreateReleaseBuilder(release.id(),
                     memberBeingProcessed);
             for (ProjectDependency dep : release.dependencies()) {
@@ -526,18 +610,16 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             }
             return;
         }
-        if (quarkusVersions.contains(release.id().version())) {
+        if (versionsInQuarkusBom.contains(release.id().version())) {
             for (ProjectDependency dep : release.dependencies()) {
-                final ProjectDependency quarkusBomDep = quarkusBomDeps.putIfAbsent(dep.key(), dep);
+                final ProjectDependency quarkusBomDep = depsAlignedWithQuarkusBom.putIfAbsent(dep.key(), dep);
                 if (quarkusBomDep != null) {
                     quarkusBomDependencyInMemberBom(quarkusBomDep, dep);
                 }
             }
             return;
         }
-        final LinkedHashMap<String, ReleaseId> preferredVersions = this.preferredVersions == null
-                ? this.preferredVersions = preferredVersions(filteredQuarkusBom.releases(release.id().origin()))
-                : this.preferredVersions;
+        final LinkedHashMap<String, ReleaseId> preferredVersions = getPreferredVersions(release.id().origin());
         for (final ProjectDependency memberDep : release.dependencies()) {
             ProjectDependency preferredDep = memberDep;
             if (!preferredVersions.containsKey(memberDep.artifact().getVersion())) {
@@ -550,11 +632,24 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                     }
                 }
             }
-            final ProjectDependency quarkusBomDep = quarkusBomDeps.putIfAbsent(preferredDep.key(), preferredDep);
+            final ProjectDependency quarkusBomDep = depsAlignedWithQuarkusBom.putIfAbsent(preferredDep.key(), preferredDep);
             if (quarkusBomDep != null) {
                 quarkusBomDependencyInMemberBom(quarkusBomDep, memberDep);
             }
         }
+    }
+
+    private LinkedHashMap<String, ReleaseId> getPreferredVersions(ReleaseOrigin origin) {
+        if (preferredVersions == null) {
+            final List<ProjectRelease> releases = new ArrayList<>(4);
+            for (ProjectRelease r : quarkusBomReleaseBuilders.values()) {
+                if (r.id().origin().equals(origin)) {
+                    releases.add(r);
+                }
+            }
+            preferredVersions = preferredVersions(releases);
+        }
+        return preferredVersions;
     }
 
     private void quarkusBomDependencyInMemberBom(ProjectDependency quarkusBomDep, ProjectDependency memberDep)
