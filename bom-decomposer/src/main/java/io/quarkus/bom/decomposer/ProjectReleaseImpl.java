@@ -35,6 +35,7 @@ class ProjectReleaseImpl implements ProjectRelease {
                         "Failed to add " + dep + " since the release already includes " + existing);
             }
             artifactVersions.add(dep.artifact().getVersion());
+            groupIds.add(dep.artifact.getGroupId());
             return this;
         }
 
@@ -64,6 +65,11 @@ class ProjectReleaseImpl implements ProjectRelease {
         }
 
         @Override
+        public Collection<String> groupIds() {
+            return groupIds;
+        }
+
+        @Override
         public ProjectRelease build() {
             ProjectReleaseImpl.this.deps = Collections.unmodifiableList(new ArrayList<>(deps.values()));
             return ProjectReleaseImpl.this;
@@ -81,6 +87,7 @@ class ProjectReleaseImpl implements ProjectRelease {
     protected final ReleaseId id;
     protected List<ProjectDependency> deps;
     protected final Set<String> artifactVersions = new HashSet<String>();
+    protected final Set<String> groupIds = new HashSet<>(1);
 
     private ProjectReleaseImpl(ReleaseId id) {
         this(id, null);
@@ -104,6 +111,11 @@ class ProjectReleaseImpl implements ProjectRelease {
     @Override
     public Collection<String> artifactVersions() {
         return artifactVersions;
+    }
+
+    @Override
+    public Collection<String> groupIds() {
+        return groupIds;
     }
 
     @Override

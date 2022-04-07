@@ -67,6 +67,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
 
     private Collection<ReleaseVersion> versionsInQuarkusBom = new HashSet<>();
     private LinkedHashMap<String, ReleaseId> preferredVersions;
+    private Map<ReleaseOrigin, Collection<ProjectRelease>> fixedReleases = new HashMap<>();
 
     private Map<ArtifactKey, ProjectDependency> depsAlignedWithQuarkusBom = new HashMap<>();
 
@@ -106,10 +107,13 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         config.quarkusBom().setOriginalDecomposedBom(originalQuarkusBom);
         initQuarkusBomReleaseBuilders(originalQuarkusBom);
 
+        for (ProjectRelease r : quarkusBomReleaseBuilders.values()) {
+            fixedReleases.computeIfAbsent(r.id().origin(), k -> new ArrayList<>()).add(r);
+        }
+
         for (PlatformMember member : config.externalMembers()) {
-            logger.info("Processing "
+            logger.info("Decomposing "
                     + (member.originalBomCoords() == null ? member.generatedBomCoords() : member.originalBomCoords()));
-            memberBeingProcessed = member;
             members.put(member.key(), member);
             DecomposedBom originalBom = BomDecomposer.config()
                     .logger(logger)
@@ -120,7 +124,24 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             originalBom = ExtensionFilter.getInstance(resolver(), logger, member)
                     .transform(originalBom);
             member.setOriginalDecomposedBom(originalBom);
-            originalBom.visit(this);
+
+            if (!member.getExtensionGroupIds().isEmpty()) {
+                for (ProjectRelease r : originalBom.releases()) {
+                    for (String groupId : r.groupIds()) {
+                        if (member.getExtensionGroupIds().contains(groupId)) {
+                            fixedReleases.computeIfAbsent(r.id().origin(), k -> new ArrayList<>()).add(r);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        for (PlatformMember member : config.externalMembers()) {
+            logger.info("Aligning "
+                    + (member.originalBomCoords() == null ? member.generatedBomCoords() : member.originalBomCoords()));
+            memberBeingProcessed = member;
+            member.originalDecomposedBom().visit(this);
         }
 
         logger.info("Generating " + config.bomArtifact());
@@ -588,10 +609,9 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
     public boolean enterReleaseOrigin(ReleaseOrigin releaseOrigin, int versions) {
         preferredVersions = null;
         versionsInQuarkusBom.clear();
-        for (ReleaseId r : quarkusBomReleaseBuilders.keySet()) {
-            if (r.origin().equals(releaseOrigin)) {
-                versionsInQuarkusBom.add(r.version());
-            }
+        final Collection<ProjectRelease> releases = fixedReleases.get(releaseOrigin);
+        if (releases != null) {
+            releases.forEach(r -> versionsInQuarkusBom.add(r.id().version()));
         }
         return true;
     }
@@ -641,13 +661,10 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
 
     private LinkedHashMap<String, ReleaseId> getPreferredVersions(ReleaseOrigin origin) {
         if (preferredVersions == null) {
-            final List<ProjectRelease> releases = new ArrayList<>(4);
-            for (ProjectRelease r : quarkusBomReleaseBuilders.values()) {
-                if (r.id().origin().equals(origin)) {
-                    releases.add(r);
-                }
+            final Collection<ProjectRelease> releases = fixedReleases.get(origin);
+            if (releases != null) {
+                preferredVersions = preferredVersions(releases);
             }
-            preferredVersions = preferredVersions(releases);
         }
         return preferredVersions;
     }

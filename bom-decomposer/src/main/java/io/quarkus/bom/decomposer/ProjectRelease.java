@@ -23,6 +23,8 @@ public interface ProjectRelease {
 
     Collection<String> artifactVersions();
 
+    Collection<String> groupIds();
+
     interface Builder extends ProjectRelease {
 
         Builder add(ProjectDependency dep);
