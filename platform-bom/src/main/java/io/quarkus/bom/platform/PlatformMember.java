@@ -12,6 +12,8 @@ public interface PlatformMember {
 
     List<String> getExtensionGroupIds();
 
+    List<String> getOwnGroupIds();
+
     Artifact previousLastUpdatedBom();
 
     Artifact lastUpdatedBom();

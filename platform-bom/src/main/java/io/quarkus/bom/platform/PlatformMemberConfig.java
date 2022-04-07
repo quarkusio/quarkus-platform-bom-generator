@@ -25,6 +25,7 @@ public class PlatformMemberConfig {
     private List<String> metadataOverrideArtifacts = new ArrayList<>(0);
 
     private List<String> extensionGroupIds = new ArrayList<>(0);
+    private List<String> ownGroupIds = new ArrayList<>(0);
 
     public void applyOverrides(PlatformMemberConfig overrides) {
         if (overrides.bom != null) {
@@ -84,6 +85,9 @@ public class PlatformMemberConfig {
         }
         if (!overrides.extensionGroupIds.isEmpty()) {
             extensionGroupIds.addAll(overrides.extensionGroupIds);
+        }
+        if (!overrides.ownGroupIds.isEmpty()) {
+            ownGroupIds.addAll(overrides.ownGroupIds);
         }
     }
 
@@ -205,7 +209,7 @@ public class PlatformMemberConfig {
     }
 
     /**
-     * A list of artifact aroupIds of the member extensions which should be
+     * A list of artifact groupIds of the member extensions which should be
      * included in the generated member descriptor.
      * 
      * @return list of extension artifact groupIds
@@ -216,5 +220,18 @@ public class PlatformMemberConfig {
 
     public void setExtensionGroupIds(List<String> extensionGroupIds) {
         this.extensionGroupIds = extensionGroupIds;
+    }
+
+    /**
+     * A list of artifact groupIds other members are not allowed to override
+     * 
+     * @return list of artifact groupIds other members are not allowed to override
+     */
+    public List<String> getOwnGroupIds() {
+        return ownGroupIds;
+    }
+
+    public void setOwnGroupIds(List<String> ownGroupIds) {
+        this.ownGroupIds = ownGroupIds;
     }
 }
