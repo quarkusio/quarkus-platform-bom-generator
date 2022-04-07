@@ -2281,9 +2281,17 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 return config.getExtensionGroupIds();
             }
             if (originalBomCoords() != null) {
-                return Collections.singletonList(originalBomCoords().getGroupId());
+                return List.of(originalBomCoords().getGroupId());
             }
-            return Collections.emptyList();
+            return List.of();
+        }
+
+        @Override
+        public List<String> getOwnGroupIds() {
+            if (!config.getOwnGroupIds().isEmpty()) {
+                return config.getOwnGroupIds();
+            }
+            return getExtensionGroupIds();
         }
 
         @Override

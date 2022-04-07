@@ -125,10 +125,10 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                     .transform(originalBom);
             member.setOriginalDecomposedBom(originalBom);
 
-            if (!member.getExtensionGroupIds().isEmpty()) {
+            if (!member.getOwnGroupIds().isEmpty()) {
                 for (ProjectRelease r : originalBom.releases()) {
                     for (String groupId : r.groupIds()) {
-                        if (member.getExtensionGroupIds().contains(groupId)) {
+                        if (member.getOwnGroupIds().contains(groupId)) {
                             fixedReleases.computeIfAbsent(r.id().origin(), k -> new ArrayList<>()).add(r);
                             break;
                         }
