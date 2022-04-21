@@ -27,6 +27,8 @@ public class PlatformMemberConfig {
     private List<String> extensionGroupIds = new ArrayList<>(0);
     private List<String> ownGroupIds = new ArrayList<>(0);
 
+    private RedHatExtensionDependencyCheck dependencyCheck;
+
     public void applyOverrides(PlatformMemberConfig overrides) {
         if (overrides.bom != null) {
             bom = overrides.bom;
@@ -233,5 +235,13 @@ public class PlatformMemberConfig {
 
     public void setOwnGroupIds(List<String> ownGroupIds) {
         this.ownGroupIds = ownGroupIds;
+    }
+
+    public RedHatExtensionDependencyCheck getRedHatExtensionDependencyCheck() {
+        return dependencyCheck;
+    }
+
+    public void setRedHatExtensionDependencyCheck(RedHatExtensionDependencyCheck dependencyCheck) {
+        this.dependencyCheck = dependencyCheck;
     }
 }

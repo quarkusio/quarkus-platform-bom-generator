@@ -15,7 +15,7 @@ import io.quarkus.registry.catalog.Category;
 import io.quarkus.registry.catalog.Extension;
 import io.quarkus.registry.catalog.ExtensionCatalog;
 import io.quarkus.registry.catalog.ExtensionOrigin;
-import io.quarkus.registry.util.GlobUtil;
+import io.quarkus.util.GlobUtil;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.FileSystem;
@@ -58,6 +58,11 @@ import org.eclipse.aether.resolution.ArtifactResolutionException;
  */
 @Mojo(name = "generate-platform-descriptor", threadSafe = true)
 public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
+
+    public static class ExtensionDependencyCheck {
+        public String versionPattern;
+        public int checkDepth = Integer.MAX_VALUE;
+    }
 
     @Parameter(property = "quarkusCoreGroupId", defaultValue = "io.quarkus")
     private String quarkusCoreGroupId;
@@ -157,6 +162,9 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
 
     @Parameter(required = false)
     String upstreamQuarkusCoreVersion;
+
+    @Parameter(required = false)
+    ExtensionDependencyCheck extensionDependencyCheck;
 
     MavenArtifactResolver resolver;
 
@@ -503,6 +511,26 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
             }
         }
         projectHelper.attachArtifact(project, jsonArtifact.getExtension(), jsonArtifact.getClassifier(), published);
+
+        if (extensionDependencyCheck != null && extensionDependencyCheck.versionPattern != null
+                && !extensionDependencyCheck.versionPattern.isEmpty()) {
+            final List<String> errors = ExtensionDependencyVersionChecker.builder()
+                    .setRepositorySystem(repoSystem)
+                    .setRepositorySystemSession(repoSession)
+                    .setRemoteRepositories(repos)
+                    .setVersionPattern(extensionDependencyCheck.versionPattern)
+                    .setDepth(extensionDependencyCheck.checkDepth)
+                    .build()
+                    .checkDependencyVersions(platformJson);
+            if (!errors.isEmpty()) {
+                getLog().error("Extension dependency version pattern check failures:");
+                for (int i = 0; i < errors.size(); ++i) {
+                    getLog().error((i + 1) + ") " + errors.get(i));
+                }
+                throw new MojoExecutionException(
+                        "Extension dependency version pattern check has failed. Please consult the error messages logged above.");
+            }
+        }
     }
 
     private MavenArtifactResolver getResolver() throws MojoExecutionException {
