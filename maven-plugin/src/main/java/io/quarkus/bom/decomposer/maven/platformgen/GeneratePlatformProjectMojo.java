@@ -23,6 +23,7 @@ import io.quarkus.bom.platform.PlatformMember;
 import io.quarkus.bom.platform.PlatformMemberConfig;
 import io.quarkus.bom.platform.PlatformMemberTestConfig;
 import io.quarkus.bom.platform.PlatformMemberTestConfig.Copy;
+import io.quarkus.bom.platform.RedHatExtensionDependencyCheck;
 import io.quarkus.bom.platform.ReportIndexPageGenerator;
 import io.quarkus.bom.resolver.ArtifactResolver;
 import io.quarkus.bom.resolver.ArtifactResolverProvider;
@@ -1784,6 +1785,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                     processGroupIds.addChild(processGroupId);
                 }
             }
+
+            addExtensionDependencyCheck(member.config().getRedHatExtensionDependencyCheck(), config);
+        } else {
+            addExtensionDependencyCheck(platformConfig.getUniversal().getRedHatExtensionDependencyCheck(), config);
         }
 
         if (descrGen != null) {
@@ -1867,6 +1872,23 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Path pomXml = moduleDir.resolve("pom.xml");
         pom.setPomFile(pomXml.toFile());
         persistPom(pom);
+    }
+
+    private void addExtensionDependencyCheck(final RedHatExtensionDependencyCheck depCheckConfig,
+            final Xpp3Dom config) {
+        Xpp3Dom e;
+        if (depCheckConfig != null && depCheckConfig.isEnabled() && depCheckConfig.getVersionPattern() != null) {
+            final Xpp3Dom depCheck = new Xpp3Dom("extensionDependencyCheck");
+            config.addChild(depCheck);
+            e = new Xpp3Dom("versionPattern");
+            e.setValue(depCheckConfig.getVersionPattern());
+            depCheck.addChild(e);
+            if (depCheckConfig.getCheckDepth() != Integer.MAX_VALUE) {
+                e = new Xpp3Dom("checkDepth");
+                e.setValue(String.valueOf(depCheckConfig.getCheckDepth()));
+                depCheck.addChild(e);
+            }
+        }
     }
 
     private void addMetadataOverrideArtifacts(final Xpp3Dom config, final List<String> overrideArtifacts) {
