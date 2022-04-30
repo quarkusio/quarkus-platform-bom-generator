@@ -358,9 +358,10 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
                 quarkusCoreVersion = artifact.getVersion();
             }
 
-            Extension.Mutable extension = inheritedExtensions.isEmpty() ? null
+            var ext = inheritedExtensions.isEmpty() ? null
                     : inheritedExtensions.get(new ArtifactKey(artifact.getGroupId(), artifact.getArtifactId(),
-                            artifact.getClassifier(), artifact.getExtension())).mutable();
+                            artifact.getClassifier(), artifact.getExtension()));
+            Extension.Mutable extension = ext == null ? null : ext.mutable();
             final List<ExtensionOrigin> origins;
             if (extension == null) {
                 try {
