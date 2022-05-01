@@ -2285,7 +2285,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         private Artifact prevBomRelease;
         private boolean bomChanged;
         private List<org.eclipse.aether.graph.Dependency> inputConstraints;
-        private Set<ArtifactKey> constraintKeys = new HashSet<>();
 
         PlatformMemberImpl(PlatformMemberConfig config) {
             this.config = config;
@@ -2453,16 +2452,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         @Override
         public void setExtensionCatalog(Collection<ArtifactKey> extensionCatalog) {
-        }
-
-        @Override
-        public void addConstraintKey(ArtifactKey key) {
-            constraintKeys.add(key);
-        }
-
-        @Override
-        public Collection<ArtifactKey> getConstraintKeys() {
-            return constraintKeys;
         }
     }
 

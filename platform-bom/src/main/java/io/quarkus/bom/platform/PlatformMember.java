@@ -47,8 +47,4 @@ public interface PlatformMember {
     Collection<ArtifactKey> extensionCatalog();
 
     void setExtensionCatalog(Collection<ArtifactKey> extensionCatalog);
-
-    void addConstraintKey(ArtifactKey key);
-
-    Collection<ArtifactKey> getConstraintKeys();
 }
