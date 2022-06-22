@@ -48,7 +48,7 @@ import org.eclipse.aether.util.artifact.JavaScopes;
 /**
  * Logs artifact coordinates (one per line) that represent supported Quarkus extensions and their dependencies
  * down to a certain depth level that need to be built from source.
- * <p/>
+ * <p>
  * The goal exposes other options that enable logging extra information, however all the extra info will be logged
  * with `#` prefix, which the tools parsing the output could treat as a comment and ignore.
  *
