@@ -7,18 +7,23 @@ import io.quarkus.bom.decomposer.DecomposedBom;
 import io.quarkus.bom.decomposer.ProjectDependency;
 import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.resolver.ArtifactResolverProvider;
+import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.maven.ArtifactCoords;
 import io.quarkus.maven.ArtifactKey;
+import io.quarkus.paths.PathTree;
 import io.quarkus.registry.catalog.Extension;
 import io.quarkus.registry.catalog.ExtensionCatalog;
 import io.quarkus.registry.util.PlatformArtifacts;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -27,6 +32,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -133,8 +139,8 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     /*
      * Whether to log code repository info for the artifacts to be built from source
      */
-    @Parameter(property = "logCodeRepos", required = false, defaultValue = "true")
-    boolean logCodeRepos = true;
+    @Parameter(property = "logCodeRepos", required = false)
+    boolean logCodeRepos;
 
     /**
      * Artifact coordinate keys in the {@code <groupId>:artifactId[:<classifier>:[type]]} format
@@ -177,8 +183,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
 
         final Path jsonPath;
         try {
-            jsonPath = resolver.resolve(new DefaultArtifact(catalogCoords.getGroupId(), catalogCoords.getArtifactId(),
-                    catalogCoords.getClassifier(), catalogCoords.getType(), catalogCoords.getVersion()))
+            jsonPath = resolver.resolve(toAetherArtifact(catalogCoords))
                     .getArtifact().getFile().toPath();
         } catch (BootstrapMavenException e) {
             throw new MojoExecutionException("Failed to resolve the extension catalog", e);
@@ -222,46 +227,47 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         }
 
         final List<Extension> supported = new ArrayList<>();
-        catalog.getExtensions().forEach(e -> {
-            if (excludeKeys.contains(e.getArtifact().getKey())) {
-                return;
+        for (Extension ext : catalog.getExtensions()) {
+            ArtifactCoords rtArtifact = ext.getArtifact();
+            if (excludeKeys.contains(rtArtifact.getKey())) {
+                continue;
             }
-            Object o = e.getMetadata().get("redhat-support");
+            Object o = ext.getMetadata().get("redhat-support");
             if (o == null) {
-                return;
+                continue;
             }
-            supported.add(e);
+            supported.add(ext);
+            processExtensionArtifact(resolver, managedDeps, rtArtifact);
 
-            final DependencyNode root;
-            try {
-                final Artifact a = new DefaultArtifact(e.getArtifact().getGroupId(),
-                        e.getArtifact().getArtifactId(), e.getArtifact().getClassifier(),
-                        e.getArtifact().getType(), e.getArtifact().getVersion());
-                root = resolver.getSystem().collectDependencies(resolver.getSession(), new CollectRequest()
-                        .setManagedDependencies(managedDeps)
-                        .setRepositories(resolver.getRepositories())
-                        .setRoot(new Dependency(a, JavaScopes.RUNTIME)))
-                        .getRoot();
-            } catch (DependencyCollectionException e1) {
-                throw new RuntimeException("Failed to collect dependencies of " + e.getArtifact().toCompactCoords(), e1);
-            }
-
-            if (logTrees) {
-                if (managedCoords.contains(e.getArtifact())) {
-                    logComment(e.getArtifact().toCompactCoords());
-                } else {
-                    logComment(e.getArtifact().toCompactCoords() + NOT_MANAGED);
+            ArtifactCoords deploymentCoords = new ArtifactCoords(rtArtifact.getGroupId(),
+                    rtArtifact.getArtifactId() + "-deployment", "", ArtifactCoords.TYPE_JAR, rtArtifact.getVersion());
+            if (!managedCoords.contains(deploymentCoords)) {
+                final Path rtJar;
+                try {
+                    rtJar = resolver.resolve(toAetherArtifact(rtArtifact)).getArtifact().getFile().toPath();
+                } catch (BootstrapMavenException e1) {
+                    throw new MojoExecutionException("Failed to resolve " + rtArtifact, e1);
+                }
+                deploymentCoords = PathTree.ofDirectoryOrArchive(rtJar).apply(BootstrapConstants.DESCRIPTOR_PATH, visit -> {
+                    if (visit == null) {
+                        return null;
+                    }
+                    final Properties props = new Properties();
+                    try (BufferedReader reader = Files.newBufferedReader(visit.getPath())) {
+                        props.load(reader);
+                    } catch (IOException e) {
+                        throw new UncheckedIOException(e);
+                    }
+                    final String str = props.getProperty(BootstrapConstants.PROP_DEPLOYMENT_ARTIFACT);
+                    return str == null ? null : ArtifactCoords.fromString(str);
+                });
+                if (deploymentCoords == null) {
+                    throw new MojoExecutionException(
+                            "Failed to determine the corresponding deployment artifact for " + rtArtifact.toCompactCoords());
                 }
             }
-
-            if (addToBeBuilt(e.getArtifact())) {
-                root.getChildren().forEach(n -> processNodes(n, 1));
-            }
-
-            if (logTrees) {
-                logComment("");
-            }
-        });
+            processExtensionArtifact(resolver, managedDeps, deploymentCoords);
+        }
 
         try {
             int codeReposTotal = 0;
@@ -331,6 +337,43 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         }
     }
 
+    private void processExtensionArtifact(final MavenArtifactResolver resolver, final List<Dependency> managedDeps,
+            ArtifactCoords extArtifact) {
+        final DependencyNode root;
+        try {
+            final Artifact a = toAetherArtifact(extArtifact);
+            root = resolver.getSystem().collectDependencies(resolver.getSession(), new CollectRequest()
+                    .setManagedDependencies(managedDeps)
+                    .setRepositories(resolver.getRepositories())
+                    .setRoot(new Dependency(a, JavaScopes.RUNTIME)))
+                    .getRoot();
+        } catch (DependencyCollectionException e1) {
+            throw new RuntimeException("Failed to collect dependencies of " + extArtifact.toCompactCoords(), e1);
+        }
+
+        if (logTrees) {
+            if (managedCoords.contains(extArtifact)) {
+                logComment(extArtifact.toCompactCoords());
+            } else {
+                logComment(extArtifact.toCompactCoords() + NOT_MANAGED);
+            }
+        }
+
+        if (addToBeBuilt(extArtifact)) {
+            root.getChildren().forEach(n -> processNodes(n, 1));
+        }
+
+        if (logTrees) {
+            logComment("");
+        }
+    }
+
+    private static DefaultArtifact toAetherArtifact(ArtifactCoords a) {
+        return new DefaultArtifact(a.getGroupId(),
+                a.getArtifactId(), a.getClassifier(),
+                a.getType(), a.getVersion());
+    }
+
     private DecomposedBom decompose(MavenArtifactResolver resolver, Artifact bomArtifact, Collection<Dependency> managed,
             Collection<ArtifactCoords> nonManaged)
             throws MojoExecutionException {
@@ -344,7 +387,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             allDeps.addAll(managed);
             for (ArtifactCoords c : nonManaged) {
                 allDeps.add(new Dependency(
-                        new DefaultArtifact(c.getGroupId(), c.getArtifactId(), c.getClassifier(), c.getType(), c.getVersion()),
+                        toAetherArtifact(c),
                         JavaScopes.COMPILE));
             }
             config.dependencies(allDeps);
