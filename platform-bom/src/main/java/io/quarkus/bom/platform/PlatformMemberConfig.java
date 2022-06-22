@@ -14,6 +14,7 @@ public class PlatformMemberConfig {
     private Boolean enabled;
     private Boolean hidden;
     private Boolean alignOwnConstraints;
+    private Boolean keepThirdpartyExclusions;
 
     private PlatformMemberReleaseConfig release;
 
@@ -48,6 +49,9 @@ public class PlatformMemberConfig {
         }
         if (overrides.alignOwnConstraints != null) {
             alignOwnConstraints = overrides.alignOwnConstraints;
+        }
+        if (overrides.keepThirdpartyExclusions != null) {
+            keepThirdpartyExclusions = overrides.keepThirdpartyExclusions;
         }
         if (overrides.release != null) {
             release.applyOverrides(overrides.release);
@@ -180,6 +184,19 @@ public class PlatformMemberConfig {
      */
     public boolean isAlignOwnConstraints() {
         return alignOwnConstraints == null ? false : alignOwnConstraints.booleanValue();
+    }
+
+    /**
+     * Each member may configure its own exclusions for certain dependencies in their BOMs.
+     * This option controls whether the exclusions for common dependencies should be aligned
+     * for all the members or each member may keep their own exclusions for those common
+     * dependencies.
+     * The default value for this option is true.
+     * 
+     * @return true if the member chose to keep its exclusions for common dependencies
+     */
+    public boolean isKeepThirpartyExclusions() {
+        return keepThirdpartyExclusions == null ? true : keepThirdpartyExclusions.booleanValue();
     }
 
     public void setMetadataOverrideFiles(List<String> metadataOverrideFiles) {

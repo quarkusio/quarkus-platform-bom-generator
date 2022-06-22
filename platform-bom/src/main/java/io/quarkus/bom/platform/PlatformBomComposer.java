@@ -166,7 +166,6 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                     }
                     releaseBuilder.add(effectiveDep);
                     depsAlignedWithQuarkusBom.put(effectiveDep.key(), effectiveDep);
-                    quarkusBom.addConstraintKey(effectiveDep.key());
                 } else {
                     depsAlignedWithQuarkusBom.put(d.key(), d);
                 }
@@ -202,13 +201,15 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                 if (platformDep == null) {
                     throw new IllegalStateException("Failed to locate " + dep.key() + " in the generated platform BOM");
                 }
+                if (member.config().isKeepThirpartyExclusions()
+                        && !dep.dependency().getExclusions().equals(platformDep.dependency().getExclusions())) {
+                    platformDep = ProjectDependency.create(dep.releaseId(), new Dependency(platformDep.artifact(),
+                            dep.dependency().getScope(), dep.dependency().isOptional(), dep.dependency().getExclusions()));
+                }
                 releaseBuilders.computeIfAbsent(platformDep.releaseId(), id -> ProjectRelease.builder(id)).add(platformDep);
             });
 
-            final Artifact bomArtifact = member.originalDecomposedBom().bomArtifact();
-            final PlatformMember memberConfig = members
-                    .get(new ArtifactKey(bomArtifact.getGroupId(), bomArtifact.getArtifactId()));
-            final Artifact generatedBomArtifact = memberConfig.generatedBomCoords();
+            final Artifact generatedBomArtifact = member.generatedBomCoords();
             final DecomposedBom.Builder updatedBom = DecomposedBom.builder()
                     .bomArtifact(generatedBomArtifact)
                     .bomSource(PomSource.of(generatedBomArtifact));
@@ -766,7 +767,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                 }
             } else {
                 if (result == null) {
-                    result = new HashMap<>(member.inputConstraints().size());
+                    result = new HashMap<>();
                 }
                 result.put(key(d.getArtifact()), d);
             }
