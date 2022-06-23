@@ -5,6 +5,7 @@ import io.quarkus.bom.decomposer.BomDecomposer.BomDecomposerConfig;
 import io.quarkus.bom.decomposer.BomDecomposerException;
 import io.quarkus.bom.decomposer.DecomposedBom;
 import io.quarkus.bom.decomposer.ProjectDependency;
+import io.quarkus.bom.decomposer.ProjectRelease;
 import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.resolver.ArtifactResolverProvider;
 import io.quarkus.bootstrap.BootstrapConstants;
@@ -30,8 +31,11 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
 import org.apache.maven.plugin.AbstractMojo;
@@ -142,6 +146,21 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     @Parameter(property = "logCodeRepos", required = false)
     boolean logCodeRepos;
 
+    /*
+     * Whether to log code repository dependency graph.
+     */
+    @Parameter(property = "logCodeRepoGraph", required = false)
+    boolean logCodeRepoGraph;
+
+    /**
+     * Artifact coordinates in the {@code <groupId>:artifactId:<classifier>:type:version} format
+     * that should be included in the captured set of artifacts to be built from source.
+     * <p>
+     * NOTE: included artifacts will be add with all their dependencies.
+     */
+    @Parameter(property = "includeArtifacts", required = false)
+    List<String> includeArtifacts = List.of();
+
     /**
      * Artifact coordinate keys in the {@code <groupId>:artifactId[:<classifier>:[type]]} format
      * that should be excluded from the captured set of artifacts to be built from source.
@@ -158,8 +177,15 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     private final Set<ArtifactCoords> nonManagedVisited = new HashSet<>();
     private final Set<ArtifactCoords> skippedDeps = new HashSet<>();
 
+    private final Map<ArtifactCoords, ArtifactDependency> artifactDeps = new HashMap<>();
+    private final Map<ReleaseId, ReleaseRepo> releaseRepos = new HashMap<>();
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
+
+        if (logCodeRepoGraph) {
+            logCodeRepos = true;
+        }
 
         final ArtifactCoords bomCoords = PlatformArtifacts.ensureBomArtifact(ArtifactCoords.fromString(bom));
         debug("Quarkus platform BOM %s", bomCoords);
@@ -199,7 +225,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
 
         final Artifact bomArtifact = new DefaultArtifact(bomCoords.getGroupId(), bomCoords.getArtifactId(),
                 "", ArtifactCoords.TYPE_POM, bomCoords.getVersion());
-        final List<Dependency> managedDeps;
+        List<Dependency> managedDeps;
         try {
             managedDeps = resolver.resolveDescriptor(bomArtifact)
                     .getManagedDependencies();
@@ -214,6 +240,19 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         managedCoords = new HashSet<>(managedDeps.size());
         for (Dependency d : managedDeps) {
             managedCoords.add(toCoords(d.getArtifact()));
+        }
+
+        if (!includeArtifacts.isEmpty()) {
+            final List<Dependency> tmp = new ArrayList<>(includeArtifacts.size() + managedDeps.size());
+            for (String s : includeArtifacts) {
+                final ArtifactCoords c = ArtifactCoords.fromString(s);
+                managedCoords.add(c);
+                tmp.add(new Dependency(
+                        new DefaultArtifact(c.getGroupId(), c.getArtifactId(), c.getClassifier(), c.getType(), c.getVersion()),
+                        JavaScopes.COMPILE));
+            }
+            tmp.addAll(managedDeps);
+            managedDeps = tmp;
         }
 
         if (!excludeArtifacts.isEmpty()) {
@@ -274,16 +313,34 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             if (logArtifactsToBeBuilt && !allDepsToBuild.isEmpty()) {
                 logComment("Artifacts to be built from source from " + bomCoords.toCompactCoords() + ":");
                 if (logCodeRepos) {
-                    final DecomposedBom decomposedBom = decompose(resolver, bomArtifact, managedDeps, nonManagedVisited);
-                    final Map<ReleaseId, Collection<ArtifactCoords>> releaseArtifacts = getReleaseArtifacts(decomposedBom);
-                    codeReposTotal = releaseArtifacts.size();
-                    for (Map.Entry<ReleaseId, Collection<ArtifactCoords>> e : releaseArtifacts.entrySet()) {
-                        logComment(e.getKey().origin().toString());
-                        logComment(e.getKey().version().toString());
-                        for (String s : toSortedStrings(e.getValue())) {
+                    initReleaseRepos(decompose(resolver, bomArtifact, managedDeps, nonManagedVisited));
+                    codeReposTotal = releaseRepos.size();
+
+                    final Map<ReleaseId, ReleaseRepo> orderedMap = new LinkedHashMap<>(codeReposTotal);
+                    for (ReleaseRepo r : releaseRepos.values()) {
+                        if (r.isRoot()) {
+                            order(r, orderedMap);
+                        }
+                    }
+
+                    for (ReleaseRepo e : orderedMap.values()) {
+                        logComment(e.id().toString());
+                        for (String s : toSortedStrings(e.artifacts)) {
                             log(s);
                         }
                     }
+
+                    if (logCodeRepoGraph) {
+                        logComment("");
+                        logComment("Code repository dependency graph");
+                        for (ReleaseRepo r : releaseRepos.values()) {
+                            if (r.isRoot()) {
+                                logReleaseRepoDep(r, 0);
+                            }
+                        }
+                        logComment("");
+                    }
+
                 } else {
                     for (String s : toSortedStrings(allDepsToBuild)) {
                         log(s);
@@ -360,7 +417,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         }
 
         if (addToBeBuilt(extArtifact)) {
-            root.getChildren().forEach(n -> processNodes(n, 1));
+            root.getChildren().forEach(n -> processNodes(logCodeRepos ? getOrCreateArtifactDep(extArtifact) : null, n, 1));
         }
 
         if (logTrees) {
@@ -402,18 +459,55 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         return decomposedBom;
     }
 
-    private Map<ReleaseId, Collection<ArtifactCoords>> getReleaseArtifacts(DecomposedBom decomposedBom) {
+    private void initReleaseRepos(DecomposedBom decomposedBom) {
         final Map<ArtifactKey, ProjectDependency> deps = new HashMap<>();
-        decomposedBom.releases().forEach(r -> r.dependencies().forEach(d -> deps.put(d.key(), d)));
-        final Map<ReleaseId, Collection<ArtifactCoords>> releaseArtifacts = new HashMap<>();
+        decomposedBom.releases().forEach(r -> {
+            r.dependencies().forEach(d -> deps.put(d.key(), d));
+            getOrCreateRepo(r);
+        });
+        final Map<ArtifactCoords, ReleaseId> artifactReleases = new HashMap<>();
         for (ArtifactCoords c : allDepsToBuild) {
             final ProjectDependency dep = deps.get(c.getKey());
             if (dep == null) {
                 throw new IllegalStateException("Failed to find dependency for " + c.getKey());
             }
-            releaseArtifacts.computeIfAbsent(dep.releaseId(), k -> new ArrayList<>()).add(c);
+            getRepo(dep.releaseId()).artifacts.add(c);
+            artifactReleases.put(c, dep.releaseId());
         }
-        return releaseArtifacts;
+        final Iterator<Map.Entry<ReleaseId, ReleaseRepo>> i = releaseRepos.entrySet().iterator();
+        while (i.hasNext()) {
+            if (i.next().getValue().artifacts.isEmpty()) {
+                i.remove();
+            }
+        }
+        for (ArtifactDependency d : artifactDeps.values()) {
+            final ReleaseRepo repo = getRepo(artifactReleases.get(d.coords));
+            for (ArtifactDependency c : d.children.values()) {
+                repo.addRepoDependency(getRepo(artifactReleases.get(c.coords)));
+            }
+        }
+    }
+
+    private void order(ReleaseRepo repo, Map<ReleaseId, ReleaseRepo> repos) {
+        for (ReleaseRepo d : repo.dependencies.values()) {
+            if (repos.containsKey(d.id())) {
+                continue;
+            }
+            order(d, repos);
+        }
+        repos.putIfAbsent(repo.id(), repo);
+    }
+
+    private void logReleaseRepoDep(ReleaseRepo repo, int depth) {
+        final StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < depth; ++i) {
+            sb.append("  ");
+        }
+        sb.append(repo.id().origin()).append(' ').append(repo.id().version());
+        logComment(sb.toString());
+        for (ReleaseRepo child : repo.dependencies.values()) {
+            logReleaseRepoDep(child, depth + 1);
+        }
     }
 
     private void debug(String msg, Object... args) {
@@ -429,7 +523,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     private static List<String> toSortedStrings(Collection<ArtifactCoords> coords) {
         final List<String> list = new ArrayList<>(coords.size());
         for (ArtifactCoords c : coords) {
-            list.add(c.toCompactCoords());
+            list.add(c.toGACTVString());
         }
         Collections.sort(list);
         return list;
@@ -458,7 +552,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         getOutput().println(msg);
     }
 
-    private void processNodes(DependencyNode node, int level) {
+    private void processNodes(ArtifactDependency parent, DependencyNode node, int level) {
         final ArtifactCoords coords = toCoords(node.getArtifact());
         if (excludeKeys.contains(coords.getKey())) {
             return;
@@ -481,8 +575,13 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         } else {
             addToRemaining(coords);
         }
+        ArtifactDependency artDep = null;
+        if (parent != null) {
+            artDep = getOrCreateArtifactDep(coords);
+            parent.addDependency(artDep);
+        }
         for (DependencyNode child : node.getChildren()) {
-            processNodes(child, level + 1);
+            processNodes(artDep, child, level + 1);
         }
     }
 
@@ -509,5 +608,57 @@ public class DependenciesToBuildMojo extends AbstractMojo {
 
     private static ArtifactCoords toCoords(Artifact a) {
         return new ArtifactCoords(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(), a.getVersion());
+    }
+
+    private ArtifactDependency getOrCreateArtifactDep(ArtifactCoords c) {
+        return artifactDeps.computeIfAbsent(c, k -> new ArtifactDependency(c));
+    }
+
+    private static class ArtifactDependency {
+        final ArtifactCoords coords;
+        final Map<ArtifactCoords, ArtifactDependency> children = new LinkedHashMap<>();
+
+        ArtifactDependency(ArtifactCoords coords) {
+            this.coords = coords;
+        }
+
+        void addDependency(ArtifactDependency d) {
+            children.putIfAbsent(d.coords, d);
+        }
+    }
+
+    private ReleaseRepo getOrCreateRepo(ProjectRelease release) {
+        return releaseRepos.computeIfAbsent(release.id(), k -> new ReleaseRepo(release));
+    }
+
+    private ReleaseRepo getRepo(ReleaseId id) {
+        return Objects.requireNonNull(releaseRepos.get(id));
+    }
+
+    private static class ReleaseRepo {
+
+        final ProjectRelease release;
+        final List<ArtifactCoords> artifacts = new ArrayList<>();
+        final Map<ReleaseId, ReleaseRepo> parents = new HashMap<>();
+        final Map<ReleaseId, ReleaseRepo> dependencies = new LinkedHashMap<>();
+
+        ReleaseRepo(ProjectRelease release) {
+            this.release = release;
+        }
+
+        ReleaseId id() {
+            return release.id();
+        }
+
+        void addRepoDependency(ReleaseRepo repo) {
+            if (repo != this) {
+                dependencies.putIfAbsent(repo.id(), repo);
+                repo.parents.putIfAbsent(id(), this);
+            }
+        }
+
+        boolean isRoot() {
+            return parents.isEmpty();
+        }
     }
 }
