@@ -101,8 +101,16 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     /**
      * Whether to log the coordinates of the artifacts captured down to the depth specified. The default is true.
      */
-    @Parameter(required = false, property = "logArtifactsToBeBuilt")
-    boolean logArtifactsToBeBuilt = true;
+    @Parameter(required = false, property = "logArtifactsToBuild")
+    boolean logArtifactsToBuild = true;
+
+    /**
+     * Whether to log the module GAVs the artifacts to be built belongs to instead of all
+     * the complete artifact coordinates to be built.
+     * If this option is enabled, it overrides {@link #logArtifactsToBuild}
+     */
+    @Parameter(required = false, property = "logModulesToBuild")
+    boolean logModulesToBuild;
 
     /**
      * Whether to log the dependency trees walked down to the depth specified. The default is false.
@@ -310,7 +318,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
 
         try {
             int codeReposTotal = 0;
-            if (logArtifactsToBeBuilt && !allDepsToBuild.isEmpty()) {
+            if (logArtifactsToBuild && !allDepsToBuild.isEmpty()) {
                 logComment("Artifacts to be built from source from " + bomCoords.toCompactCoords() + ":");
                 if (logCodeRepos) {
                     initReleaseRepos(decompose(resolver, bomArtifact, managedDeps, nonManagedVisited));
@@ -325,7 +333,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
 
                     for (ReleaseRepo e : orderedMap.values()) {
                         logComment(e.id().toString());
-                        for (String s : toSortedStrings(e.artifacts)) {
+                        for (String s : toSortedStrings(e.artifacts, logModulesToBuild)) {
                             log(s);
                         }
                     }
@@ -342,7 +350,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                     }
 
                 } else {
-                    for (String s : toSortedStrings(allDepsToBuild)) {
+                    for (String s : toSortedStrings(allDepsToBuild, logModulesToBuild)) {
                         log(s);
                     }
                 }
@@ -350,7 +358,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
 
             if (logNonManagedVisited && !nonManagedVisited.isEmpty()) {
                 logComment("Non-managed dependencies visited walking dependency trees:");
-                final List<String> sorted = toSortedStrings(nonManagedVisited);
+                final List<String> sorted = toSortedStrings(nonManagedVisited, logModulesToBuild);
                 for (int i = 0; i < sorted.size(); ++i) {
                     logComment((i + 1) + ") " + sorted.get(i));
                 }
@@ -520,10 +528,19 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         }
     }
 
-    private static List<String> toSortedStrings(Collection<ArtifactCoords> coords) {
-        final List<String> list = new ArrayList<>(coords.size());
-        for (ArtifactCoords c : coords) {
-            list.add(c.toGACTVString());
+    private static List<String> toSortedStrings(Collection<ArtifactCoords> coords, boolean asModules) {
+        final List<String> list;
+        if (asModules) {
+            final Set<String> set = new HashSet<>();
+            for (ArtifactCoords c : coords) {
+                set.add(c.getGroupId() + ":" + c.getArtifactId() + ":" + c.getVersion());
+            }
+            list = new ArrayList<>(set);
+        } else {
+            list = new ArrayList<>(coords.size());
+            for (ArtifactCoords c : coords) {
+                list.add(c.toGACTVString());
+            }
         }
         Collections.sort(list);
         return list;
