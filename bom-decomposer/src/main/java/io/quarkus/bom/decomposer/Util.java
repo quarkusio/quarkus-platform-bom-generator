@@ -43,13 +43,36 @@ public class Util {
             return null;
         }
         if (scm.getConnection() != null) {
-            return resolveModelValue(model, scm.getConnection());
+            String s = resolveModelValue(model, scm.getConnection());
+            s = scmToHttps(s);
+            return s;
         }
         final String url = resolveModelValue(model, model.getUrl());
         if (url != null && url.startsWith("https://github.com/")) {
             return url;
         }
         return null;
+    }
+
+    private static String scmToHttps(String s) {
+        s = s.replace("scm:", "");
+        s = s.replace("git:", "");
+        s = s.replace("git@", "");
+        s = s.replace("ssh:", "");
+        s = s.replace("svn:", "");
+        s = s.replace(".git", "");
+        if (s.startsWith("https://") || s.startsWith("http://")) {
+            return s;
+        }
+        if (s.startsWith("github.com:")) {
+            s = s.replace(':', '/');
+        }
+        if (s.startsWith("//")) {
+            s = "https:" + s;
+        } else {
+            s = "https://" + s;
+        }
+        return s;
     }
 
     public static String getScmTag(Model model) {
