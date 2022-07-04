@@ -11,12 +11,19 @@ import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.devtools.messagewriter.MessageWriter;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.ServiceLoader;
 import org.apache.maven.model.Model;
+import org.apache.maven.model.building.ModelSource;
+import org.apache.maven.model.resolution.UnresolvableModelException;
+import org.apache.maven.project.ProjectBuildingRequest;
+import org.apache.maven.project.ProjectModelResolver;
+import org.eclipse.aether.RequestTrace;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.graph.Dependency;
@@ -29,6 +36,8 @@ public class BomDecomposer {
     }
 
     public class BomDecomposerConfig {
+
+        boolean loadReleaseDetectors = true;
 
         private BomDecomposerConfig() {
         }
@@ -45,6 +54,12 @@ public class BomDecomposer {
 
         public BomDecomposerConfig mavenArtifactResolver(ArtifactResolver resolver) {
             mvnResolver = resolver;
+            if (resolver != null) {
+                final MavenArtifactResolver mvn = resolver.underlyingResolver();
+                modelResolver = new ProjectModelResolver(mvn.getSession(), new RequestTrace(null), mvn.getSystem(),
+                        mvn.getRemoteRepositoryManager(), mvn.getRepositories(),
+                        ProjectBuildingRequest.RepositoryMerging.POM_DOMINANT, null);
+            }
             return this;
         }
 
@@ -105,11 +120,19 @@ public class BomDecomposer {
             return this;
         }
 
+        public BomDecomposerConfig loadReleaseDetectors(boolean loadReleaseDetectors) {
+            this.loadReleaseDetectors = loadReleaseDetectors;
+            return this;
+        }
+
         public DecomposedBom decompose() throws BomDecomposerException {
-            ServiceLoader.load(ReleaseIdDetector.class, Thread.currentThread().getContextClassLoader()).forEach(d -> {
-                BomDecomposer.this.logger().debug("Loaded release detector " + d);
-                releaseDetectors.add(d);
-            });
+            if (loadReleaseDetectors) {
+                ServiceLoader.load(ReleaseIdDetector.class, Thread.currentThread().getContextClassLoader())
+                        .forEach(d -> {
+                            BomDecomposer.this.logger().debug("Loaded release detector " + d);
+                            releaseDetectors.add(d);
+                        });
+            }
             return BomDecomposer.this.decompose();
         }
     }
@@ -123,6 +146,7 @@ public class BomDecomposer {
     private PomResolver bomSource;
     private Iterable<Dependency> artifacts;
     private ArtifactResolver mvnResolver;
+    private ProjectModelResolver modelResolver;
     private List<ReleaseIdDetector> releaseDetectors = new ArrayList<>();
     private DecomposedBomBuilder decomposedBuilder;
     private DecomposedBomTransformer transformer;
@@ -158,7 +182,7 @@ public class BomDecomposer {
                 bomBuilder.bomDependency(releaseId(dep.getArtifact()), dep);
             } catch (BomDecomposerException e) {
                 throw e;
-            } catch (ArtifactNotFoundException e) {
+            } catch (ArtifactNotFoundException | UnresolvableModelException e) {
                 // there are plenty of BOMs that include artifacts that don't exist
                 logger().debug("Failed to resolve POM for %s", dep);
             }
@@ -170,13 +194,28 @@ public class BomDecomposer {
         return describe(bomArtifact).getManagedDependencies();
     }
 
-    private ReleaseId releaseId(Artifact artifact) throws BomDecomposerException {
+    private ReleaseId releaseId(Artifact artifact) throws BomDecomposerException, UnresolvableModelException {
         for (ReleaseIdDetector releaseDetector : releaseDetectors) {
             final ReleaseId releaseId = releaseDetector.detectReleaseId(this, artifact);
             if (releaseId != null) {
                 return releaseId;
             }
         }
+
+        final ModelSource ms = modelResolver.resolveModel(artifact.getGroupId(), artifact.getArtifactId(),
+                artifact.getVersion());
+
+        final Model effectiveModel;
+        try (InputStream is = ms.getInputStream()) {
+            effectiveModel = ModelUtils.readModel(is);
+        } catch (IOException e) {
+            throw new BomDecomposerException("Failed to read model from " + ms.getLocation(), e);
+        }
+
+        if (effectiveModel.getScm() != null) {
+            return ReleaseIdFactory.forModel(effectiveModel);
+        }
+
         Model model = model(artifact);
         Model tmp;
         while ((tmp = workspaceParent(model)) != null) {
@@ -201,7 +240,8 @@ public class BomDecomposer {
             return null;
         }
 
-        if (model.getVersion() == null || !"../pom.xml".equals(model.getParent().getRelativePath())
+        if (model.getVersion() == null
+                || model.getParent().getRelativePath() != null && model.getParent().getRelativePath().startsWith("..")
                 || ModelUtils.getGroupId(parentModel).equals(ModelUtils.getGroupId(model))
                         && ModelUtils.getVersion(parentModel).equals(ModelUtils.getVersion(model))) {
             return parentModel;

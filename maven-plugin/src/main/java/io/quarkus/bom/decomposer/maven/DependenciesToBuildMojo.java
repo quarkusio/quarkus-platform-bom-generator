@@ -121,8 +121,8 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     /**
      * Whether to log the coordinates of the artifacts below the depth specified. The default is false.
      */
-    @Parameter(required = false, property = "logRemainingArtifacts")
-    boolean logRemainingArtifacts;
+    @Parameter(required = false, property = "logRemaining")
+    boolean logRemaining;
     /**
      * Whether to log the summary at the end. The default is true.
      */
@@ -184,6 +184,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     private final Set<ArtifactCoords> allDepsToBuild = new HashSet<>();
     private final Set<ArtifactCoords> nonManagedVisited = new HashSet<>();
     private final Set<ArtifactCoords> skippedDeps = new HashSet<>();
+    private final Set<ArtifactCoords> remainingDeps = new HashSet<>();
 
     private final Map<ArtifactCoords, ArtifactDependency> artifactDeps = new HashMap<>();
     private final Map<ReleaseId, ReleaseRepo> releaseRepos = new HashMap<>();
@@ -364,6 +365,14 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 }
             }
 
+            if (logRemaining) {
+                logComment("Remaining artifacts include:");
+                final List<String> sorted = toSortedStrings(remainingDeps, logModulesToBuild);
+                for (int i = 0; i < sorted.size(); ++i) {
+                    logComment((i + 1) + ") " + sorted.get(i));
+                }
+            }
+
             if (logSummary) {
                 final StringBuilder sb = new StringBuilder().append("Selecting ");
                 if (this.level < 0) {
@@ -425,7 +434,13 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         }
 
         if (addToBeBuilt(extArtifact)) {
-            root.getChildren().forEach(n -> processNodes(logCodeRepos ? getOrCreateArtifactDep(extArtifact) : null, n, 1));
+            for (DependencyNode d : root.getChildren()) {
+                processNodes(logCodeRepos ? getOrCreateArtifactDep(extArtifact) : null, d, 1, false);
+            }
+        } else if (logRemaining) {
+            for (DependencyNode d : root.getChildren()) {
+                processNodes(null, d, 1, true);
+            }
         }
 
         if (logTrees) {
@@ -445,6 +460,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         final BomDecomposerConfig config = BomDecomposer.config()
                 .bomArtifact(bomArtifact)
                 .logger(new MojoMessageWriter(getLog()))
+                .loadReleaseDetectors(false)
                 .mavenArtifactResolver(ArtifactResolverProvider.get(resolver));
 
         if (nonManaged != null && !nonManaged.isEmpty()) {
@@ -569,36 +585,47 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         getOutput().println(msg);
     }
 
-    private void processNodes(ArtifactDependency parent, DependencyNode node, int level) {
+    private void processNodes(ArtifactDependency parent, DependencyNode node, int level, boolean remaining) {
         final ArtifactCoords coords = toCoords(node.getArtifact());
         if (excludeKeys.contains(coords.getKey())) {
             return;
         }
-        if (this.level < 0 || level <= this.level) {
-            if (logTrees) {
-                final StringBuilder buf = new StringBuilder();
-                for (int i = 0; i < level; ++i) {
-                    buf.append("  ");
+        ArtifactDependency artDep = null;
+        if (remaining) {
+            addToRemaining(coords);
+        } else if (this.level < 0 || level <= this.level) {
+            if (addToBeBuilt(coords)) {
+                if (logTrees) {
+                    final StringBuilder buf = new StringBuilder();
+                    for (int i = 0; i < level; ++i) {
+                        buf.append("  ");
+                    }
+                    buf.append(coords.toCompactCoords());
+                    if (!managedCoords.contains(coords)) {
+                        buf.append(' ').append(NOT_MANAGED);
+                    }
+                    logComment(buf.toString());
                 }
-                buf.append(coords.toCompactCoords());
-                if (!managedCoords.contains(coords)) {
-                    buf.append(' ').append(NOT_MANAGED);
+                if (parent != null) {
+                    artDep = getOrCreateArtifactDep(coords);
+                    parent.addDependency(artDep);
                 }
-                logComment(buf.toString());
-            }
-            if (!addToBeBuilt(coords)) {
+            } else if (logRemaining) {
+                remaining = true;
+            } else {
                 return;
             }
         } else {
-            addToRemaining(coords);
-        }
-        ArtifactDependency artDep = null;
-        if (parent != null) {
-            artDep = getOrCreateArtifactDep(coords);
-            parent.addDependency(artDep);
+            addToSkipped(coords);
+            if (logRemaining) {
+                remaining = true;
+                addToRemaining(coords);
+            } else {
+                return;
+            }
         }
         for (DependencyNode child : node.getChildren()) {
-            processNodes(artDep, child, level + 1);
+            processNodes(artDep, child, level + 1, remaining);
         }
     }
 
@@ -607,19 +634,30 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         if (!managed) {
             nonManagedVisited.add(coords);
         }
+
         if (managed || includeNonManaged) {
             allDepsToBuild.add(coords);
             skippedDeps.remove(coords);
-        } else {
-            addToRemaining(coords);
-            return false;
+            remainingDeps.remove(coords);
+            return true;
         }
-        return true;
+
+        addToSkipped(coords);
+        if (logRemaining) {
+            addToRemaining(coords);
+        }
+        return false;
+    }
+
+    private void addToSkipped(ArtifactCoords coords) {
+        if (!allDepsToBuild.contains(coords)) {
+            skippedDeps.add(coords);
+        }
     }
 
     private void addToRemaining(ArtifactCoords coords) {
         if (!allDepsToBuild.contains(coords)) {
-            skippedDeps.add(coords);
+            remainingDeps.add(coords);
         }
     }
 
