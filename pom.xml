@@ -105,6 +105,16 @@
         <groupId>xom</groupId>
         <artifactId>xom</artifactId>
         <version>${xom.version}</version>
+        <exclusions>
+            <exclusion>
+                <groupId>xerces</groupId>
+                <artifactId>xercesImpl</artifactId>
+            </exclusion>
+            <exclusion>
+                <groupId>xalan</groupId>
+                <artifactId>xalan</artifactId>
+            </exclusion>
+        </exclusions>
       </dependency>
     </dependencies>
   </dependencyManagement>
