@@ -107,12 +107,12 @@
         <version>${xom.version}</version>
         <exclusions>
             <exclusion>
-                <groupId>xerces</groupId>
-                <artifactId>xercesImpl</artifactId>
+                <groupId>xml-apis</groupId>
+                <artifactId>xml-apis</artifactId>
             </exclusion>
             <exclusion>
-                <groupId>xalan</groupId>
-                <artifactId>xalan</artifactId>
+                <groupId>xerces</groupId>
+                <artifactId>xercesImpl</artifactId>
             </exclusion>
         </exclusions>
       </dependency>

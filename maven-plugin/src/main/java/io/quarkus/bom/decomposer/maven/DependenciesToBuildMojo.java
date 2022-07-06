@@ -7,12 +7,15 @@ import io.quarkus.bom.decomposer.DecomposedBom;
 import io.quarkus.bom.decomposer.ProjectDependency;
 import io.quarkus.bom.decomposer.ProjectRelease;
 import io.quarkus.bom.decomposer.ReleaseId;
+import io.quarkus.bom.decomposer.maven.platformgen.DependenciesToBuildConfig;
+import io.quarkus.bom.decomposer.maven.platformgen.PlatformConfig;
 import io.quarkus.bom.resolver.ArtifactResolverProvider;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
-import io.quarkus.maven.ArtifactCoords;
-import io.quarkus.maven.ArtifactKey;
+import io.quarkus.maven.dependency.ArtifactCoords;
+import io.quarkus.maven.dependency.ArtifactKey;
+import io.quarkus.maven.dependency.GACTV;
 import io.quarkus.paths.PathTree;
 import io.quarkus.registry.catalog.Extension;
 import io.quarkus.registry.catalog.ExtensionCatalog;
@@ -160,25 +163,11 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     @Parameter(property = "logCodeRepoGraph", required = false)
     boolean logCodeRepoGraph;
 
-    /**
-     * Artifact coordinates in the {@code <groupId>:artifactId:<classifier>:type:version} format
-     * that should be included in the captured set of artifacts to be built from source.
-     * <p>
-     * NOTE: included artifacts will be add with all their dependencies.
-     */
-    @Parameter(property = "includeArtifacts", required = false)
-    List<String> includeArtifacts = List.of();
+    @Parameter(required = false)
+    PlatformConfig platformConfig;
 
-    /**
-     * Artifact coordinate keys in the {@code <groupId>:artifactId[:<classifier>:[type]]} format
-     * that should be excluded from the captured set of artifacts to be built from source.
-     * <p>
-     * NOTE: in case an excluded artifact was met while walking a dependency, the whole branch
-     * starting at the excluded artifact will be ignored.
-     */
-    @Parameter(property = "excludeArtifacts", required = false)
-    List<String> excludeArtifacts = List.of();
-    private Set<ArtifactKey> excludeKeys;
+    @Parameter(required = false)
+    DependenciesToBuildConfig dependenciesToBuild;
 
     private Set<ArtifactCoords> managedCoords;
     private final Set<ArtifactCoords> allDepsToBuild = new HashSet<>();
@@ -196,9 +185,13 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             logCodeRepos = true;
         }
 
-        final ArtifactCoords bomCoords = PlatformArtifacts.ensureBomArtifact(ArtifactCoords.fromString(bom));
+        ArtifactCoords bomCoords = ArtifactCoords.fromString(bom);
+        if (PlatformArtifacts.isCatalogArtifactId(bomCoords.getArtifactId())) {
+            bomCoords = new GACTV(bomCoords.getGroupId(), PlatformArtifacts.ensureBomArtifactId(bomCoords.getArtifactId()), "",
+                    ArtifactCoords.TYPE_POM, bomCoords.getVersion());
+        }
         debug("Quarkus platform BOM %s", bomCoords);
-        final ArtifactCoords catalogCoords = new ArtifactCoords(bomCoords.getGroupId(),
+        final ArtifactCoords catalogCoords = new GACTV(bomCoords.getGroupId(),
                 PlatformArtifacts.ensureCatalogArtifactId(bomCoords.getArtifactId()), bomCoords.getVersion(), "json",
                 bomCoords.getVersion());
         debug("Quarkus extension catalog %s", catalogCoords);
@@ -251,33 +244,10 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             managedCoords.add(toCoords(d.getArtifact()));
         }
 
-        if (!includeArtifacts.isEmpty()) {
-            final List<Dependency> tmp = new ArrayList<>(includeArtifacts.size() + managedDeps.size());
-            for (String s : includeArtifacts) {
-                final ArtifactCoords c = ArtifactCoords.fromString(s);
-                managedCoords.add(c);
-                tmp.add(new Dependency(
-                        new DefaultArtifact(c.getGroupId(), c.getArtifactId(), c.getClassifier(), c.getType(), c.getVersion()),
-                        JavaScopes.COMPILE));
-            }
-            tmp.addAll(managedDeps);
-            managedDeps = tmp;
-        }
-
-        if (!excludeArtifacts.isEmpty()) {
-            debug("Excluding artifacts %s", excludeArtifacts);
-            excludeKeys = new HashSet<>(excludeArtifacts.size());
-            for (String s : excludeArtifacts) {
-                excludeKeys.add(ArtifactKey.fromString(s));
-            }
-        } else {
-            excludeKeys = Set.of();
-        }
-
         final List<Extension> supported = new ArrayList<>();
         for (Extension ext : catalog.getExtensions()) {
             ArtifactCoords rtArtifact = ext.getArtifact();
-            if (excludeKeys.contains(rtArtifact.getKey())) {
+            if (isExcluded(rtArtifact)) {
                 continue;
             }
             Object o = ext.getMetadata().get("redhat-support");
@@ -285,9 +255,10 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 continue;
             }
             supported.add(ext);
-            processExtensionArtifact(resolver, managedDeps, rtArtifact);
+            processExtensionArtifact(resolver, managedDeps, new GACTV(rtArtifact.getGroupId(), rtArtifact.getArtifactId(),
+                    rtArtifact.getClassifier(), rtArtifact.getType(), rtArtifact.getVersion()));
 
-            ArtifactCoords deploymentCoords = new ArtifactCoords(rtArtifact.getGroupId(),
+            ArtifactCoords deploymentCoords = new GACTV(rtArtifact.getGroupId(),
                     rtArtifact.getArtifactId() + "-deployment", "", ArtifactCoords.TYPE_JAR, rtArtifact.getVersion());
             if (!managedCoords.contains(deploymentCoords)) {
                 final Path rtJar;
@@ -315,6 +286,12 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 }
             }
             processExtensionArtifact(resolver, managedDeps, deploymentCoords);
+        }
+
+        if (dependenciesToBuild != null && !dependenciesToBuild.getIncludeArtifacts().isEmpty()) {
+            for (ArtifactCoords coords : dependenciesToBuild.getIncludeArtifacts()) {
+                processExtensionArtifact(resolver, managedDeps, coords);
+            }
         }
 
         try {
@@ -587,7 +564,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
 
     private void processNodes(ArtifactDependency parent, DependencyNode node, int level, boolean remaining) {
         final ArtifactCoords coords = toCoords(node.getArtifact());
-        if (excludeKeys.contains(coords.getKey())) {
+        if (isExcluded(coords)) {
             return;
         }
         ArtifactDependency artDep = null;
@@ -635,7 +612,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             nonManagedVisited.add(coords);
         }
 
-        if (managed || includeNonManaged) {
+        if (managed || includeNonManaged || isIncluded(coords)) {
             allDepsToBuild.add(coords);
             skippedDeps.remove(coords);
             remainingDeps.remove(coords);
@@ -661,8 +638,22 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         }
     }
 
+    private boolean isExcluded(ArtifactCoords coords) {
+        return dependenciesToBuild != null
+                && (dependenciesToBuild.getExcludeGroupIds().contains(coords.getGroupId())
+                        || dependenciesToBuild.getExcludeKeys().contains(coords.getKey())
+                        || dependenciesToBuild.getExcludeArtifacts().contains(coords));
+    }
+
+    private boolean isIncluded(ArtifactCoords coords) {
+        return dependenciesToBuild != null
+                && (dependenciesToBuild.getIncludeGroupIds().contains(coords.getGroupId())
+                        || dependenciesToBuild.getIncludeKeys().contains(coords.getKey())
+                        || dependenciesToBuild.getIncludeArtifacts().contains(coords));
+    }
+
     private static ArtifactCoords toCoords(Artifact a) {
-        return new ArtifactCoords(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(), a.getVersion());
+        return new GACTV(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(), a.getVersion());
     }
 
     private ArtifactDependency getOrCreateArtifactDep(ArtifactCoords c) {
