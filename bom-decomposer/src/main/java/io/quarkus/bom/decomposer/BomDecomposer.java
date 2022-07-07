@@ -11,15 +11,12 @@ import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.devtools.messagewriter.MessageWriter;
-import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.ServiceLoader;
 import org.apache.maven.model.Model;
-import org.apache.maven.model.building.ModelSource;
 import org.apache.maven.model.resolution.UnresolvableModelException;
 import org.apache.maven.project.ProjectBuildingRequest;
 import org.apache.maven.project.ProjectModelResolver;
@@ -54,12 +51,6 @@ public class BomDecomposer {
 
         public BomDecomposerConfig mavenArtifactResolver(ArtifactResolver resolver) {
             mvnResolver = resolver;
-            if (resolver != null) {
-                final MavenArtifactResolver mvn = resolver.underlyingResolver();
-                modelResolver = new ProjectModelResolver(mvn.getSession(), new RequestTrace(null), mvn.getSystem(),
-                        mvn.getRemoteRepositoryManager(), mvn.getRepositories(),
-                        ProjectBuildingRequest.RepositoryMerging.POM_DOMINANT, null);
-            }
             return this;
         }
 
@@ -202,6 +193,7 @@ public class BomDecomposer {
             }
         }
 
+        /* @formatter:off
         final ModelSource ms = modelResolver.resolveModel(artifact.getGroupId(), artifact.getArtifactId(),
                 artifact.getVersion());
 
@@ -215,6 +207,7 @@ public class BomDecomposer {
         if (effectiveModel.getScm() != null) {
             return ReleaseIdFactory.forModel(effectiveModel);
         }
+        @formatter:on */
 
         Model model = model(artifact);
         Model tmp;
@@ -241,7 +234,7 @@ public class BomDecomposer {
         }
 
         if (model.getVersion() == null
-                || model.getParent().getRelativePath() != null && model.getParent().getRelativePath().startsWith("..")
+                || model.getParent().getRelativePath() != null && !model.getParent().getRelativePath().startsWith("../pom.xml") // unfortunately that's the default
                 || ModelUtils.getGroupId(parentModel).equals(ModelUtils.getGroupId(model))
                         && ModelUtils.getVersion(parentModel).equals(ModelUtils.getVersion(model))) {
             return parentModel;
@@ -273,5 +266,15 @@ public class BomDecomposer {
 
     private Artifact resolve(Artifact artifact) throws BomDecomposerException {
         return artifactResolver().resolve(artifact).getArtifact();
+    }
+
+    private ProjectModelResolver getModelResolver() {
+        if (modelResolver == null) {
+            final MavenArtifactResolver mvn = artifactResolver().underlyingResolver();
+            modelResolver = new ProjectModelResolver(mvn.getSession(), new RequestTrace(null), mvn.getSystem(),
+                    mvn.getRemoteRepositoryManager(), mvn.getRepositories(),
+                    ProjectBuildingRequest.RepositoryMerging.POM_DOMINANT, null);
+        }
+        return modelResolver;
     }
 }
