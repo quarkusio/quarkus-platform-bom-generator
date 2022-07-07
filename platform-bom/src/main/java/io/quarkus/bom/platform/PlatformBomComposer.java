@@ -203,7 +203,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                 }
                 if (member.config().isKeepThirpartyExclusions()
                         && !dep.dependency().getExclusions().equals(platformDep.dependency().getExclusions())) {
-                    platformDep = ProjectDependency.create(dep.releaseId(), new Dependency(platformDep.artifact(),
+                    platformDep = ProjectDependency.create(platformDep.releaseId(), new Dependency(platformDep.artifact(),
                             dep.dependency().getScope(), dep.dependency().isOptional(), dep.dependency().getExclusions()));
                 }
                 releaseBuilders.computeIfAbsent(platformDep.releaseId(), id -> ProjectRelease.builder(id)).add(platformDep);
@@ -343,18 +343,22 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         for (Collection<ProjectRelease> releases : extReleaseCollector.getOriginReleaseBuilders()) {
 
             if (releases.size() == 1) {
-                mergeExtensionDeps(releases.iterator().next(), externalExtensionDeps);
+                mergeExtensionDeps(releases.iterator().next(), null);
                 continue;
             }
 
             final LinkedHashMap<String, ReleaseId> preferredVersions = preferredVersions(releases);
+            final Set<ArtifactKey> merged = new HashSet<>();
             for (ProjectRelease release : releases) {
                 for (Map.Entry<String, ReleaseId> preferred : preferredVersions.entrySet()) {
                     if (release.id().equals(preferred.getValue())) {
-                        mergeExtensionDeps(release, externalExtensionDeps);
+                        mergeExtensionDeps(release, merged);
                         break;
                     }
                     for (ProjectDependency dep : release.dependencies()) {
+                        if (merged.contains(dep.key())) {
+                            continue;
+                        }
                         if (depsAlignedWithQuarkusBom.containsKey(dep.key())) {
                             continue;
                         }
@@ -369,7 +373,8 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                                 }
                             }
                         }
-                        addNonQuarkusDep(dep, externalExtensionDeps);
+                        addNonQuarkusDep(dep);
+                        merged.add(dep.key());
                     }
                 }
             }
@@ -557,39 +562,42 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         return ProjectDependency.create(dep.releaseId(), dep.dependency().setArtifact(enforced));
     }
 
-    private void mergeExtensionDeps(ProjectRelease release, Map<ArtifactKey, ProjectDependency> extensionDeps)
+    private void mergeExtensionDeps(ProjectRelease release, Set<ArtifactKey> merged)
             throws BomDecomposerException {
         for (ProjectDependency dep : release.dependencies()) {
+            if (merged != null && !merged.add(dep.key())) {
+                continue;
+            }
             // the origin may have changed in the release of the dependency
             final ProjectDependency quarkusBomDep = depsAlignedWithQuarkusBom.get(dep.key());
             if (quarkusBomDep != null) {
                 quarkusBomDependencyInMemberBom(quarkusBomDep, dep);
                 return;
             }
-            addNonQuarkusDep(dep, extensionDeps);
+            addNonQuarkusDep(dep);
         }
     }
 
-    private void addNonQuarkusDep(ProjectDependency dep, Map<ArtifactKey, ProjectDependency> extensionDeps) {
+    private void addNonQuarkusDep(ProjectDependency dep) {
         if (config.excluded(dep.key())) {
             return;
         }
         final Artifact enforced = config.enforced(dep.key());
         if (enforced != null) {
-            if (!extensionDeps.containsKey(dep.key())) {
-                extensionDeps.put(dep.key(), ProjectDependency.create(dep.releaseId(), enforced));
+            if (!externalExtensionDeps.containsKey(dep.key())) {
+                externalExtensionDeps.put(dep.key(), ProjectDependency.create(dep.releaseId(), enforced));
             }
             return;
         }
-        final ProjectDependency currentDep = extensionDeps.get(dep.key());
+        final ProjectDependency currentDep = externalExtensionDeps.get(dep.key());
         if (currentDep != null) {
             final ArtifactVersion currentVersion = new DefaultArtifactVersion(currentDep.artifact().getVersion());
             final ArtifactVersion newVersion = new DefaultArtifactVersion(dep.artifact().getVersion());
             if (versionConstraintComparator().compare(currentVersion, newVersion) < 0) {
-                extensionDeps.put(dep.key(), dep);
+                externalExtensionDeps.put(dep.key(), dep);
             }
         } else {
-            extensionDeps.put(dep.key(), dep);
+            externalExtensionDeps.put(dep.key(), dep);
         }
     }
 
@@ -623,6 +631,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
 
     @Override
     public void visitProjectRelease(ProjectRelease release) throws BomDecomposerException {
+
         if (versionsInQuarkusBom.isEmpty()) {
             final ProjectRelease.Builder releaseBuilder = extReleaseCollector.getOrCreateReleaseBuilder(release.id(),
                     memberBeingProcessed);
