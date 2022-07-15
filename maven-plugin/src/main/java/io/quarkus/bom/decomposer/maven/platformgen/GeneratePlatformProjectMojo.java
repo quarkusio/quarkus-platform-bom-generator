@@ -918,7 +918,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 }
             }
             if (parentReleaseProfile == null) {
-                getLog().warn("Failed to locate profile with id 'release'");
+                getLog().debug("Failed to locate profile with id 'release'");
                 return null;
             }
             Plugin gpgPlugin = null;
