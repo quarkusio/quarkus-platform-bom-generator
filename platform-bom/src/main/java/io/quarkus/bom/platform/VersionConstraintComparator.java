@@ -1,8 +1,8 @@
 package io.quarkus.bom.platform;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Comparator;
+import java.util.List;
 import java.util.regex.Pattern;
 import org.apache.maven.artifact.versioning.ArtifactVersion;
 
@@ -11,7 +11,7 @@ public class VersionConstraintComparator implements Comparator<ArtifactVersion> 
     private final Collection<Pattern> versionPreferences;
 
     public VersionConstraintComparator(Collection<Pattern> versionPreferences) {
-        this.versionPreferences = versionPreferences == null ? Collections.emptyList() : versionPreferences;
+        this.versionPreferences = versionPreferences == null ? List.of() : versionPreferences;
     }
 
     @Override

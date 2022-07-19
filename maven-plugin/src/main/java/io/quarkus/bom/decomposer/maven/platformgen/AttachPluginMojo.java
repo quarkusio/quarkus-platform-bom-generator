@@ -3,8 +3,8 @@ package io.quarkus.bom.decomposer.maven.platformgen;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.bootstrap.util.IoUtils;
 import io.quarkus.fs.util.ZipUtils;
-import io.quarkus.maven.ArtifactCoords;
-import io.quarkus.maven.ArtifactKey;
+import io.quarkus.maven.dependency.ArtifactCoords;
+import io.quarkus.maven.dependency.ArtifactKey;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -121,7 +121,7 @@ public class AttachPluginMojo extends AbstractMojo {
             if (!a.getExtension().isEmpty() && !"jar".equals(a.getExtension())) {
                 modelDep.setType(a.getExtension());
             }
-            if (!managedKeys.contains(new ArtifactKey(modelDep.getGroupId(), modelDep.getArtifactId(), modelDep.getClassifier(),
+            if (!managedKeys.contains(ArtifactKey.of(modelDep.getGroupId(), modelDep.getArtifactId(), modelDep.getClassifier(),
                     modelDep.getType()))) {
                 modelDep.setVersion(a.getVersion());
             }
@@ -181,7 +181,7 @@ public class AttachPluginMojo extends AbstractMojo {
         }
         final Set<ArtifactKey> keys = new HashSet<>(deps.size());
         for (org.apache.maven.model.Dependency d : deps) {
-            keys.add(new ArtifactKey(d.getGroupId(), d.getArtifactId(), d.getClassifier(), d.getType()));
+            keys.add(ArtifactKey.of(d.getGroupId(), d.getArtifactId(), d.getClassifier(), d.getType()));
         }
         return keys;
     }

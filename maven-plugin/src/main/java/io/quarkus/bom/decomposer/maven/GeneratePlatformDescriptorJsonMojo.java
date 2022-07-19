@@ -9,7 +9,7 @@ import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.bootstrap.util.IoUtils;
 import io.quarkus.fs.util.ZipUtils;
 import io.quarkus.maven.ArtifactCoords;
-import io.quarkus.maven.ArtifactKey;
+import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.registry.CatalogMergeUtility;
 import io.quarkus.registry.catalog.Category;
 import io.quarkus.registry.catalog.Extension;
@@ -359,7 +359,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
             }
 
             var ext = inheritedExtensions.isEmpty() ? null
-                    : inheritedExtensions.get(new ArtifactKey(artifact.getGroupId(), artifact.getArtifactId(),
+                    : inheritedExtensions.get(ArtifactKey.gact(artifact.getGroupId(), artifact.getArtifactId(),
                             artifact.getClassifier(), artifact.getExtension()));
             Extension.Mutable extension = ext == null ? null : ext.mutable();
             final List<ExtensionOrigin> origins;
@@ -793,6 +793,6 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
     }
 
     private static ArtifactKey getKey(Artifact a) {
-        return new ArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension());
+        return ArtifactKey.gact(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension());
     }
 }

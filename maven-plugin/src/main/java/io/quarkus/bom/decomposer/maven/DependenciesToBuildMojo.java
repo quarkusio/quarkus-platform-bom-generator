@@ -15,7 +15,6 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
-import io.quarkus.maven.dependency.GACTV;
 import io.quarkus.paths.PathTree;
 import io.quarkus.registry.catalog.Extension;
 import io.quarkus.registry.catalog.ExtensionCatalog;
@@ -47,7 +46,6 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
-import org.apache.maven.project.MavenProject;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.collection.CollectRequest;
@@ -77,8 +75,8 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
     List<RemoteRepository> repos;
 
-    @Parameter(defaultValue = "${project}", readonly = true)
-    MavenProject project;
+    @Parameter(required = false, defaultValue = "${project.file}")
+    File projectFile;
 
     /**
      * Coordinates of the BOM containing Quarkus extensions. If not provided defaults to the current project's POM
@@ -187,11 +185,11 @@ public class DependenciesToBuildMojo extends AbstractMojo {
 
         ArtifactCoords bomCoords = ArtifactCoords.fromString(bom);
         if (PlatformArtifacts.isCatalogArtifactId(bomCoords.getArtifactId())) {
-            bomCoords = new GACTV(bomCoords.getGroupId(), PlatformArtifacts.ensureBomArtifactId(bomCoords.getArtifactId()), "",
-                    ArtifactCoords.TYPE_POM, bomCoords.getVersion());
+            bomCoords = ArtifactCoords.pom(bomCoords.getGroupId(),
+                    PlatformArtifacts.ensureBomArtifactId(bomCoords.getArtifactId()), bomCoords.getVersion());
         }
         debug("Quarkus platform BOM %s", bomCoords);
-        final ArtifactCoords catalogCoords = new GACTV(bomCoords.getGroupId(),
+        final ArtifactCoords catalogCoords = ArtifactCoords.of(bomCoords.getGroupId(),
                 PlatformArtifacts.ensureCatalogArtifactId(bomCoords.getArtifactId()), bomCoords.getVersion(), "json",
                 bomCoords.getVersion());
         debug("Quarkus extension catalog %s", catalogCoords);
@@ -203,7 +201,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                     .setRemoteRepositoryManager(remoteRepoManager)
                     .setWorkspaceDiscovery(true)
                     .setPreferPomsFromWorkspace(true)
-                    .setCurrentProject(project.getFile().toString())
+                    .setCurrentProject(projectFile.toString())
                     .build();
         } catch (BootstrapMavenException e) {
             throw new MojoExecutionException("Failed to initialize Maven artifact resolver", e);
@@ -226,7 +224,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         }
 
         final Artifact bomArtifact = new DefaultArtifact(bomCoords.getGroupId(), bomCoords.getArtifactId(),
-                "", ArtifactCoords.TYPE_POM, bomCoords.getVersion());
+                ArtifactCoords.DEFAULT_CLASSIFIER, ArtifactCoords.TYPE_POM, bomCoords.getVersion());
         List<Dependency> managedDeps;
         try {
             managedDeps = resolver.resolveDescriptor(bomArtifact)
@@ -255,11 +253,12 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 continue;
             }
             supported.add(ext);
-            processExtensionArtifact(resolver, managedDeps, new GACTV(rtArtifact.getGroupId(), rtArtifact.getArtifactId(),
-                    rtArtifact.getClassifier(), rtArtifact.getType(), rtArtifact.getVersion()));
+            processExtensionArtifact(resolver, managedDeps,
+                    ArtifactCoords.of(rtArtifact.getGroupId(), rtArtifact.getArtifactId(),
+                            rtArtifact.getClassifier(), rtArtifact.getType(), rtArtifact.getVersion()));
 
-            ArtifactCoords deploymentCoords = new GACTV(rtArtifact.getGroupId(),
-                    rtArtifact.getArtifactId() + "-deployment", "", ArtifactCoords.TYPE_JAR, rtArtifact.getVersion());
+            ArtifactCoords deploymentCoords = ArtifactCoords.jar(rtArtifact.getGroupId(),
+                    rtArtifact.getArtifactId() + "-deployment", rtArtifact.getVersion());
             if (!managedCoords.contains(deploymentCoords)) {
                 final Path rtJar;
                 try {
@@ -653,7 +652,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     }
 
     private static ArtifactCoords toCoords(Artifact a) {
-        return new GACTV(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(), a.getVersion());
+        return ArtifactCoords.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(), a.getVersion());
     }
 
     private ArtifactDependency getOrCreateArtifactDep(ArtifactCoords c) {

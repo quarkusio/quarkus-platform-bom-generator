@@ -2,7 +2,7 @@ package io.quarkus.bom.platform;
 
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
-import io.quarkus.maven.ArtifactKey;
+import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.registry.catalog.ExtensionCatalog;
 import java.io.IOException;
 import java.util.HashMap;
@@ -19,7 +19,7 @@ public class PlatformCatalogResolver {
     }
 
     ExtensionCatalog resolve(Artifact artifact) throws BootstrapMavenException, IOException {
-        final ArtifactKey key = new ArtifactKey(artifact.getGroupId(), artifact.getArtifactId(), artifact.getClassifier(),
+        final ArtifactKey key = ArtifactKey.of(artifact.getGroupId(), artifact.getArtifactId(), artifact.getClassifier(),
                 artifact.getExtension());
         ExtensionCatalog catalog = catalogCache.get(key);
         if (catalog == null) {

@@ -3,7 +3,7 @@ package io.quarkus.bom.decomposer.maven;
 import io.quarkus.bom.decomposer.maven.platformgen.MavenRepoZip;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
-import io.quarkus.maven.ArtifactCoords;
+import io.quarkus.maven.dependency.ArtifactCoords;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;

@@ -4,7 +4,7 @@ import io.quarkus.bom.decomposer.ProjectRelease;
 import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.decomposer.ReleaseOrigin;
 import io.quarkus.bom.decomposer.ReleaseVersion;
-import io.quarkus.maven.ArtifactKey;
+import io.quarkus.maven.dependency.ArtifactKey;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
