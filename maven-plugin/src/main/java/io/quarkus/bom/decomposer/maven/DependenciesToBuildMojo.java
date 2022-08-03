@@ -13,6 +13,7 @@ import io.quarkus.bom.resolver.ArtifactResolverProvider;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
+import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.paths.PathTree;
@@ -40,6 +41,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
+import org.apache.maven.model.Model;
+import org.apache.maven.model.Parent;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
@@ -161,6 +164,12 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     @Parameter(property = "logCodeRepoGraph", required = false)
     boolean logCodeRepoGraph;
 
+    /*
+     * Whether to include parent POMs into the list to be built from source
+     */
+    @Parameter(property = "excludeParentPoms", required = false)
+    boolean excludeParentPoms;
+
     @Parameter(required = false)
     PlatformConfig platformConfig;
 
@@ -175,6 +184,8 @@ public class DependenciesToBuildMojo extends AbstractMojo {
 
     private final Map<ArtifactCoords, ArtifactDependency> artifactDeps = new HashMap<>();
     private final Map<ReleaseId, ReleaseRepo> releaseRepos = new HashMap<>();
+
+    private MavenArtifactResolver resolver;
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
@@ -194,7 +205,6 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 bomCoords.getVersion());
         debug("Quarkus extension catalog %s", catalogCoords);
 
-        final MavenArtifactResolver resolver;
         try {
             resolver = MavenArtifactResolver.builder()
                     .setRemoteRepositories(repos)
@@ -253,7 +263,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 continue;
             }
             supported.add(ext);
-            processExtensionArtifact(resolver, managedDeps,
+            processExtensionArtifact(managedDeps,
                     ArtifactCoords.of(rtArtifact.getGroupId(), rtArtifact.getArtifactId(),
                             rtArtifact.getClassifier(), rtArtifact.getType(), rtArtifact.getVersion()));
 
@@ -284,12 +294,12 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                             "Failed to determine the corresponding deployment artifact for " + rtArtifact.toCompactCoords());
                 }
             }
-            processExtensionArtifact(resolver, managedDeps, deploymentCoords);
+            processExtensionArtifact(managedDeps, deploymentCoords);
         }
 
         if (dependenciesToBuild != null && !dependenciesToBuild.getIncludeArtifacts().isEmpty()) {
             for (ArtifactCoords coords : dependenciesToBuild.getIncludeArtifacts()) {
-                processExtensionArtifact(resolver, managedDeps, coords);
+                processExtensionArtifact(managedDeps, coords);
             }
         }
 
@@ -298,7 +308,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             if (logArtifactsToBuild && !allDepsToBuild.isEmpty()) {
                 logComment("Artifacts to be built from source from " + bomCoords.toCompactCoords() + ":");
                 if (logCodeRepos) {
-                    initReleaseRepos(decompose(resolver, bomArtifact, managedDeps, nonManagedVisited));
+                    initReleaseRepos(decompose(bomArtifact, managedDeps, nonManagedVisited));
                     codeReposTotal = releaseRepos.size();
 
                     final Map<ReleaseId, ReleaseRepo> orderedMap = new LinkedHashMap<>(codeReposTotal);
@@ -387,8 +397,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         }
     }
 
-    private void processExtensionArtifact(final MavenArtifactResolver resolver, final List<Dependency> managedDeps,
-            ArtifactCoords extArtifact) {
+    private void processExtensionArtifact(List<Dependency> managedDeps, ArtifactCoords extArtifact) {
         final DependencyNode root;
         try {
             final Artifact a = toAetherArtifact(extArtifact);
@@ -430,8 +439,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 a.getType(), a.getVersion());
     }
 
-    private DecomposedBom decompose(MavenArtifactResolver resolver, Artifact bomArtifact, Collection<Dependency> managed,
-            Collection<ArtifactCoords> nonManaged)
+    private DecomposedBom decompose(Artifact bomArtifact, Collection<Dependency> managed, Collection<ArtifactCoords> nonManaged)
             throws MojoExecutionException {
         final BomDecomposerConfig config = BomDecomposer.config()
                 .bomArtifact(bomArtifact)
@@ -611,10 +619,33 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             nonManagedVisited.add(coords);
         }
 
-        if (managed || includeNonManaged || isIncluded(coords)) {
+        if (managed || includeNonManaged || isIncluded(coords)
+                || !excludeParentPoms && coords.getType().equals(ArtifactCoords.TYPE_POM)) {
             allDepsToBuild.add(coords);
             skippedDeps.remove(coords);
             remainingDeps.remove(coords);
+            if (!excludeParentPoms) {
+                final ArtifactCoords pomCoords = coords.getType().equals(ArtifactCoords.TYPE_POM) ? coords
+                        : ArtifactCoords.pom(coords.getGroupId(), coords.getArtifactId(), coords.getVersion());
+                final Path pomXml;
+                try {
+                    pomXml = resolver.resolve(toAetherArtifact(pomCoords)).getArtifact().getFile().toPath();
+                } catch (BootstrapMavenException e) {
+                    throw new IllegalStateException("Failed to resolve " + pomCoords, e);
+                }
+                final Model model;
+                try {
+                    model = ModelUtils.readModel(pomXml);
+                } catch (IOException e) {
+                    throw new IllegalStateException("Failed to read " + pomXml, e);
+                }
+                final Parent parent = model.getParent();
+                if (parent != null) {
+                    final ArtifactCoords parentPom = ArtifactCoords.pom(parent.getGroupId(), parent.getArtifactId(),
+                            parent.getVersion());
+                    addToBeBuilt(parentPom);
+                }
+            }
             return true;
         }
 
