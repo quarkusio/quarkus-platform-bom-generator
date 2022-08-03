@@ -641,9 +641,20 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 }
                 final Parent parent = model.getParent();
                 if (parent != null) {
-                    final ArtifactCoords parentPom = ArtifactCoords.pom(parent.getGroupId(), parent.getArtifactId(),
-                            parent.getVersion());
-                    addToBeBuilt(parentPom);
+                    String parentVersion = parent.getVersion();
+                    if (ModelUtils.isUnresolvedVersion(parentVersion)) {
+                        if (model.getVersion() == null || model.getVersion().equals(parentVersion)) {
+                            parentVersion = pomCoords.getVersion();
+                        } else {
+                            parentVersion = null;
+                        }
+                    }
+                    if (parentVersion != null) {
+                        addToBeBuilt(ArtifactCoords.pom(parent.getGroupId(), parent.getArtifactId(), parentVersion));
+                    } else {
+                        getLog().warn("Failed to resolve the version of" + parent.getGroupId() + ":" + parent.getArtifactId()
+                                + ":" + parent.getVersion() + " as a parent of " + pomCoords);
+                    }
                 }
             }
             return true;
