@@ -2,7 +2,7 @@ package io.quarkus.bom.platform;
 
 import io.quarkus.bom.decomposer.ProjectRelease;
 import io.quarkus.bom.decomposer.ReleaseId;
-import io.quarkus.maven.ArtifactKey;
+import io.quarkus.maven.dependency.ArtifactKey;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;

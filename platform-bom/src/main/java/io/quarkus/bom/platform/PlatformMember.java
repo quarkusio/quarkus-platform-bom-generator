@@ -1,8 +1,8 @@
 package io.quarkus.bom.platform;
 
 import io.quarkus.bom.decomposer.DecomposedBom;
-import io.quarkus.maven.ArtifactCoords;
-import io.quarkus.maven.ArtifactKey;
+import io.quarkus.maven.dependency.ArtifactCoords;
+import io.quarkus.maven.dependency.ArtifactKey;
 import java.util.Collection;
 import java.util.List;
 import org.eclipse.aether.artifact.Artifact;

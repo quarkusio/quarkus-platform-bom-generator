@@ -10,8 +10,8 @@ import io.quarkus.bom.resolver.ArtifactResolver;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.devtools.messagewriter.MessageWriter;
-import io.quarkus.maven.ArtifactCoords;
-import io.quarkus.maven.ArtifactKey;
+import io.quarkus.maven.dependency.ArtifactCoords;
+import io.quarkus.maven.dependency.ArtifactKey;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.file.FileSystem;
@@ -248,6 +248,6 @@ public class ExtensionFilter implements DecomposedBomTransformer {
     }
 
     private static ArtifactKey key(final Artifact a) {
-        return new ArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension());
+        return ArtifactKey.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension());
     }
 }

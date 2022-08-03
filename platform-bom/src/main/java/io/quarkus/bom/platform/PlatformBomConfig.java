@@ -2,8 +2,8 @@ package io.quarkus.bom.platform;
 
 import io.quarkus.bom.PomResolver;
 import io.quarkus.bom.resolver.ArtifactResolver;
-import io.quarkus.maven.ArtifactCoords;
-import io.quarkus.maven.ArtifactKey;
+import io.quarkus.maven.dependency.ArtifactCoords;
+import io.quarkus.maven.dependency.ArtifactKey;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -50,7 +50,7 @@ public class PlatformBomConfig {
         }
 
         public Builder enforce(Artifact artifact) {
-            config.enforced.put(new ArtifactKey(artifact.getGroupId(), artifact.getArtifactId(), artifact.getClassifier(),
+            config.enforced.put(ArtifactKey.of(artifact.getGroupId(), artifact.getArtifactId(), artifact.getClassifier(),
                     artifact.getExtension()), artifact);
             return this;
         }
@@ -61,7 +61,7 @@ public class PlatformBomConfig {
         }
 
         public Builder exclude(String groupId, String artifactId) {
-            return exclude(new ArtifactKey(groupId, artifactId, null, ArtifactCoords.TYPE_JAR));
+            return exclude(ArtifactKey.of(groupId, artifactId, null, ArtifactCoords.TYPE_JAR));
         }
 
         public Builder exclude(ArtifactKey key) {
@@ -196,6 +196,7 @@ public class PlatformBomConfig {
     }
 
     private static ArtifactKey getNonClassifiedKey(ArtifactKey key) {
-        return new ArtifactKey(key.getGroupId(), key.getArtifactId(), null, ArtifactCoords.TYPE_JAR);
+        return ArtifactKey.of(key.getGroupId(), key.getArtifactId(), ArtifactCoords.DEFAULT_CLASSIFIER,
+                ArtifactCoords.TYPE_JAR);
     }
 }

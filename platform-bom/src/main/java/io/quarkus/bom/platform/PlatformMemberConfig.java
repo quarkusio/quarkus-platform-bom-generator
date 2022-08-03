@@ -1,5 +1,6 @@
 package io.quarkus.bom.platform;
 
+import io.quarkus.maven.dependency.ArtifactCoords;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -260,5 +261,15 @@ public class PlatformMemberConfig {
 
     public void setRedHatExtensionDependencyCheck(RedHatExtensionDependencyCheck dependencyCheck) {
         this.dependencyCheck = dependencyCheck;
+    }
+
+    public ArtifactCoords getGeneratedBom(String defaultGroupId) {
+        if (getRelease() == null || getRelease().getNext() == null) {
+            final ArtifactCoords originalBom = ArtifactCoords.fromString(getBom());
+            return ArtifactCoords.pom(defaultGroupId, originalBom.getArtifactId(), originalBom.getVersion());
+        }
+        var coords = ArtifactCoords.fromString(getRelease().getNext());
+        return ArtifactCoords.TYPE_POM.equals(coords.getType()) ? coords
+                : ArtifactCoords.pom(coords.getGroupId(), coords.getArtifactId(), coords.getVersion());
     }
 }

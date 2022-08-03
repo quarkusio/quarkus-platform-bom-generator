@@ -19,10 +19,10 @@ import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.devtools.messagewriter.MessageWriter;
-import io.quarkus.maven.ArtifactCoords;
-import io.quarkus.maven.ArtifactKey;
-import io.quarkus.registry.util.GlobUtil;
+import io.quarkus.maven.dependency.ArtifactCoords;
+import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.registry.util.PlatformArtifacts;
+import io.quarkus.util.GlobUtil;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -407,7 +407,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
 
         final Map<ArtifactKey, ProjectDependency> universeConstraints = new HashMap<>();
         for (ProjectRelease.Builder r : releaseBuilders.values()) {
-            r.dependencies().forEach(d -> universeConstraints.put(new ArtifactKey(d.artifact().getGroupId(),
+            r.dependencies().forEach(d -> universeConstraints.put(ArtifactKey.of(d.artifact().getGroupId(),
                     d.artifact().getArtifactId(), d.artifact().getClassifier(), d.artifact().getExtension()), d));
         }
 
@@ -480,7 +480,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         for (ProjectRelease.Builder r : quarkusBomReleaseBuilders.values()) {
             r.dependencies().forEach(d -> {
                 combinedConstraints.add(d.dependency());
-                constraintKeys.add(new ArtifactKey(d.artifact().getGroupId(), d.artifact().getArtifactId(),
+                constraintKeys.add(ArtifactKey.of(d.artifact().getGroupId(), d.artifact().getArtifactId(),
                         d.artifact().getClassifier(), d.artifact().getExtension()));
             });
         }
@@ -529,7 +529,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         for (DependencyNode node : depNodes) {
             collectNotManagedDependencies(node.getChildren(), constraints, member, root);
             final Artifact a = node.getArtifact();
-            final ArtifactKey key = new ArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension());
+            final ArtifactKey key = ArtifactKey.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension());
             if (a == null || constraints.contains(key)) {
                 continue;
             }
@@ -785,7 +785,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
     }
 
     private static ArtifactKey key(Artifact artifact) {
-        return new ArtifactKey(artifact.getGroupId(), artifact.getArtifactId(), artifact.getClassifier(),
+        return ArtifactKey.of(artifact.getGroupId(), artifact.getArtifactId(), artifact.getClassifier(),
                 artifact.getExtension());
     }
 

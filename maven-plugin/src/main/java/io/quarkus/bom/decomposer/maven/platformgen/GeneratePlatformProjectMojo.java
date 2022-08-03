@@ -33,8 +33,8 @@ import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.bootstrap.util.IoUtils;
 import io.quarkus.fs.util.ZipUtils;
-import io.quarkus.maven.ArtifactCoords;
-import io.quarkus.maven.ArtifactKey;
+import io.quarkus.maven.dependency.ArtifactCoords;
+import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.registry.Constants;
 import io.quarkus.registry.catalog.CatalogMapperHelper;
 import io.quarkus.registry.util.PlatformArtifacts;
@@ -556,7 +556,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Map<ArtifactKey, String> originalDepVersions = new HashMap<>(originalDeps.size());
         for (org.eclipse.aether.graph.Dependency d : originalDeps) {
             final Artifact a = d.getArtifact();
-            originalDepVersions.put(new ArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension()),
+            originalDepVersions.put(ArtifactKey.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension()),
                     a.getVersion());
         }
         final List<Dependency> managedDeps = quarkusCore.generatedBomModel.getDependencyManagement().getDependencies();
@@ -613,7 +613,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private ArtifactKey getKey(Dependency d) {
-        return new ArtifactKey(d.getGroupId(), d.getArtifactId(), d.getClassifier(), d.getType());
+        return ArtifactKey.of(d.getGroupId(), d.getArtifactId(), d.getClassifier(), d.getType());
     }
 
     private static File getPomFile(Model parentPom, final String moduleName) {
@@ -953,7 +953,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private static ArtifactCoords toCoords(final Artifact a) {
-        return new ArtifactCoords(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(), a.getVersion());
+        return ArtifactCoords.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(), a.getVersion());
     }
 
     private static boolean isIrrelevantConstraint(final Artifact a) {
@@ -1031,9 +1031,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         managedDep.setVersion(quarkusCore.getVersionProperty());
         dm.addDependency(managedDep);
 
-        final Map<ArtifactCoords, PlatformMemberTestConfig> testConfigs = new LinkedHashMap<>();
+        final Map<ArtifactKey, PlatformMemberTestConfig> testConfigs = new LinkedHashMap<>();
         for (PlatformMemberTestConfig test : member.config().getTests()) {
-            testConfigs.put(ArtifactCoords.fromString(test.getArtifact()), test);
+            testConfigs.put(ArtifactCoords.fromString(test.getArtifact()).getKey(), test);
         }
 
         if (member.config().getTestCatalogArtifact() != null) {
@@ -1068,26 +1068,24 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 if (testVersion == null || testVersion.isBlank()) {
                     testVersion = testCatalogArtifact.getVersion();
                 }
-                final ArtifactCoords testCoords = new ArtifactCoords(testGroupId, testArtifactId, null, ArtifactCoords.TYPE_JAR,
-                        testVersion);
+                final ArtifactCoords testCoords = ArtifactCoords.jar(testGroupId, testArtifactId, testVersion);
                 // add it unless it's overriden in the config
-                PlatformMemberTestConfig testConfig = testConfigs.get(testCoords);
+                PlatformMemberTestConfig testConfig = testConfigs.get(testCoords.getKey());
                 if (testConfig == null) {
                     testConfig = new PlatformMemberTestConfig();
                     testConfig.setArtifact(
                             testCoords.getGroupId() + ":" + testCoords.getArtifactId() + ":" + testCoords.getVersion());
-                    testConfigs.put(testCoords, testConfig);
+                    testConfigs.put(testCoords.getKey(), testConfig);
                 }
             }
         }
 
-        for (Map.Entry<ArtifactCoords, PlatformMemberTestConfig> test : testConfigs.entrySet()) {
-            final PlatformMemberTestConfig testConfig = test.getValue();
+        for (PlatformMemberTestConfig testConfig : testConfigs.values()) {
             if (member.config().getDefaultTestConfig() != null) {
                 testConfig.applyDefaults(member.config().getDefaultTestConfig());
             }
             if (!testConfig.isExcluded()) {
-                generateIntegrationTestModule(test.getKey(), testConfig, pom);
+                generateIntegrationTestModule(ArtifactCoords.fromString(testConfig.getArtifact()), testConfig, pom);
             }
         }
 
@@ -1101,7 +1099,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         bomDep.setGroupId(bom.getGroupId());
         bomDep.setArtifactId(bom.getArtifactId());
         bomDep.setVersion(getUniversalBomArtifact().getVersion());
-        bomDep.setType("pom");
+        bomDep.setType(ArtifactCoords.TYPE_POM);
         bomDep.setScope("import");
         return bomDep;
     }
@@ -1239,7 +1237,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                     }
                     modelDep.setType(a.getExtension());
                     if (!universalBomDepKeys.contains(
-                            new ArtifactKey(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension()))) {
+                            ArtifactKey.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension()))) {
                         modelDep.setVersion(getTestArtifactVersion(a.getGroupId(), a.getVersion()));
                     }
                     modelDep.setScope(d.getScope());
@@ -1477,7 +1475,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 if (!coords.getType().equals("jar")) {
                     dep.setType(coords.getType());
                 }
-                if (!universalBomDepKeys.contains(new ArtifactKey(coords.getGroupId(), coords.getArtifactId(),
+                if (!universalBomDepKeys.contains(ArtifactKey.of(coords.getGroupId(), coords.getArtifactId(),
                         coords.getClassifier(), coords.getType()))) {
                     dep.setVersion(coords.getVersion());
                 }
@@ -1618,7 +1616,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         pom.setParent(parent);
 
         generatePlatformDescriptorModule(
-                new ArtifactCoords(bomArtifact.getGroupId(),
+                ArtifactCoords.of(bomArtifact.getGroupId(),
                         PlatformArtifacts.ensureCatalogArtifactId(bomArtifact.getArtifactId()),
                         bomArtifact.getVersion(), "json", bomArtifact.getVersion()),
                 pom, true, true, null, null);
@@ -2343,16 +2341,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         @Override
         public Artifact generatedBomCoords() {
-            if (generatedBomCoords == null) {
-                if (config.getRelease() == null || config.getRelease().getNext() == null) {
-                    generatedBomCoords = new DefaultArtifact(getUniversalBomArtifact().getGroupId(),
-                            originalBomCoords().getArtifactId(), null,
-                            "pom", originalBomCoords().getVersion());
-                } else {
-                    generatedBomCoords = toPomArtifact(config.getRelease().getNext());
-                }
-            }
-            return generatedBomCoords;
+            return generatedBomCoords == null
+                    ? generatedBomCoords = toPomArtifact(config.getGeneratedBom(getUniversalBomArtifact().getGroupId()))
+                    : generatedBomCoords;
         }
 
         @Override
@@ -2389,7 +2380,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
             final String currentCoords = config.getRelease().getNext();
             final String currentVersion = ArtifactCoords.fromString(currentCoords).getVersion();
-            return stackDescriptorCoords = new ArtifactCoords(generatedBomCoords().getGroupId(),
+            return stackDescriptorCoords = ArtifactCoords.of(generatedBomCoords().getGroupId(),
                     generatedBomCoords().getArtifactId() + BootstrapConstants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX,
                     currentVersion, "json", currentVersion);
         }
@@ -2397,7 +2388,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         @Override
         public ArtifactCoords descriptorCoords() {
             return descriptorCoords == null
-                    ? descriptorCoords = new ArtifactCoords(generatedBomCoords().getGroupId(),
+                    ? descriptorCoords = ArtifactCoords.of(generatedBomCoords().getGroupId(),
                             generatedBomCoords().getArtifactId() + BootstrapConstants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX,
                             generatedBomCoords().getVersion(), "json", generatedBomCoords().getVersion())
                     : descriptorCoords;
@@ -2406,7 +2397,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         @Override
         public ArtifactCoords propertiesCoords() {
             return propertiesCoords == null
-                    ? propertiesCoords = new ArtifactCoords(generatedBomCoords().getGroupId(),
+                    ? propertiesCoords = ArtifactCoords.of(generatedBomCoords().getGroupId(),
                             generatedBomCoords().getArtifactId() + BootstrapConstants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX,
                             null, "properties", generatedBomCoords().getVersion())
                     : propertiesCoords;
@@ -2452,7 +2443,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         @Override
         public Collection<ArtifactKey> extensionCatalog() {
-            return Collections.emptyList();
+            return List.of();
         }
 
         @Override
@@ -2465,7 +2456,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private static ArtifactKey toKey(Artifact a) {
-        return new ArtifactKey(a.getGroupId(), a.getArtifactId());
+        return ArtifactKey.ga(a.getGroupId(), a.getArtifactId());
     }
 
     private static DefaultArtifact toPomArtifact(String coords) {
@@ -2473,7 +2464,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private static DefaultArtifact toPomArtifact(ArtifactCoords coords) {
-        return new DefaultArtifact(coords.getGroupId(), coords.getArtifactId(), null, "pom", coords.getVersion());
+        return new DefaultArtifact(coords.getGroupId(), coords.getArtifactId(), ArtifactCoords.DEFAULT_CLASSIFIER,
+                ArtifactCoords.TYPE_POM, coords.getVersion());
     }
 
     private static Artifact toAetherArtifact(String coords) {

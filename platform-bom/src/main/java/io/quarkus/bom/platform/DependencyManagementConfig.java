@@ -1,7 +1,7 @@
 package io.quarkus.bom.platform;
 
-import io.quarkus.maven.ArtifactCoords;
-import io.quarkus.maven.ArtifactKey;
+import io.quarkus.maven.dependency.ArtifactCoords;
+import io.quarkus.maven.dependency.ArtifactKey;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
