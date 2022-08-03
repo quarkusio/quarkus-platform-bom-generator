@@ -625,37 +625,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             skippedDeps.remove(coords);
             remainingDeps.remove(coords);
             if (!excludeParentPoms) {
-                final ArtifactCoords pomCoords = coords.getType().equals(ArtifactCoords.TYPE_POM) ? coords
-                        : ArtifactCoords.pom(coords.getGroupId(), coords.getArtifactId(), coords.getVersion());
-                final Path pomXml;
-                try {
-                    pomXml = resolver.resolve(toAetherArtifact(pomCoords)).getArtifact().getFile().toPath();
-                } catch (BootstrapMavenException e) {
-                    throw new IllegalStateException("Failed to resolve " + pomCoords, e);
-                }
-                final Model model;
-                try {
-                    model = ModelUtils.readModel(pomXml);
-                } catch (IOException e) {
-                    throw new IllegalStateException("Failed to read " + pomXml, e);
-                }
-                final Parent parent = model.getParent();
-                if (parent != null) {
-                    String parentVersion = parent.getVersion();
-                    if (ModelUtils.isUnresolvedVersion(parentVersion)) {
-                        if (model.getVersion() == null || model.getVersion().equals(parentVersion)) {
-                            parentVersion = pomCoords.getVersion();
-                        } else {
-                            parentVersion = null;
-                        }
-                    }
-                    if (parentVersion != null) {
-                        addToBeBuilt(ArtifactCoords.pom(parent.getGroupId(), parent.getArtifactId(), parentVersion));
-                    } else {
-                        getLog().warn("Failed to resolve the version of" + parent.getGroupId() + ":" + parent.getArtifactId()
-                                + ":" + parent.getVersion() + " as a parent of " + pomCoords);
-                    }
-                }
+                addParentPomToBeBuilt(coords);
             }
             return true;
         }
@@ -665,6 +635,41 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             addToRemaining(coords);
         }
         return false;
+    }
+
+    private void addParentPomToBeBuilt(ArtifactCoords coords) {
+        final ArtifactCoords pomCoords = coords.getType().equals(ArtifactCoords.TYPE_POM) ? coords
+                : ArtifactCoords.pom(coords.getGroupId(), coords.getArtifactId(), coords.getVersion());
+        if (allDepsToBuild.contains(pomCoords)) {
+            return;
+        }
+        final Path pomXml;
+        try {
+            pomXml = resolver.resolve(toAetherArtifact(pomCoords)).getArtifact().getFile().toPath();
+        } catch (BootstrapMavenException e) {
+            throw new IllegalStateException("Failed to resolve " + pomCoords, e);
+        }
+        final Model model;
+        try {
+            model = ModelUtils.readModel(pomXml);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to read " + pomXml, e);
+        }
+        final Parent parent = model.getParent();
+        if (parent == null) {
+            return;
+        }
+        String parentVersion = parent.getVersion();
+        if (ModelUtils.isUnresolvedVersion(parentVersion)) {
+            if (model.getVersion() == null || model.getVersion().equals(parentVersion)) {
+                parentVersion = pomCoords.getVersion();
+            } else {
+                getLog().warn("Failed to resolve the version of" + parent.getGroupId() + ":" + parent.getArtifactId() + ":"
+                        + parent.getVersion() + " as a parent of " + pomCoords);
+                return;
+            }
+        }
+        addToBeBuilt(ArtifactCoords.pom(parent.getGroupId(), parent.getArtifactId(), parentVersion));
     }
 
     private void addToSkipped(ArtifactCoords coords) {
