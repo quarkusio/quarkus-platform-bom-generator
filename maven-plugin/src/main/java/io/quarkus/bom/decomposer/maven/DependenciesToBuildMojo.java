@@ -238,9 +238,11 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             if (targetBomCoords.getArtifactId().equals("quarkus-bom")) {
                 generatedCoreBomCoords = targetBomCoords;
             } else {
+                final String coreDescriptorArtifactId = "quarkus-bom"
+                        + BootstrapConstants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX;
                 for (ArtifactCoords c : otherDescriptorCoords) {
-                    if (c.getArtifactId().equals("quarkus-bom")) {
-                        generatedCoreBomCoords = c;
+                    if (c.getArtifactId().equals(coreDescriptorArtifactId)) {
+                        generatedCoreBomCoords = PlatformArtifacts.ensureBomArtifact(c);
                         break;
                     }
                 }
