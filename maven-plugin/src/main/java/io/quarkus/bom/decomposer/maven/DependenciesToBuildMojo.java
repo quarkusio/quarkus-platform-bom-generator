@@ -17,8 +17,10 @@ import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.paths.PathTree;
+import io.quarkus.registry.CatalogMergeUtility;
 import io.quarkus.registry.catalog.Extension;
 import io.quarkus.registry.catalog.ExtensionCatalog;
+import io.quarkus.registry.catalog.ExtensionOrigin;
 import io.quarkus.registry.util.PlatformArtifacts;
 import java.io.BufferedReader;
 import java.io.File;
@@ -176,7 +178,8 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     @Parameter(required = false)
     DependenciesToBuildConfig dependenciesToBuild;
 
-    private Set<ArtifactCoords> managedCoords;
+    private Set<ArtifactCoords> targetBomConstraints;
+    private Map<ArtifactCoords, List<Dependency>> enforcedConstraintsForBom = new HashMap<>();
     private final Set<ArtifactCoords> allDepsToBuild = new HashSet<>();
     private final Set<ArtifactCoords> nonManagedVisited = new HashSet<>();
     private final Set<ArtifactCoords> skippedDeps = new HashSet<>();
@@ -194,15 +197,16 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             logCodeRepos = true;
         }
 
-        ArtifactCoords bomCoords = ArtifactCoords.fromString(bom);
-        if (PlatformArtifacts.isCatalogArtifactId(bomCoords.getArtifactId())) {
-            bomCoords = ArtifactCoords.pom(bomCoords.getGroupId(),
-                    PlatformArtifacts.ensureBomArtifactId(bomCoords.getArtifactId()), bomCoords.getVersion());
+        ArtifactCoords targetBomCoords = ArtifactCoords.fromString(bom);
+        if (PlatformArtifacts.isCatalogArtifactId(targetBomCoords.getArtifactId())) {
+            targetBomCoords = ArtifactCoords.pom(targetBomCoords.getGroupId(),
+                    PlatformArtifacts.ensureBomArtifactId(targetBomCoords.getArtifactId()), targetBomCoords.getVersion());
         }
-        debug("Quarkus platform BOM %s", bomCoords);
-        final ArtifactCoords catalogCoords = ArtifactCoords.of(bomCoords.getGroupId(),
-                PlatformArtifacts.ensureCatalogArtifactId(bomCoords.getArtifactId()), bomCoords.getVersion(), "json",
-                bomCoords.getVersion());
+        debug("Quarkus platform BOM %s", targetBomCoords);
+        final ArtifactCoords catalogCoords = ArtifactCoords.of(targetBomCoords.getGroupId(),
+                PlatformArtifacts.ensureCatalogArtifactId(targetBomCoords.getArtifactId()), targetBomCoords.getVersion(),
+                "json",
+                targetBomCoords.getVersion());
         debug("Quarkus extension catalog %s", catalogCoords);
 
         try {
@@ -217,39 +221,45 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             throw new MojoExecutionException("Failed to initialize Maven artifact resolver", e);
         }
 
-        final Path jsonPath;
-        try {
-            jsonPath = resolver.resolve(toAetherArtifact(catalogCoords))
-                    .getArtifact().getFile().toPath();
-        } catch (BootstrapMavenException e) {
-            throw new MojoExecutionException("Failed to resolve the extension catalog", e);
+        ExtensionCatalog catalog = resolveCatalog(catalogCoords);
+
+        final List<Dependency> targetBomManagedDeps = getBomConstraints(targetBomCoords);
+        targetBomConstraints = new HashSet<>(targetBomManagedDeps.size());
+        for (Dependency d : targetBomManagedDeps) {
+            targetBomConstraints.add(toCoords(d.getArtifact()));
         }
 
-        final ExtensionCatalog catalog;
-        try {
-            debug("Parsing extension catalog %s", jsonPath);
-            catalog = ExtensionCatalog.fromFile(jsonPath);
-        } catch (IOException e) {
-            throw new MojoExecutionException("Failed to parse " + jsonPath, e);
-        }
+        final Collection<ArtifactCoords> otherDescriptorCoords = getOtherMemberDescriptorCoords(catalog);
+        if (!otherDescriptorCoords.isEmpty()) {
+            final String defaultPlatformGroupId = ArtifactCoords.fromString(platformConfig.getUniversal().getBom())
+                    .getGroupId();
+            final ArtifactCoords generatedCoreBomCoords = platformConfig.getCore().getGeneratedBom(defaultPlatformGroupId);
+            if (targetBomCoords.equals(generatedCoreBomCoords)) {
 
-        final Artifact bomArtifact = new DefaultArtifact(bomCoords.getGroupId(), bomCoords.getArtifactId(),
-                ArtifactCoords.DEFAULT_CLASSIFIER, ArtifactCoords.TYPE_POM, bomCoords.getVersion());
-        List<Dependency> managedDeps;
-        try {
-            managedDeps = resolver.resolveDescriptor(bomArtifact)
-                    .getManagedDependencies();
-        } catch (BootstrapMavenException e) {
-            throw new MojoExecutionException("Failed to resolve the descriptor of " + bomCoords, e);
-        }
-        if (managedDeps.isEmpty()) {
-            throw new MojoExecutionException(bomCoords.toCompactCoords()
-                    + " does not include any managed dependency or its descriptor could not be read");
-        }
+                enforcedConstraintsForBom.put(targetBomCoords, targetBomManagedDeps);
 
-        managedCoords = new HashSet<>(managedDeps.size());
-        for (Dependency d : managedDeps) {
-            managedCoords.add(toCoords(d.getArtifact()));
+                final List<ExtensionCatalog> catalogs = new ArrayList<>(otherDescriptorCoords.size() + 1);
+                catalogs.add(catalog);
+                for (ArtifactCoords descrCoords : otherDescriptorCoords) {
+                    final ExtensionCatalog otherCatalog = resolveCatalog(descrCoords);
+                    catalogs.add(otherCatalog);
+
+                    final ArtifactCoords otherBomCoords = otherCatalog.getBom();
+                    final List<Dependency> otherBomDeps = getBomConstraints(otherBomCoords);
+                    final List<Dependency> enforcedConstraints = new ArrayList<>(
+                            targetBomManagedDeps.size() + otherBomDeps.size());
+                    enforcedConstraints.addAll(otherBomDeps);
+                    enforcedConstraints.addAll(otherBomDeps);
+                    enforcedConstraintsForBom.put(otherBomCoords, enforcedConstraints);
+                }
+                catalog = CatalogMergeUtility.merge(catalogs);
+            } else {
+                final List<Dependency> bomConstraints = getBomConstraints(generatedCoreBomCoords);
+                bomConstraints.addAll(targetBomManagedDeps);
+                enforcedConstraintsForBom.put(targetBomCoords, bomConstraints);
+            }
+        } else {
+            enforcedConstraintsForBom.put(targetBomCoords, targetBomManagedDeps);
         }
 
         final List<Extension> supported = new ArrayList<>();
@@ -263,13 +273,16 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 continue;
             }
             supported.add(ext);
-            processExtensionArtifact(managedDeps,
+
+            final List<Dependency> extConstraints = getConstraintsForExtension(ext);
+
+            processExtensionArtifact(extConstraints,
                     ArtifactCoords.of(rtArtifact.getGroupId(), rtArtifact.getArtifactId(),
                             rtArtifact.getClassifier(), rtArtifact.getType(), rtArtifact.getVersion()));
 
             ArtifactCoords deploymentCoords = ArtifactCoords.jar(rtArtifact.getGroupId(),
                     rtArtifact.getArtifactId() + "-deployment", rtArtifact.getVersion());
-            if (!managedCoords.contains(deploymentCoords)) {
+            if (!targetBomConstraints.contains(deploymentCoords)) {
                 final Path rtJar;
                 try {
                     rtJar = resolver.resolve(toAetherArtifact(rtArtifact)).getArtifact().getFile().toPath();
@@ -294,21 +307,30 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                             "Failed to determine the corresponding deployment artifact for " + rtArtifact.toCompactCoords());
                 }
             }
-            processExtensionArtifact(managedDeps, deploymentCoords);
+            processExtensionArtifact(extConstraints, deploymentCoords);
         }
 
         if (dependenciesToBuild != null && !dependenciesToBuild.getIncludeArtifacts().isEmpty()) {
+            // this is a tricky case, these artifacts will be resolved against all the member BOMs
+            // we may want to have them configured per member instead of in the global config
+            final List<Dependency> enforcedConstraints = enforcedConstraintsForBom.get(targetBomCoords);
+            if (enforcedConstraints == null) {
+                throw new MojoExecutionException("Failed to locate enforced constraints for " + targetBomCoords);
+            }
             for (ArtifactCoords coords : dependenciesToBuild.getIncludeArtifacts()) {
-                processExtensionArtifact(managedDeps, coords);
+                processExtensionArtifact(enforcedConstraints, coords);
             }
         }
 
         try {
             int codeReposTotal = 0;
             if (logArtifactsToBuild && !allDepsToBuild.isEmpty()) {
-                logComment("Artifacts to be built from source from " + bomCoords.toCompactCoords() + ":");
+                logComment("Artifacts to be built from source from " + targetBomCoords.toCompactCoords() + ":");
                 if (logCodeRepos) {
-                    initReleaseRepos(decompose(bomArtifact, managedDeps, nonManagedVisited));
+                    final Artifact bomArtifact = new DefaultArtifact(targetBomCoords.getGroupId(),
+                            targetBomCoords.getArtifactId(),
+                            ArtifactCoords.DEFAULT_CLASSIFIER, ArtifactCoords.TYPE_POM, targetBomCoords.getVersion());
+                    initReleaseRepos(decompose(bomArtifact, targetBomManagedDeps, nonManagedVisited));
                     codeReposTotal = releaseRepos.size();
 
                     final Map<ReleaseId, ReleaseRepo> orderedMap = new LinkedHashMap<>(codeReposTotal);
@@ -371,7 +393,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 } else {
                     sb.append(" managed (stopping at the first non-managed one)");
                 }
-                sb.append(" dependencies of supported extensions from ").append(bomCoords.toCompactCoords())
+                sb.append(" dependencies of supported extensions from ").append(targetBomCoords.toCompactCoords())
                         .append(" will result in:");
                 logComment(sb.toString());
 
@@ -389,12 +411,60 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                     logComment(skippedDeps.size() + " dependency nodes skipped");
                 }
                 logComment((allDepsToBuild.size() + skippedDeps.size()) + " dependencies visited in total");
+                logComment(supported.size() + " out of " + catalog.getExtensions().size() + " extensions are supported");
             }
         } finally {
             if (fileOutput != null) {
                 fileOutput.close();
             }
         }
+    }
+
+    private List<Dependency> getConstraintsForExtension(Extension ext) throws MojoExecutionException {
+        for (ExtensionOrigin origin : ext.getOrigins()) {
+            List<Dependency> enforcedConstraints = enforcedConstraintsForBom.get(origin.getBom());
+            if (enforcedConstraints != null) {
+                return enforcedConstraints;
+            }
+        }
+        throw new MojoExecutionException("Failed to locate enforced constraints for " + ext.getArtifact());
+    }
+
+    private List<Dependency> getBomConstraints(ArtifactCoords bomCoords)
+            throws MojoExecutionException {
+        final Artifact bomArtifact = new DefaultArtifact(bomCoords.getGroupId(), bomCoords.getArtifactId(),
+                ArtifactCoords.DEFAULT_CLASSIFIER, ArtifactCoords.TYPE_POM, bomCoords.getVersion());
+        List<Dependency> managedDeps;
+        try {
+            managedDeps = resolver.resolveDescriptor(bomArtifact)
+                    .getManagedDependencies();
+        } catch (BootstrapMavenException e) {
+            throw new MojoExecutionException("Failed to resolve the descriptor of " + bomCoords, e);
+        }
+        if (managedDeps.isEmpty()) {
+            throw new MojoExecutionException(bomCoords.toCompactCoords()
+                    + " does not include any managed dependency or its descriptor could not be read");
+        }
+        return managedDeps;
+    }
+
+    private ExtensionCatalog resolveCatalog(final ArtifactCoords catalogCoords) throws MojoExecutionException {
+        final Path jsonPath;
+        try {
+            jsonPath = resolver.resolve(toAetherArtifact(catalogCoords))
+                    .getArtifact().getFile().toPath();
+        } catch (BootstrapMavenException e) {
+            throw new MojoExecutionException("Failed to resolve the extension catalog", e);
+        }
+
+        ExtensionCatalog catalog;
+        try {
+            debug("Parsing extension catalog %s", jsonPath);
+            catalog = ExtensionCatalog.fromFile(jsonPath);
+        } catch (IOException e) {
+            throw new MojoExecutionException("Failed to parse " + jsonPath, e);
+        }
+        return catalog;
     }
 
     private void processExtensionArtifact(List<Dependency> managedDeps, ArtifactCoords extArtifact) {
@@ -411,7 +481,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         }
 
         if (logTrees) {
-            if (managedCoords.contains(extArtifact)) {
+            if (targetBomConstraints.contains(extArtifact)) {
                 logComment(extArtifact.toCompactCoords());
             } else {
                 logComment(extArtifact.toCompactCoords() + NOT_MANAGED);
@@ -585,7 +655,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                         buf.append("  ");
                     }
                     buf.append(coords.toCompactCoords());
-                    if (!managedCoords.contains(coords)) {
+                    if (!targetBomConstraints.contains(coords)) {
                         buf.append(' ').append(NOT_MANAGED);
                     }
                     logComment(buf.toString());
@@ -614,7 +684,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     }
 
     private boolean addToBeBuilt(ArtifactCoords coords) {
-        final boolean managed = managedCoords.contains(coords);
+        final boolean managed = targetBomConstraints.contains(coords);
         if (!managed) {
             nonManagedVisited.add(coords);
         }
@@ -752,5 +822,28 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         boolean isRoot() {
             return parents.isEmpty();
         }
+    }
+
+    private static Collection<ArtifactCoords> getOtherMemberDescriptorCoords(ExtensionCatalog catalog) {
+        Map<String, Object> map = catalog.getMetadata();
+        if (map == null) {
+            return List.of();
+        }
+        Object o = map.get("platform-release");
+        if (o == null || !(o instanceof Map)) {
+            return List.of();
+        }
+        o = ((Map<?, ?>) o).get("members");
+        if (o == null || !(o instanceof List)) {
+            return List.of();
+        }
+        final List<?> list = (List<?>) o;
+        final List<ArtifactCoords> result = new ArrayList<>(list.size());
+        list.forEach(i -> {
+            if (!i.equals(catalog.getId())) {
+                result.add(ArtifactCoords.fromString(i.toString()));
+            }
+        });
+        return result;
     }
 }
