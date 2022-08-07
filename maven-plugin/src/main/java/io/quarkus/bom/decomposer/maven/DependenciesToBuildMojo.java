@@ -1,21 +1,14 @@
 package io.quarkus.bom.decomposer.maven;
 
-import io.quarkus.bom.decomposer.BomDecomposer;
-import io.quarkus.bom.decomposer.BomDecomposer.BomDecomposerConfig;
-import io.quarkus.bom.decomposer.BomDecomposerException;
-import io.quarkus.bom.decomposer.DecomposedBom;
-import io.quarkus.bom.decomposer.ProjectDependency;
-import io.quarkus.bom.decomposer.ProjectRelease;
 import io.quarkus.bom.decomposer.ReleaseId;
+import io.quarkus.bom.decomposer.ReleaseIdResolver;
 import io.quarkus.bom.decomposer.maven.platformgen.DependenciesToBuildConfig;
 import io.quarkus.bom.decomposer.maven.platformgen.PlatformConfig;
-import io.quarkus.bom.resolver.ArtifactResolverProvider;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.maven.dependency.ArtifactCoords;
-import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.paths.PathTree;
 import io.quarkus.registry.CatalogMergeUtility;
 import io.quarkus.registry.catalog.Extension;
@@ -43,6 +36,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
+import org.apache.maven.model.DependencyManagement;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Parent;
 import org.apache.maven.plugin.AbstractMojo;
@@ -167,10 +161,16 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     boolean logCodeRepoGraph;
 
     /*
-     * Whether to include parent POMs into the list to be built from source
+     * Whether to exclude parent POMs from the list of artifacts to be built from source
      */
     @Parameter(property = "excludeParentPoms", required = false)
     boolean excludeParentPoms;
+
+    /*
+     * Whether to exclude BOMs imported in the POMs of artifacts to be built from the list of artifacts to be built from source
+     */
+    @Parameter(property = "excludeBomImports", required = false)
+    boolean excludeBomImports;
 
     @Parameter(required = false)
     PlatformConfig platformConfig;
@@ -187,6 +187,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
 
     private final Map<ArtifactCoords, ArtifactDependency> artifactDeps = new HashMap<>();
     private final Map<ReleaseId, ReleaseRepo> releaseRepos = new HashMap<>();
+    private final Map<ArtifactCoords, Map<String, String>> effectivePomProps = new HashMap<>();
 
     private MavenArtifactResolver resolver;
 
@@ -343,10 +344,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             if (logArtifactsToBuild && !allDepsToBuild.isEmpty()) {
                 logComment("Artifacts to be built from source from " + targetBomCoords.toCompactCoords() + ":");
                 if (logCodeRepos) {
-                    final Artifact bomArtifact = new DefaultArtifact(targetBomCoords.getGroupId(),
-                            targetBomCoords.getArtifactId(),
-                            ArtifactCoords.DEFAULT_CLASSIFIER, ArtifactCoords.TYPE_POM, targetBomCoords.getVersion());
-                    initReleaseRepos(decompose(bomArtifact, targetBomManagedDeps, nonManagedVisited));
+                    initReleaseRepos();
                     codeReposTotal = releaseRepos.size();
 
                     final Map<ReleaseId, ReleaseRepo> orderedMap = new LinkedHashMap<>(codeReposTotal);
@@ -528,9 +526,13 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             }
         }
 
-        if (addToBeBuilt(extArtifact)) {
+        if (addExtensionDependencyToBuild(extArtifact)) {
+            final ArtifactDependency extDep = getOrCreateArtifactDep(extArtifact);
+            if (!excludeParentPoms && logTrees) {
+                extDep.logBomImportsAndParents();
+            }
             for (DependencyNode d : root.getChildren()) {
-                processNodes(logCodeRepos ? getOrCreateArtifactDep(extArtifact) : null, d, 1, false);
+                processNodes(extDep, d, 1, false);
             }
         } else if (logRemaining) {
             for (DependencyNode d : root.getChildren()) {
@@ -549,49 +551,20 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 a.getType(), a.getVersion());
     }
 
-    private DecomposedBom decompose(Artifact bomArtifact, Collection<Dependency> managed, Collection<ArtifactCoords> nonManaged)
-            throws MojoExecutionException {
-        final BomDecomposerConfig config = BomDecomposer.config()
-                .bomArtifact(bomArtifact)
-                .logger(new MojoMessageWriter(getLog()))
-                .loadReleaseDetectors(false)
-                .mavenArtifactResolver(ArtifactResolverProvider.get(resolver));
-
-        if (nonManaged != null && !nonManaged.isEmpty()) {
-            final List<Dependency> allDeps = new ArrayList<>(managed.size() + nonManaged.size());
-            allDeps.addAll(managed);
-            for (ArtifactCoords c : nonManaged) {
-                allDeps.add(new Dependency(
-                        toAetherArtifact(c),
-                        JavaScopes.COMPILE));
-            }
-            config.dependencies(allDeps);
-        }
-
-        DecomposedBom decomposedBom = null;
-        try {
-            decomposedBom = config.decompose();
-        } catch (BomDecomposerException e) {
-            throw new MojoExecutionException("Failed to decompose BOM " + bomArtifact, e);
-        }
-        return decomposedBom;
-    }
-
-    private void initReleaseRepos(DecomposedBom decomposedBom) {
-        final Map<ArtifactKey, ProjectDependency> deps = new HashMap<>();
-        decomposedBom.releases().forEach(r -> {
-            r.dependencies().forEach(d -> deps.put(d.key(), d));
-            getOrCreateRepo(r);
-        });
+    private void initReleaseRepos() throws MojoExecutionException {
+        final ReleaseIdResolver idResolver = new ReleaseIdResolver(resolver);
         final Map<ArtifactCoords, ReleaseId> artifactReleases = new HashMap<>();
         for (ArtifactCoords c : allDepsToBuild) {
-            final ProjectDependency dep = deps.get(c.getKey());
-            if (dep == null) {
-                throw new IllegalStateException("Failed to find dependency for " + c.getKey());
+            final ReleaseId releaseId;
+            try {
+                releaseId = idResolver.releaseId(toAetherArtifact(c));
+            } catch (Exception e) {
+                throw new MojoExecutionException("Failed to resolve release id for " + c, e);
             }
-            getRepo(dep.releaseId()).artifacts.add(c);
-            artifactReleases.put(c, dep.releaseId());
+            getOrCreateRepo(releaseId).artifacts.add(c);
+            artifactReleases.put(c, releaseId);
         }
+
         final Iterator<Map.Entry<ReleaseId, ReleaseRepo>> i = releaseRepos.entrySet().iterator();
         while (i.hasNext()) {
             if (i.next().getValue().artifacts.isEmpty()) {
@@ -600,7 +573,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         }
         for (ArtifactDependency d : artifactDeps.values()) {
             final ReleaseRepo repo = getRepo(artifactReleases.get(d.coords));
-            for (ArtifactDependency c : d.children.values()) {
+            for (ArtifactDependency c : d.getAllDependencies()) {
                 repo.addRepoDependency(getRepo(artifactReleases.get(c.coords)));
             }
         }
@@ -688,7 +661,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         if (remaining) {
             addToRemaining(coords);
         } else if (this.level < 0 || level <= this.level) {
-            if (addToBeBuilt(coords)) {
+            if (addExtensionDependencyToBuild(coords)) {
                 if (logTrees) {
                     final StringBuilder buf = new StringBuilder();
                     for (int i = 0; i < level; ++i) {
@@ -703,6 +676,9 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 if (parent != null) {
                     artDep = getOrCreateArtifactDep(coords);
                     parent.addDependency(artDep);
+                    if (logTrees) {
+                        artDep.logBomImportsAndParents(level + 1);
+                    }
                 }
             } else if (logRemaining) {
                 remaining = true;
@@ -723,7 +699,17 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         }
     }
 
-    private boolean addToBeBuilt(ArtifactCoords coords) {
+    private boolean addExtensionDependencyToBuild(ArtifactCoords coords) {
+        if (!addArtifactToBuild(coords)) {
+            return false;
+        }
+        if (!excludeParentPoms) {
+            addImportedBomsAndParentPomToBuild(coords);
+        }
+        return true;
+    }
+
+    private boolean addArtifactToBuild(ArtifactCoords coords) {
         final boolean managed = targetBomConstraints.contains(coords);
         if (!managed) {
             nonManagedVisited.add(coords);
@@ -734,9 +720,6 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             allDepsToBuild.add(coords);
             skippedDeps.remove(coords);
             remainingDeps.remove(coords);
-            if (!excludeParentPoms) {
-                addParentPomToBeBuilt(coords);
-            }
             return true;
         }
 
@@ -747,11 +730,11 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         return false;
     }
 
-    private void addParentPomToBeBuilt(ArtifactCoords coords) {
+    private Map<String, String> addImportedBomsAndParentPomToBuild(ArtifactCoords coords) {
         final ArtifactCoords pomCoords = coords.getType().equals(ArtifactCoords.TYPE_POM) ? coords
                 : ArtifactCoords.pom(coords.getGroupId(), coords.getArtifactId(), coords.getVersion());
         if (allDepsToBuild.contains(pomCoords)) {
-            return;
+            return effectivePomProps.getOrDefault(pomCoords, Map.of());
         }
         final Path pomXml;
         try {
@@ -765,21 +748,74 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         } catch (IOException e) {
             throw new IllegalStateException("Failed to read " + pomXml, e);
         }
+        final ArtifactDependency artDep = getOrCreateArtifactDep(coords);
+        Map<String, String> parentPomProps = null;
         final Parent parent = model.getParent();
-        if (parent == null) {
-            return;
-        }
-        String parentVersion = parent.getVersion();
-        if (ModelUtils.isUnresolvedVersion(parentVersion)) {
-            if (model.getVersion() == null || model.getVersion().equals(parentVersion)) {
-                parentVersion = pomCoords.getVersion();
-            } else {
-                getLog().warn("Failed to resolve the version of" + parent.getGroupId() + ":" + parent.getArtifactId() + ":"
-                        + parent.getVersion() + " as a parent of " + pomCoords);
-                return;
+        if (parent != null) {
+            String parentVersion = parent.getVersion();
+            if (ModelUtils.isUnresolvedVersion(parentVersion)) {
+                if (model.getVersion() == null || model.getVersion().equals(parentVersion)) {
+                    parentVersion = pomCoords.getVersion();
+                } else {
+                    getLog().warn("Failed to resolve the version of" + parent.getGroupId() + ":" + parent.getArtifactId() + ":"
+                            + parent.getVersion() + " as a parent of " + pomCoords);
+                    parentVersion = null;
+                }
+            }
+            if (parentVersion != null) {
+                final ArtifactCoords parentPomCoords = ArtifactCoords.pom(parent.getGroupId(), parent.getArtifactId(),
+                        parentVersion);
+                if (!isExcluded(parentPomCoords)) {
+                    artDep.setParentPom(getOrCreateArtifactDep(parentPomCoords));
+                    parentPomProps = addImportedBomsAndParentPomToBuild(parentPomCoords);
+                    addArtifactToBuild(parentPomCoords);
+                }
             }
         }
-        addToBeBuilt(ArtifactCoords.pom(parent.getGroupId(), parent.getArtifactId(), parentVersion));
+
+        if (excludeBomImports) {
+            return Map.of();
+        }
+        Map<String, String> pomProps = toMap(model.getProperties());
+        pomProps.put("project.version", pomCoords.getVersion());
+        if (parentPomProps != null) {
+            final Map<String, String> tmp = new HashMap<>(parentPomProps.size() + pomProps.size());
+            tmp.putAll(parentPomProps);
+            tmp.putAll(pomProps);
+            pomProps = tmp;
+        }
+        effectivePomProps.put(pomCoords, pomProps);
+        addImportedBomsToBuild(artDep, model, pomProps);
+        return pomProps;
+    }
+
+    private void addImportedBomsToBuild(ArtifactDependency pomArtDep, Model model, Map<String, String> effectiveProps) {
+        final DependencyManagement dm = model.getDependencyManagement();
+        if (dm == null) {
+            return;
+        }
+        for (org.apache.maven.model.Dependency d : dm.getDependencies()) {
+            if ("import".equals(d.getScope()) && ArtifactCoords.TYPE_POM.equals(d.getType())) {
+                String version = d.getVersion();
+                if (version.startsWith("${") && version.endsWith("}")) {
+                    final String name = version.substring(2, version.length() - 1);
+                    version = effectiveProps.get(name);
+                    if (version == null) {
+                        getLog().warn("Failed to resolve the version of " + d);
+                        continue;
+                    }
+                }
+                final ArtifactCoords bomCoords = ArtifactCoords.pom(d.getGroupId(), d.getArtifactId(), version);
+                if (!isExcluded(bomCoords)) {
+                    if (pomArtDep != null) {
+                        final ArtifactDependency bomDep = getOrCreateArtifactDep(bomCoords);
+                        pomArtDep.addBomImport(bomDep);
+                    }
+                    addImportedBomsAndParentPomToBuild(bomCoords);
+                    addArtifactToBuild(bomCoords);
+                }
+            }
+        }
     }
 
     private void addToSkipped(ArtifactCoords coords) {
@@ -816,21 +852,68 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         return artifactDeps.computeIfAbsent(c, k -> new ArtifactDependency(c));
     }
 
-    private static class ArtifactDependency {
+    private class ArtifactDependency {
         final ArtifactCoords coords;
         final Map<ArtifactCoords, ArtifactDependency> children = new LinkedHashMap<>();
+        final Map<ArtifactCoords, ArtifactDependency> bomImports = new LinkedHashMap<>();
+        ArtifactDependency parentPom;
 
         ArtifactDependency(ArtifactCoords coords) {
             this.coords = coords;
         }
 
+        public void addBomImport(ArtifactDependency bomDep) {
+            bomImports.put(bomDep.coords, bomDep);
+        }
+
+        public void setParentPom(ArtifactDependency parentPom) {
+            this.parentPom = parentPom;
+        }
+
         void addDependency(ArtifactDependency d) {
             children.putIfAbsent(d.coords, d);
         }
+
+        Iterable<ArtifactDependency> getAllDependencies() {
+            final List<ArtifactDependency> list = new ArrayList<>(children.size() + bomImports.size() + 1);
+            if (parentPom != null) {
+                list.add(parentPom);
+            }
+            list.addAll(bomImports.values());
+            list.addAll(children.values());
+            return list;
+        }
+
+        private void logBomImportsAndParents() {
+            logBomImportsAndParents(1);
+        }
+
+        private void logBomImportsAndParents(int depth) {
+            if (parentPom == null && bomImports.isEmpty()) {
+                return;
+            }
+            final StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < depth; ++i) {
+                sb.append("  ");
+            }
+            final String offset = sb.toString();
+            if (parentPom != null) {
+                sb.setLength(0);
+                sb.append(offset).append(parentPom.coords.toCompactCoords()).append(" [parent pom]");
+                logComment(sb.toString());
+                parentPom.logBomImportsAndParents(depth + 1);
+            }
+            for (ArtifactDependency d : bomImports.values()) {
+                sb.setLength(0);
+                sb.append(offset).append(d.coords.toCompactCoords()).append(" [bom import]");
+                logComment(sb.toString());
+                d.logBomImportsAndParents(depth + 1);
+            }
+        }
     }
 
-    private ReleaseRepo getOrCreateRepo(ProjectRelease release) {
-        return releaseRepos.computeIfAbsent(release.id(), k -> new ReleaseRepo(release));
+    private ReleaseRepo getOrCreateRepo(ReleaseId id) {
+        return releaseRepos.computeIfAbsent(id, k -> new ReleaseRepo(id));
     }
 
     private ReleaseRepo getRepo(ReleaseId id) {
@@ -839,17 +922,17 @@ public class DependenciesToBuildMojo extends AbstractMojo {
 
     private static class ReleaseRepo {
 
-        final ProjectRelease release;
+        final ReleaseId id;
         final List<ArtifactCoords> artifacts = new ArrayList<>();
         final Map<ReleaseId, ReleaseRepo> parents = new HashMap<>();
         final Map<ReleaseId, ReleaseRepo> dependencies = new LinkedHashMap<>();
 
-        ReleaseRepo(ProjectRelease release) {
-            this.release = release;
+        ReleaseRepo(ReleaseId release) {
+            this.id = release;
         }
 
         ReleaseId id() {
-            return release.id();
+            return id;
         }
 
         void addRepoDependency(ReleaseRepo repo) {
@@ -885,5 +968,17 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             }
         });
         return result;
+    }
+
+    private static Map<String, String> toMap(Properties props) {
+        final Map<String, String> map = new HashMap<>(props.size());
+        for (Map.Entry<?, ?> e : props.entrySet()) {
+            map.put(toString(e.getKey()), toString(e.getValue()));
+        }
+        return map;
+    }
+
+    private static String toString(Object o) {
+        return o == null ? null : o.toString();
     }
 }
