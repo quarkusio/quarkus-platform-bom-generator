@@ -778,6 +778,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         }
         Map<String, String> pomProps = toMap(model.getProperties());
         pomProps.put("project.version", pomCoords.getVersion());
+        pomProps.put("project.groupId", pomCoords.getGroupId());
         if (parentPomProps != null) {
             final Map<String, String> tmp = new HashMap<>(parentPomProps.size() + pomProps.size());
             tmp.putAll(parentPomProps);
@@ -796,16 +797,12 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         }
         for (org.apache.maven.model.Dependency d : dm.getDependencies()) {
             if ("import".equals(d.getScope()) && ArtifactCoords.TYPE_POM.equals(d.getType())) {
-                String version = d.getVersion();
-                if (version.startsWith("${") && version.endsWith("}")) {
-                    final String name = version.substring(2, version.length() - 1);
-                    version = effectiveProps.get(name);
-                    if (version == null) {
-                        getLog().warn("Failed to resolve the version of " + d);
-                        continue;
-                    }
+                final String groupId = resolveProperty(d.getGroupId(), d, effectiveProps);
+                final String version = resolveProperty(d.getVersion(), d, effectiveProps);
+                if (groupId == null || version == null) {
+                    continue;
                 }
-                final ArtifactCoords bomCoords = ArtifactCoords.pom(d.getGroupId(), d.getArtifactId(), version);
+                final ArtifactCoords bomCoords = ArtifactCoords.pom(groupId, d.getArtifactId(), version);
                 if (!isExcluded(bomCoords)) {
                     if (pomArtDep != null) {
                         final ArtifactDependency bomDep = getOrCreateArtifactDep(bomCoords);
@@ -816,6 +813,19 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 }
             }
         }
+    }
+
+    private String resolveProperty(String expr, org.apache.maven.model.Dependency dep, Map<String, String> props) {
+        if (expr.startsWith("${") && expr.endsWith("}")) {
+            final String name = expr.substring(2, expr.length() - 1);
+            final String value = props.get(name);
+            if (value == null) {
+                getLog().warn("Failed to resolve " + value + " from " + dep);
+                return null;
+            }
+            return value;
+        }
+        return expr;
     }
 
     private void addToSkipped(ArtifactCoords coords) {
