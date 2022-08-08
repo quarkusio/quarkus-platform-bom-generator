@@ -143,9 +143,15 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     @Parameter(required = true, defaultValue = "${project.build.directory}/reports")
     File reportsDir;
 
+    @Parameter(required = true, defaultValue = "${project.build.directory}")
+    File buildDir;
+
     @Parameter(required = true)
     PlatformConfig platformConfig;
     private PlatformReleaseConfig platformReleaseConfig;
+
+    @Parameter(required = false)
+    DependenciesToBuildConfig dependenciesToBuild;
 
     @Parameter(required = true, defaultValue = "${project.build.directory}/updated-pom.xml")
     File updatedPom;
@@ -213,7 +219,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Model pom = newModel();
         final String rootArtifactIdBase = getArtifactIdBase(project.getModel());
         pom.setArtifactId(rootArtifactIdBase + "-parent");
-        pom.setPackaging("pom");
+        pom.setPackaging(ArtifactCoords.TYPE_POM);
         pom.setName(artifactIdToName(rootArtifactIdBase) + " - Parent");
 
         final File pomXml = new File(outputDir, "pom.xml");
@@ -257,6 +263,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         if (platformConfig.getAttachedMavenPlugin() != null) {
             generateMavenPluginModule(pom);
+        }
+
+        if (dependenciesToBuild != null) {
+            generateDepsToBuildModule(pom);
         }
 
         if (platformConfig.getGenerateMavenRepoZip() != null) {
@@ -304,6 +314,87 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 }
             }
         }
+    }
+
+    private void generateDepsToBuildModule(Model parentPom) throws MojoExecutionException {
+        final Model pom = newModel();
+        final String artifactId = "quarkus-dependencies-to-build";
+        pom.setArtifactId(artifactId);
+        pom.setPackaging(ArtifactCoords.TYPE_POM);
+        pom.setName(getNameBase(parentPom) + " " + artifactIdToName(artifactId));
+        parentPom.addModule(artifactId);
+        final File pomXml = getPomFile(parentPom, artifactId);
+        pom.setPomFile(pomXml);
+        final Parent parent = new Parent();
+        parent.setGroupId(ModelUtils.getGroupId(parentPom));
+        parent.setArtifactId(parentPom.getArtifactId());
+        parent.setVersion(ModelUtils.getVersion(parentPom));
+        parent.setRelativePath(pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
+        pom.setParent(parent);
+        Utils.skipInstallAndDeploy(pom);
+
+        Plugin plugin = new Plugin();
+        Build build = pom.getBuild();
+        if (build == null) {
+            build = new Build();
+            pom.setBuild(build);
+        }
+        build.addPlugin(plugin);
+        plugin.setGroupId(pluginDescriptor().getGroupId());
+        plugin.setArtifactId(pluginDescriptor().getArtifactId());
+
+        Profile profile = new Profile();
+        profile.setId("depsToBuild");
+        pom.addProfile(profile);
+        final Activation activation = new Activation();
+        profile.setActivation(activation);
+        final ActivationProperty ap = new ActivationProperty();
+        activation.setProperty(ap);
+        ap.setName("depsToBuild");
+
+        build = new Build();
+        profile.setBuild(build);
+
+        PluginManagement pm = new PluginManagement();
+        build.setPluginManagement(pm);
+        plugin = new Plugin();
+        pm.addPlugin(plugin);
+        plugin.setGroupId(pluginDescriptor().getGroupId());
+        plugin.setArtifactId(pluginDescriptor().getArtifactId());
+
+        final StringBuilder sb = new StringBuilder();
+        for (PlatformMemberImpl m : members.values()) {
+            if (!m.config.isHidden() && m.config.isEnabled()) {
+                sb.append("quarkus-platform-bom:dependencies-to-build@").append(m.generatedBomCoords().getArtifactId())
+                        .append(' ');
+            }
+        }
+        build.setDefaultGoal(sb.toString());
+
+        Path outputDir = buildDir.toPath().resolve("dependencies-to-build");
+        final String prefix = pomXml.toPath().getParent().relativize(outputDir).toString();
+        for (PlatformMemberImpl m : members.values()) {
+            if (m.config.isHidden() || !m.config.isEnabled()) {
+                continue;
+            }
+            final PluginExecution exec = new PluginExecution();
+            plugin.addExecution(exec);
+            exec.setId(m.generatedBomCoords().getArtifactId());
+            exec.setPhase("process-resources");
+            exec.addGoal("dependencies-to-build");
+            final Xpp3Dom config = new Xpp3Dom("configuration");
+            exec.setConfiguration(config);
+            final Xpp3Dom bom = new Xpp3Dom("bom");
+            bom.setValue(m.generatedBomCoords().getGroupId() + ":" + m.generatedBomCoords().getArtifactId() + ":"
+                    + getDependencyVersion(pom, m.descriptorCoords()));
+            config.addChild(bom);
+            final Xpp3Dom outputFile = new Xpp3Dom("outputFile");
+            //outputFile.setValue("${project.build.directory}/" + m.generatedBomCoords().getArtifactId() + "-deps-to-build.txt");
+            outputFile.setValue(prefix + "/" + m.generatedBomCoords().getArtifactId() + "-deps-to-build.txt");
+            config.addChild(outputFile);
+        }
+
+        persistPom(pom);
     }
 
     private static void generateReleasesReport(DecomposedBom originalBom, Path outputFile)
@@ -957,7 +1048,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private static boolean isIrrelevantConstraint(final Artifact a) {
-        return !a.getExtension().equals("jar")
+        return !a.getExtension().equals(ArtifactCoords.TYPE_JAR)
                 || PlatformArtifacts.isCatalogArtifactId(a.getArtifactId())
                 || a.getArtifactId().endsWith(Constants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX)
                 || "sources".equals(a.getClassifier())
@@ -1657,7 +1748,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         if (!descriptorCoords.getVersion().equals(ModelUtils.getVersion(parentPom))) {
             pom.setVersion(descriptorCoords.getVersion());
         }
-        pom.setPackaging("pom");
+        pom.setPackaging(ArtifactCoords.TYPE_POM);
         pom.setName(getNameBase(parentPom) + " Quarkus Platform Descriptor");
 
         final Parent parent = new Parent();
@@ -1864,7 +1955,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Dependency dep = new Dependency();
         dep.setGroupId(descriptorCoords.getGroupId());
         dep.setArtifactId(bomArtifact);
-        dep.setType("pom");
+        dep.setType(ArtifactCoords.TYPE_POM);
         dep.setVersion(getDependencyVersion(pom, descriptorCoords));
         pom.addDependency(dep);
 
