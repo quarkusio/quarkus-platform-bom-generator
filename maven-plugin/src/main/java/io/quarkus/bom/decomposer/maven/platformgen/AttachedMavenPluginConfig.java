@@ -5,6 +5,7 @@ public class AttachedMavenPluginConfig {
     private String originalPluginCoords;
     private String targetPluginCoords;
     private Boolean importSources;
+    private Boolean flattenPom;
 
     public String getOriginalPluginCoords() {
         return originalPluginCoords;
@@ -28,5 +29,13 @@ public class AttachedMavenPluginConfig {
 
     public boolean isImportSources() {
         return importSources == null ? true : importSources.booleanValue();
+    }
+
+    public void setFlattenPom(boolean flattenPom) {
+        this.flattenPom = flattenPom;
+    }
+
+    public boolean isFlattenPom() {
+        return flattenPom == null ? true : flattenPom.booleanValue();
     }
 }
