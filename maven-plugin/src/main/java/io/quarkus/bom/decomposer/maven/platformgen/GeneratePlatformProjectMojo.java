@@ -525,19 +525,18 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final String moduleName = targetCoords.getArtifactId();
         parentPom.addModule(moduleName);
 
-        final ArtifactCoords originalCoords = ArtifactCoords
-                .fromString(platformConfig.getAttachedMavenPlugin().getOriginalPluginCoords());
-
         if (platformConfig.getAttachedMavenPlugin().isImportSources()) {
-            importOriginalPluginSources(parentPom, moduleName, originalCoords, targetCoords);
+            importOriginalPluginSources(parentPom, moduleName, platformConfig.getAttachedMavenPlugin(), targetCoords);
         } else {
-            republishOriginalPluginBinary(parentPom, moduleName, targetCoords, originalCoords);
+            republishOriginalPluginBinary(parentPom, moduleName, targetCoords, ArtifactCoords
+                    .fromString(platformConfig.getAttachedMavenPlugin().getOriginalPluginCoords()));
         }
     }
 
     private void importOriginalPluginSources(Model parentPom, final String moduleName,
-            final ArtifactCoords originalCoords, final ArtifactCoords targetCoords)
+            AttachedMavenPluginConfig pluginConfig, final ArtifactCoords targetCoords)
             throws MojoExecutionException {
+        final ArtifactCoords originalCoords = ArtifactCoords.fromString(pluginConfig.getOriginalPluginCoords());
         final Path sourcesJar;
         try {
             sourcesJar = nonWorkspaceResolver().resolve(new DefaultArtifact(originalCoords.getGroupId(),
@@ -700,7 +699,45 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
         }
 
+        if (pluginConfig.isFlattenPom()) {
+            Build build = pom.getBuild();
+            if (build == null) {
+                build = new Build();
+                pom.setBuild(build);
+            }
+            Plugin plugin = new Plugin();
+            build.addPlugin(plugin);
+            plugin.setGroupId("org.codehaus.mojo");
+            plugin.setArtifactId("flatten-maven-plugin");
+            PluginExecution e = new PluginExecution();
+            plugin.addExecution(e);
+            e.setId("flatten");
+            e.setPhase("process-resources");
+            e.addGoal("flatten");
+            Xpp3Dom config = new Xpp3Dom("configuration");
+            e.setConfiguration(config);
+
+            config.addChild(textDomElement("flattenMode", "oss"));
+
+            Xpp3Dom pomElements = new Xpp3Dom("pomElements");
+            config.addChild(pomElements);
+            pomElements.addChild(textDomElement("repositories", "remove"));
+            pomElements.addChild(textDomElement("build", "remove"));
+
+            e = new PluginExecution();
+            plugin.addExecution(e);
+            e.setId("flatten.clean");
+            e.setPhase("clean");
+            e.addGoal("clean");
+        }
+
         persistPom(pom);
+    }
+
+    private static Xpp3Dom textDomElement(String name, String value) {
+        final Xpp3Dom e = new Xpp3Dom(name);
+        e.setValue(value);
+        return e;
     }
 
     private ArtifactKey getKey(Dependency d) {
