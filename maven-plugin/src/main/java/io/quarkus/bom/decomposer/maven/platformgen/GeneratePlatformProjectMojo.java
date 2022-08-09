@@ -384,14 +384,11 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             exec.addGoal("dependencies-to-build");
             final Xpp3Dom config = new Xpp3Dom("configuration");
             exec.setConfiguration(config);
-            final Xpp3Dom bom = new Xpp3Dom("bom");
-            bom.setValue(m.generatedBomCoords().getGroupId() + ":" + m.generatedBomCoords().getArtifactId() + ":"
-                    + getDependencyVersion(pom, m.descriptorCoords()));
-            config.addChild(bom);
-            final Xpp3Dom outputFile = new Xpp3Dom("outputFile");
-            //outputFile.setValue("${project.build.directory}/" + m.generatedBomCoords().getArtifactId() + "-deps-to-build.txt");
-            outputFile.setValue(prefix + "/" + m.generatedBomCoords().getArtifactId() + "-deps-to-build.txt");
-            config.addChild(outputFile);
+            config.addChild(textDomElement("bom",
+                    m.generatedBomCoords().getGroupId() + ":" + m.generatedBomCoords().getArtifactId() + ":"
+                            + getDependencyVersion(pom, m.descriptorCoords())));
+            config.addChild(
+                    textDomElement("outputFile", prefix + "/" + m.generatedBomCoords().getArtifactId() + "-deps-to-build.txt"));
         }
 
         persistPom(pom);
@@ -798,12 +795,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         exec.addGoal("attach-maven-plugin");
         Xpp3Dom config = new Xpp3Dom("configuration");
         exec.setConfiguration(config);
-        Xpp3Dom e = new Xpp3Dom("originalPluginCoords");
-        e.setValue(platformConfig.getAttachedMavenPlugin().getOriginalPluginCoords());
-        config.addChild(e);
-        e = new Xpp3Dom("targetPluginCoords");
-        e.setValue(platformConfig.getAttachedMavenPlugin().getTargetPluginCoords());
-        config.addChild(e);
+        config.addChild(
+                textDomElement("originalPluginCoords", platformConfig.getAttachedMavenPlugin().getOriginalPluginCoords()));
+        config.addChild(textDomElement("targetPluginCoords", platformConfig.getAttachedMavenPlugin().getTargetPluginCoords()));
 
         // keep the previous plugin-help.xml path to avoid re-compiling the HelpMojo
         plugin = new Plugin();
@@ -818,14 +812,11 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         exec.addGoal("copy");
         config = new Xpp3Dom("configuration");
         exec.setConfiguration(config);
-        Xpp3Dom el = new Xpp3Dom("sourceFile");
-        el.setValue("${project.build.outputDirectory}/META-INF/maven/" + targetCoords.getGroupId() + "/"
-                + targetCoords.getArtifactId() + "/plugin-help.xml");
-        config.addChild(el);
-        el = new Xpp3Dom("destinationFile");
-        el.setValue("${project.build.outputDirectory}/META-INF/maven/" + originalCoords.getGroupId() + "/"
-                + originalCoords.getArtifactId() + "/plugin-help.xml");
-        config.addChild(el);
+        config.addChild(textDomElement("sourceFile",
+                "${project.build.outputDirectory}/META-INF/maven/" + targetCoords.getGroupId() + "/"
+                        + targetCoords.getArtifactId() + "/plugin-help.xml"));
+        config.addChild(textDomElement("destinationFile", "${project.build.outputDirectory}/META-INF/maven/"
+                + originalCoords.getGroupId() + "/" + originalCoords.getArtifactId() + "/plugin-help.xml"));
 
         persistPom(pom);
     }
@@ -875,53 +866,41 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         e.addChild(bom);
 
         if (generateMavenRepoZip.getRepositoryDir() != null) {
-            final Xpp3Dom d = new Xpp3Dom("repositoryDir");
-            d.setValue(generateMavenRepoZip.getRepositoryDir());
-            e.addChild(d);
+            e.addChild(textDomElement("repositoryDir", generateMavenRepoZip.getRepositoryDir()));
         }
         if (generateMavenRepoZip.getZipLocation() != null) {
-            final Xpp3Dom d = new Xpp3Dom("zipLocation");
-            d.setValue(generateMavenRepoZip.getZipLocation());
-            e.addChild(d);
+            e.addChild(textDomElement("zipLocation", generateMavenRepoZip.getZipLocation()));
         }
         if (!generateMavenRepoZip.getExcludedGroupIds().isEmpty()) {
             final Xpp3Dom d = new Xpp3Dom("excludedGroupIds");
             for (String groupId : generateMavenRepoZip.getExcludedGroupIds()) {
-                final Xpp3Dom g = new Xpp3Dom("groupId");
-                g.setValue(groupId);
-                d.addChild(g);
+                d.addChild(textDomElement("groupId", groupId));
             }
             e.addChild(d);
         }
         if (!generateMavenRepoZip.getExcludedArtifacts().isEmpty()) {
             final Xpp3Dom d = new Xpp3Dom("excludedArtifacts");
             for (String key : generateMavenRepoZip.getExcludedArtifacts()) {
-                final Xpp3Dom g = new Xpp3Dom("key");
-                g.setValue(key);
-                d.addChild(g);
+                d.addChild(textDomElement("key", key));
             }
             e.addChild(d);
         }
         if (!generateMavenRepoZip.getExtraArtifacts().isEmpty()) {
             final Xpp3Dom extras = new Xpp3Dom("extraArtifacts");
             for (String coords : generateMavenRepoZip.getExtraArtifacts()) {
-                final Xpp3Dom g = new Xpp3Dom("artifact");
-                g.setValue(coords);
-                extras.addChild(g);
+                extras.addChild(textDomElement("artifact", coords));
             }
             for (PlatformMember m : members.values()) {
                 if (m.config().isHidden() || !m.config().isEnabled()) {
                     continue;
                 }
-                addExtraArtifact(extras, m.descriptorCoords().toString());
-                addExtraArtifact(extras, m.propertiesCoords().toString());
+                extras.addChild(textDomElement("artifact", m.descriptorCoords().toString()));
+                extras.addChild(textDomElement("artifact", m.propertiesCoords().toString()));
             }
             e.addChild(extras);
         }
         if (generateMavenRepoZip.getIncludedVersionsPattern() != null) {
-            final Xpp3Dom d = new Xpp3Dom("includedVersionsPattern");
-            d.setValue(generateMavenRepoZip.getIncludedVersionsPattern());
-            e.addChild(d);
+            e.addChild(textDomElement("includedVersionsPattern", generateMavenRepoZip.getIncludedVersionsPattern()));
         }
 
         final Xpp3Dom configuration = new Xpp3Dom("configuration");
@@ -1298,9 +1277,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         addDependencies(pom, testConfig.getTestDependencies(), true);
 
         final Xpp3Dom depsToScan = new Xpp3Dom("dependenciesToScan");
-        final Xpp3Dom testDep = new Xpp3Dom("dependency");
-        depsToScan.addChild(testDep);
-        testDep.setValue(testArtifact.getGroupId() + ":" + testArtifact.getArtifactId());
+        depsToScan.addChild(textDomElement("dependency", testArtifact.getGroupId() + ":" + testArtifact.getArtifactId()));
 
         if (!testConfig.isSkipJvm()) {
             final Build build = new Build();
@@ -1416,13 +1393,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             Xpp3Dom config = new Xpp3Dom("configuration");
             exec.setConfiguration(config);
             if (testConfig.isSkip()) {
-                Xpp3Dom skip = new Xpp3Dom("skip");
-                config.addChild(skip);
-                skip.setValue("true");
+                config.addChild(textDomElement("skip", "true"));
             }
-            final Xpp3Dom appArtifact = new Xpp3Dom("appArtifact");
-            config.addChild(appArtifact);
-            appArtifact.setValue(testArtifact.getGroupId() + ":" + testArtifact.getArtifactId() + ":" + testArtifactVersion);
+            config.addChild(textDomElement("appArtifact",
+                    testArtifact.getGroupId() + ":" + testArtifact.getArtifactId() + ":" + testArtifactVersion));
         }
 
         Utils.disablePlugin(pom, "maven-jar-plugin", "default-jar");
@@ -1504,15 +1478,13 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         e.addGoal("build");
         final Xpp3Dom config = new Xpp3Dom("configuration");
         e.setConfiguration(config);
-        final Xpp3Dom appArtifact = new Xpp3Dom("appArtifact");
         final StringBuilder sb = new StringBuilder();
         sb.append(appArtifactDep.getGroupId()).append(':').append(appArtifactDep.getArtifactId()).append(':');
         if (appArtifactDep.getClassifier() != null && !appArtifactDep.getClassifier().isEmpty()) {
             sb.append(appArtifactDep.getClassifier()).append(':').append(appArtifactDep.getType()).append(':');
         }
         sb.append(appArtifactDep.getVersion());
-        appArtifact.setValue(sb.toString());
-        config.addChild(appArtifact);
+        config.addChild(textDomElement("appArtifact", sb.toString()));
     }
 
     /**
@@ -1623,9 +1595,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         if (groupsStr == null) {
             return;
         }
-        final Xpp3Dom groups = new Xpp3Dom("groups");
-        config.addChild(groups);
-        groups.setValue(groupsStr);
+        config.addChild(textDomElement("groups", groupsStr));
     }
 
     private static void addIncludesExcludesConfig(PlatformMemberTestConfig testConfig, Xpp3Dom config, boolean nativeTest) {
@@ -1650,9 +1620,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Xpp3Dom includes = new Xpp3Dom(wrapperName);
         config.addChild(includes);
         for (String s : values) {
-            final Xpp3Dom e = new Xpp3Dom(elementName);
-            e.setValue(s);
-            includes.addChild(e);
+            includes.addChild(textDomElement(elementName, s));
         }
     }
 
@@ -1716,9 +1684,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
     private void addSystemProperties(Xpp3Dom sysProps, Map<String, String> props) {
         for (Map.Entry<String, String> entry : props.entrySet()) {
-            final Xpp3Dom e = new Xpp3Dom(entry.getKey());
-            e.setValue(entry.getValue());
-            sysProps.addChild(e);
+            sysProps.addChild(textDomElement(entry.getKey(), entry.getValue()));
         }
     }
 
@@ -1807,18 +1773,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         exec.addGoal("generate-platform-descriptor");
 
         final Xpp3Dom config = new Xpp3Dom("configuration");
-        final Xpp3Dom bomArtifactId = new Xpp3Dom("bomArtifactId");
         final String bomArtifact = PlatformArtifacts.ensureBomArtifactId(descriptorCoords.getArtifactId());
-        bomArtifactId.setValue(bomArtifact);
-        config.addChild(bomArtifactId);
+        config.addChild(textDomElement("bomArtifactId", bomArtifact));
 
-        Xpp3Dom e = new Xpp3Dom("quarkusCoreVersion");
-        e.setValue(quarkusCore.getVersionProperty());
-        config.addChild(e);
+        config.addChild(textDomElement("quarkusCoreVersion", quarkusCore.getVersionProperty()));
         if (platformConfig.hasUpstreamQuarkusCoreVersion()) {
-            e = new Xpp3Dom("upstreamQuarkusCoreVersion");
-            e.setValue(platformConfig.getUpstreamQuarkusCoreVersion());
-            config.addChild(e);
+            config.addChild(textDomElement("upstreamQuarkusCoreVersion", platformConfig.getUpstreamQuarkusCoreVersion()));
         }
 
         if (addPlatformReleaseConfig) {
@@ -1826,12 +1786,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             config.addChild(stackConfig);
             final Xpp3Dom platformKey = new Xpp3Dom("platformKey");
             stackConfig.addChild(platformKey);
-            e = new Xpp3Dom("stream");
-            e.setValue("${" + PLATFORM_STREAM_PROP + "}");
-            stackConfig.addChild(e);
-            e = new Xpp3Dom("version");
-            e.setValue("${" + PLATFORM_RELEASE_PROP + "}");
-            stackConfig.addChild(e);
+            stackConfig.addChild(textDomElement("stream", "${" + PLATFORM_STREAM_PROP + "}"));
+            stackConfig.addChild(textDomElement("version", "${" + PLATFORM_RELEASE_PROP + "}"));
             final Xpp3Dom membersConfig = new Xpp3Dom("members");
             stackConfig.addChild(membersConfig);
             if (descriptorCoords.getGroupId().equals(getUniversalBomArtifact().getGroupId())
@@ -1911,9 +1867,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 final Xpp3Dom processGroupIds = new Xpp3Dom("processGroupIds");
                 config.addChild(processGroupIds);
                 for (String groupId : extensionGroupIds) {
-                    final Xpp3Dom processGroupId = new Xpp3Dom("groupId");
-                    processGroupId.setValue(groupId);
-                    processGroupIds.addChild(processGroupId);
+                    processGroupIds.addChild(textDomElement("groupId", groupId));
                 }
             }
 
@@ -1927,9 +1881,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 final Xpp3Dom ignoredArtifacts = new Xpp3Dom("ignoredArtifacts");
                 config.addChild(ignoredArtifacts);
                 for (String coords : descrGen.ignoredArtifacts) {
-                    final Xpp3Dom artifact = new Xpp3Dom("artifact");
-                    artifact.setValue(coords);
-                    ignoredArtifacts.addChild(artifact);
+                    ignoredArtifacts.addChild(textDomElement("artifact", coords));
                 }
             }
         }
@@ -1970,21 +1922,15 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         if (metadataOverrideFiles.length() > 0) {
-            e = new Xpp3Dom("overridesFile");
-            e.setValue(metadataOverrideFiles.toString());
-            config.addChild(e);
+            config.addChild(textDomElement("overridesFile", metadataOverrideFiles.toString()));
         }
 
         if (descrGen != null) {
             if (descrGen.skipCategoryCheck) {
-                e = new Xpp3Dom("skipCategoryCheck");
-                e.setValue("true");
-                config.addChild(e);
+                config.addChild(textDomElement("skipCategoryCheck", "true"));
             }
             if (descrGen.resolveDependencyManagement) {
-                e = new Xpp3Dom("resolveDependencyManagement");
-                e.setValue("true");
-                config.addChild(e);
+                config.addChild(textDomElement("resolveDependencyManagement", "true"));
             }
         }
         plugin.setConfiguration(config);
@@ -2007,17 +1953,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
     private void addExtensionDependencyCheck(final RedHatExtensionDependencyCheck depCheckConfig,
             final Xpp3Dom config) {
-        Xpp3Dom e;
         if (depCheckConfig != null && depCheckConfig.isEnabled() && depCheckConfig.getVersionPattern() != null) {
             final Xpp3Dom depCheck = new Xpp3Dom("extensionDependencyCheck");
             config.addChild(depCheck);
-            e = new Xpp3Dom("versionPattern");
-            e.setValue(depCheckConfig.getVersionPattern());
-            depCheck.addChild(e);
+            depCheck.addChild(textDomElement("versionPattern", depCheckConfig.getVersionPattern()));
             if (depCheckConfig.getCheckDepth() != Integer.MAX_VALUE) {
-                e = new Xpp3Dom("checkDepth");
-                e.setValue(String.valueOf(depCheckConfig.getCheckDepth()));
-                depCheck.addChild(e);
+                depCheck.addChild(textDomElement("checkDepth", String.valueOf(depCheckConfig.getCheckDepth())));
             }
         }
     }
@@ -2029,9 +1970,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Xpp3Dom artifacts = new Xpp3Dom("metadataOverrideArtifacts");
         config.addChild(artifacts);
         for (String s : overrideArtifacts) {
-            final Xpp3Dom e = new Xpp3Dom("artifact");
-            e.setValue(s);
-            artifacts.addChild(e);
+            artifacts.addChild(textDomElement("artifact", s));
         }
     }
 
@@ -2045,8 +1984,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
     private void addMemberDescriptorConfig(final Model pom, final Xpp3Dom membersConfig,
             final ArtifactCoords memberCoords) {
-        Xpp3Dom e;
-        e = new Xpp3Dom("member");
         final String value;
         if (memberCoords.getGroupId().equals(ModelUtils.getGroupId(pom))
                 && memberCoords.getVersion().equals(ModelUtils.getVersion(pom))) {
@@ -2054,8 +1991,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         } else {
             value = memberCoords.toString();
         }
-        e.setValue(value);
-        membersConfig.addChild(e);
+        membersConfig.addChild(textDomElement("member", value));
     }
 
     private void generatePlatformPropertiesModule(PlatformMemberImpl member, boolean addPlatformReleaseConfig)
@@ -2153,15 +2089,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             final Xpp3Dom config = new Xpp3Dom("configuration");
             final Xpp3Dom stackConfig = new Xpp3Dom("platformRelease");
             config.addChild(stackConfig);
-            Xpp3Dom e = new Xpp3Dom("platformKey");
-            e.setValue("${" + PLATFORM_KEY_PROP + "}");
-            stackConfig.addChild(e);
-            e = new Xpp3Dom("stream");
-            e.setValue("${" + PLATFORM_STREAM_PROP + "}");
-            stackConfig.addChild(e);
-            e = new Xpp3Dom("version");
-            e.setValue("${" + PLATFORM_RELEASE_PROP + "}");
-            stackConfig.addChild(e);
+            stackConfig.addChild(textDomElement("platformKey", "${" + PLATFORM_KEY_PROP + "}"));
+            stackConfig.addChild(textDomElement("stream", "${" + PLATFORM_STREAM_PROP + "}"));
+            stackConfig.addChild(textDomElement("version", "${" + PLATFORM_RELEASE_PROP + "}"));
             final Xpp3Dom membersConfig = new Xpp3Dom("members");
             stackConfig.addChild(membersConfig);
             final Iterator<PlatformMemberImpl> i = members.values().iterator();
@@ -2174,9 +2104,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 if (buf.length() > 0) {
                     buf.append(",");
                 }
-                e = new Xpp3Dom("member");
-                membersConfig.addChild(e);
-                e.setValue(m.stackDescriptorCoords().toString());
+                membersConfig.addChild(textDomElement("member", m.stackDescriptorCoords().toString()));
                 final ArtifactCoords bomCoords = PlatformArtifacts.ensureBomArtifact(m.stackDescriptorCoords());
                 if (bomCoords.getGroupId().equals(project.getGroupId())
                         && bomCoords.getVersion().equals(project.getVersion())) {
@@ -2311,12 +2239,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 universalBomDepKeys.add(d.key());
             }
         }
-    }
-
-    private void addExtraArtifact(final Xpp3Dom extras, String coords) {
-        Xpp3Dom artifact = new Xpp3Dom("artifact");
-        artifact.setValue(coords);
-        extras.addChild(artifact);
     }
 
     private Artifact getUniversalBomArtifact() {
