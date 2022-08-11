@@ -825,7 +825,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Model pom = newModel();
         final String artifactId = "maven-repo-zip-generator";
         pom.setArtifactId(artifactId);
-        pom.setPackaging("pom");
+        pom.setPackaging(ArtifactCoords.TYPE_POM);
         pom.setName(getNameBase(parentPom) + " " + artifactIdToName(artifactId));
         parentPom.addModule(artifactId);
         final File pomXml = getPomFile(parentPom, artifactId);
@@ -924,7 +924,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             pom.setVersion(member.generatedBomCoords().getVersion());
         }
 
-        pom.setPackaging("pom");
+        pom.setPackaging(ArtifactCoords.TYPE_POM);
         pom.setName(getNameBase(parentPom) + " " + member.config().getName() + " - Parent");
         parentPom.addModule(moduleName);
 
@@ -1106,7 +1106,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         final Model pom = newModel();
         pom.setArtifactId(getArtifactIdBase(parentPom) + "-" + moduleName + "-parent");
-        pom.setPackaging("pom");
+        pom.setPackaging(ArtifactCoords.TYPE_POM);
         pom.setName(getNameBase(parentPom) + " " + artifactIdToName(moduleName) + " - Parent");
         parentPom.addModule(moduleName);
 
@@ -1321,7 +1321,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                     }
                     final Artifact a = d.getArtifact();
                     // filter out pom dependencies with *:* exclusions
-                    if ("pom".equals(a.getExtension()) && !d.getExclusions().isEmpty()) {
+                    if (ArtifactCoords.TYPE_POM.equals(a.getExtension()) && !d.getExclusions().isEmpty()) {
                         boolean skip = false;
                         for (org.eclipse.aether.graph.Exclusion e : d.getExclusions()) {
                             if ("*".equals(e.getGroupId()) && "*".equals(e.getArtifactId())) {
@@ -1695,7 +1695,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         final Model pom = newModel();
         pom.setArtifactId(artifactIdBase + "-parent");
-        pom.setPackaging("pom");
+        pom.setPackaging(ArtifactCoords.TYPE_POM);
         pom.setName(getNameBase(parentPom) + " " + artifactIdToName(moduleName) + " - Parent");
         parentPom.addModule(moduleName);
 
@@ -2013,7 +2013,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         if (!propertiesCoords.getVersion().equals(ModelUtils.getVersion(parentPom))) {
             pom.setVersion(propertiesCoords.getVersion());
         }
-        pom.setPackaging("pom");
+        pom.setPackaging(ArtifactCoords.TYPE_POM);
         pom.setName(getNameBase(parentPom) + " Quarkus Platform Properties");
 
         final Parent parent = new Parent();
@@ -2032,7 +2032,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         bom.setArtifactId(propertiesCoords.getArtifactId().substring(0,
                 propertiesCoords.getArtifactId().length() - Constants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX.length()));
         bom.setVersion(getDependencyVersion(pom, propertiesCoords));
-        bom.setType("pom");
+        bom.setType(ArtifactCoords.TYPE_POM);
         bom.setScope("import");
 
         addResourcesPlugin(pom, true);
