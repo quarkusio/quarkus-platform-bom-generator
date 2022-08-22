@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.quarkus</groupId>
   <artifactId>quarkus-platform-bom-tools-parent</artifactId>
-  <version>0.0.58</version>
+  <version>0.0.59-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Quarkus - Platform BOM Tools - Parent</name>
 
@@ -29,7 +29,7 @@
     <url>https://github.com/quarkusio/quarkus-platform-bom-generator</url>
     <connection>scm:git:git@github.com:quarkusio/quarkus-platform-bom-generator.git</connection>
     <developerConnection>scm:git:git@github.com:quarkusio/quarkus-platform-bom-generator.git</developerConnection>
-    <tag>0.0.58</tag>
+    <tag>HEAD</tag>
   </scm>
 
   <properties>
