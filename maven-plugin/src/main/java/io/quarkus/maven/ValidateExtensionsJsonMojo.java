@@ -3,6 +3,8 @@ package io.quarkus.maven;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
+import io.quarkus.maven.dependency.ArtifactCoords;
+import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.paths.PathTree;
 import io.quarkus.registry.catalog.Extension;
 import io.quarkus.registry.catalog.ExtensionCatalog;
@@ -124,7 +126,7 @@ public class ValidateExtensionsJsonMojo extends AbstractMojo {
                 missingFromBom.add(rtCoords);
             }
 
-            ArtifactKey deploymentKey = new ArtifactKey(rtCoords.getGroupId(), rtCoords.getArtifactId() + "-deployment",
+            ArtifactKey deploymentKey = ArtifactKey.of(rtCoords.getGroupId(), rtCoords.getArtifactId() + "-deployment",
                     rtCoords.getClassifier(), rtCoords.getType());
             if (bomExtensionArtifacts.remove(deploymentKey) == null) {
                 final Path rtJar;
@@ -225,10 +227,11 @@ public class ValidateExtensionsJsonMojo extends AbstractMojo {
             final Path descrJson = metaInf.resolve(BootstrapConstants.EXTENSION_PROPS_JSON_FILE_NAME);
             if (ensureExtensionMetadata(artifact, descrProps, descrYaml, descrJson)) {
                 final ArtifactCoords deployment = readDeploymentCoords(descrProps, artifact);
-                final ArtifactKey key = new ArtifactKey(artifact.getGroupId(), artifact.getArtifactId(),
+                final ArtifactKey key = ArtifactKey.of(artifact.getGroupId(), artifact.getArtifactId(),
                         artifact.getClassifier(),
                         artifact.getExtension());
-                extensions.put(key, new ArtifactCoords(key, artifact.getVersion()));
+                extensions.put(key, ArtifactCoords.of(key.getGroupId(), key.getArtifactId(), key.getClassifier(), key.getType(),
+                        artifact.getVersion()));
                 extensions.put(deployment.getKey(), deployment);
             }
         });

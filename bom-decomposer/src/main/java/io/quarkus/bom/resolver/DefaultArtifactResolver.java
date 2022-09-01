@@ -3,7 +3,7 @@ package io.quarkus.bom.resolver;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalWorkspace;
-import io.quarkus.maven.ArtifactCoords;
+import io.quarkus.maven.dependency.ArtifactCoords;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -169,7 +169,7 @@ public class DefaultArtifactResolver implements ArtifactResolver {
     }
 
     private static ArtifactCoords toCoords(Artifact a) {
-        return new ArtifactCoords(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(), a.getVersion());
+        return ArtifactCoords.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(), a.getVersion());
     }
 
     private ArtifactNotFoundException recordedAsNonExistingError(final ArtifactCoords coords) {

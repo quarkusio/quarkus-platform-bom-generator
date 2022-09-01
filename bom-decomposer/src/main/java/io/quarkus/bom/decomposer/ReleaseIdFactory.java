@@ -1,7 +1,7 @@
 package io.quarkus.bom.decomposer;
 
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
-import io.quarkus.maven.ArtifactCoords;
+import io.quarkus.maven.dependency.ArtifactCoords;
 import org.apache.maven.model.Model;
 
 public class ReleaseIdFactory {

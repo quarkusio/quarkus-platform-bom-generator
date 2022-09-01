@@ -1,7 +1,6 @@
 package io.quarkus.bom.decomposer;
 
-import io.quarkus.bom.decomposer.ProjectRelease.Builder;
-import io.quarkus.maven.ArtifactKey;
+import io.quarkus.maven.dependency.ArtifactKey;
 import java.util.Collection;
 import java.util.List;
 import org.eclipse.aether.artifact.Artifact;

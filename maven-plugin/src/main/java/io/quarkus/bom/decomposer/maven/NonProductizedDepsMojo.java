@@ -1,6 +1,6 @@
 package io.quarkus.bom.decomposer.maven;
 
-import io.quarkus.maven.ArtifactCoords;
+import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.registry.catalog.Extension;
 import io.quarkus.registry.catalog.ExtensionCatalog;
 import io.quarkus.registry.util.PlatformArtifacts;
@@ -200,6 +200,6 @@ public class NonProductizedDepsMojo extends AbstractMojo {
     }
 
     private static ArtifactCoords toCoords(Artifact a) {
-        return new ArtifactCoords(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(), a.getVersion());
+        return ArtifactCoords.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(), a.getVersion());
     }
 }

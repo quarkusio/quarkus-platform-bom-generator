@@ -8,7 +8,7 @@ import io.quarkus.bootstrap.resolver.maven.workspace.LocalWorkspace;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.bootstrap.util.IoUtils;
 import io.quarkus.fs.util.ZipUtils;
-import io.quarkus.maven.ArtifactCoords;
+import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.registry.CatalogMergeUtility;
 import io.quarkus.registry.catalog.Category;
@@ -359,7 +359,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
             }
 
             var ext = inheritedExtensions.isEmpty() ? null
-                    : inheritedExtensions.get(ArtifactKey.gact(artifact.getGroupId(), artifact.getArtifactId(),
+                    : inheritedExtensions.get(ArtifactKey.of(artifact.getGroupId(), artifact.getArtifactId(),
                             artifact.getClassifier(), artifact.getExtension()));
             Extension.Mutable extension = ext == null ? null : ext.mutable();
             final List<ExtensionOrigin> origins;
@@ -659,7 +659,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
             final Path props = metaInfDir.resolve(BootstrapConstants.DESCRIPTOR_FILE_NAME);
             if (Files.exists(props)) {
                 e = Extension.builder();
-                e.setArtifact(new ArtifactCoords(artifact.getGroupId(), artifact.getArtifactId(),
+                e.setArtifact(ArtifactCoords.of(artifact.getGroupId(), artifact.getArtifactId(),
                         artifact.getClassifier(), artifact.getExtension(), artifact.getVersion()));
                 e.setName(artifact.getArtifactId());
             }
@@ -693,7 +693,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
                 extObject.setArtifact(overrideCoords);
             } else {
                 final ArtifactCoords originalCoords = extObject.getArtifact();
-                extObject.setArtifact(new ArtifactCoords(
+                extObject.setArtifact(ArtifactCoords.of(
                         overrideCoords.getGroupId() == null ? originalCoords.getGroupId() : overrideCoords.getGroupId(),
                         overrideCoords.getArtifactId() == null ? originalCoords.getArtifactId()
                                 : overrideCoords.getArtifactId(),
@@ -793,6 +793,6 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
     }
 
     private static ArtifactKey getKey(Artifact a) {
-        return ArtifactKey.gact(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension());
+        return ArtifactKey.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension());
     }
 }

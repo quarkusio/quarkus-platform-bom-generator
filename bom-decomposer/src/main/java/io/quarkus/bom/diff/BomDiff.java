@@ -6,7 +6,7 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
-import io.quarkus.maven.ArtifactKey;
+import io.quarkus.maven.dependency.ArtifactKey;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.Path;
@@ -300,7 +300,7 @@ public class BomDiff {
     }
 
     private static ArtifactKey key(Dependency dep) {
-        return new ArtifactKey(dep.getArtifact().getGroupId(), dep.getArtifact().getArtifactId(),
+        return ArtifactKey.of(dep.getArtifact().getGroupId(), dep.getArtifact().getArtifactId(),
                 dep.getArtifact().getClassifier(), dep.getArtifact().getExtension());
     }
 }

@@ -1,6 +1,6 @@
 package io.quarkus.bom.decomposer;
 
-import io.quarkus.maven.ArtifactKey;
+import io.quarkus.maven.dependency.ArtifactKey;
 import java.util.Objects;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.graph.Dependency;
@@ -77,7 +77,7 @@ public class ProjectDependency {
 
     public ArtifactKey key() {
         return key == null
-                ? key = new ArtifactKey(artifact.getGroupId(), artifact.getArtifactId(), artifact.getClassifier(),
+                ? key = ArtifactKey.of(artifact.getGroupId(), artifact.getArtifactId(), artifact.getClassifier(),
                         artifact.getExtension())
                 : key;
     }

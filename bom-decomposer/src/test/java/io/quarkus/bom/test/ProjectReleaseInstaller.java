@@ -7,7 +7,7 @@ import io.quarkus.bom.decomposer.ReleaseOrigin;
 import io.quarkus.bom.decomposer.ReleaseOrigin.ScmConnectionOrigin;
 import io.quarkus.bom.decomposer.ReleaseVersion;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
-import io.quarkus.maven.ArtifactCoords;
+import io.quarkus.maven.dependency.ArtifactCoords;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
