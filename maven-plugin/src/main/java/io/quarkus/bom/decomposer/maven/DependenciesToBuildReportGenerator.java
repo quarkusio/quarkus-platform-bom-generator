@@ -1,7 +1,9 @@
 package io.quarkus.bom.decomposer.maven;
 
 import io.quarkus.bom.decomposer.ReleaseId;
+import io.quarkus.bom.decomposer.ReleaseIdDetector;
 import io.quarkus.bom.decomposer.ReleaseIdResolver;
+import io.quarkus.bom.decomposer.detector.HibernateReleaseIdDetector;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
@@ -494,7 +496,11 @@ public class DependenciesToBuildReportGenerator {
     }
 
     private void initReleaseRepos() {
-        final ReleaseIdResolver idResolver = new ReleaseIdResolver(resolver);
+
+        //final List<ReleaseIdDetector> releaseDetectors = ServiceLoader.load(ReleaseIdDetector.class).stream().map(p -> p.get()).collect(Collectors.toList());
+        final List<ReleaseIdDetector> releaseDetectors = List.of(new HibernateReleaseIdDetector());
+
+        final ReleaseIdResolver idResolver = new ReleaseIdResolver(resolver, releaseDetectors);
         final Map<ArtifactCoords, ReleaseId> artifactReleases = new HashMap<>();
         for (ArtifactCoords c : allDepsToBuild) {
             final ReleaseId releaseId;
