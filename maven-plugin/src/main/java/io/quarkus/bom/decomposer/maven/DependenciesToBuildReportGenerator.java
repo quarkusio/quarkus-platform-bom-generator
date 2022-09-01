@@ -1,9 +1,11 @@
 package io.quarkus.bom.decomposer.maven;
 
+import io.quarkus.bom.decomposer.BomDecomposerException;
 import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.decomposer.ReleaseIdDetector;
+import io.quarkus.bom.decomposer.ReleaseIdFactory;
 import io.quarkus.bom.decomposer.ReleaseIdResolver;
-import io.quarkus.bom.decomposer.detector.HibernateReleaseIdDetector;
+import io.quarkus.bom.decomposer.detector.PrefixedTagReleaseIdDetector;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
@@ -27,8 +29,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.apache.maven.model.DependencyManagement;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Parent;
@@ -173,6 +177,11 @@ public class DependenciesToBuildReportGenerator {
             return this;
         }
 
+        public Builder setValidateCodeRepoTags(boolean validateTags) {
+            validateCodeRepoTags = validateTags;
+            return this;
+        }
+
         public DependenciesToBuildReportGenerator build() {
             if (resolver == null) {
                 try {
@@ -282,6 +291,11 @@ public class DependenciesToBuildReportGenerator {
      */
     private boolean excludeBomImports;
 
+    /*
+     * Whether to validate the discovered code repo and tags that are included in the report
+     */
+    private boolean validateCodeRepoTags;
+
     private Set<String> excludeGroupIds = Set.of();
     private Set<ArtifactKey> excludeKeys = Set.of();
     private Set<ArtifactCoords> excludeArtifacts = Set.of();
@@ -347,7 +361,8 @@ public class DependenciesToBuildReportGenerator {
                     }
 
                     for (ReleaseRepo e : orderedMap.values()) {
-                        logComment(e.id().toString());
+                        logComment("repo-url " + e.id().origin());
+                        logComment("tag " + e.id().version().asString());
                         for (String s : toSortedStrings(e.artifacts, logModulesToBuild)) {
                             log(s);
                         }
@@ -497,10 +512,8 @@ public class DependenciesToBuildReportGenerator {
 
     private void initReleaseRepos() {
 
-        //final List<ReleaseIdDetector> releaseDetectors = ServiceLoader.load(ReleaseIdDetector.class).stream().map(p -> p.get()).collect(Collectors.toList());
-        final List<ReleaseIdDetector> releaseDetectors = List.of(new HibernateReleaseIdDetector());
+        final ReleaseIdResolver idResolver = newReleaseIdResolver(resolver, log, validateCodeRepoTags);
 
-        final ReleaseIdResolver idResolver = new ReleaseIdResolver(resolver, releaseDetectors);
         final Map<ArtifactCoords, ReleaseId> artifactReleases = new HashMap<>();
         for (ArtifactCoords c : allDepsToBuild) {
             final ReleaseId releaseId;
@@ -525,6 +538,60 @@ public class DependenciesToBuildReportGenerator {
                 repo.addRepoDependency(getRepo(artifactReleases.get(c.coords)));
             }
         }
+    }
+
+    private static ReleaseIdResolver newReleaseIdResolver(MavenArtifactResolver artifactResolver, MessageWriter log,
+            boolean validateCodeRepoTags) {
+        final List<ReleaseIdDetector> releaseDetectors = new ArrayList<>();
+        releaseDetectors.add(new PrefixedTagReleaseIdDetector("jetty-", List.of("org.eclipse.jetty")));
+        releaseDetectors.add(
+                // Vert.X
+                new ReleaseIdDetector() {
+                    @Override
+                    public ReleaseId detectReleaseId(ReleaseIdResolver releaseResolver, Artifact artifact)
+                            throws BomDecomposerException {
+                        if (!"io.vertx".equals(artifact.getGroupId())) {
+                            return null;
+                        }
+                        String s = artifact.getArtifactId();
+                        if (!s.startsWith("vertx-")) {
+                            return releaseResolver.defaultReleaseId(artifact);
+                        }
+                        if (s.equals("vertx-uri-template") || s.equals("vertx-codegen")) {
+                            return ReleaseIdFactory.forScmAndTag("https://github.com/eclipse-vertx/" + s,
+                                    artifact.getVersion());
+                        }
+                        if (s.equals("vertx-core")) {
+                            return ReleaseIdFactory.forScmAndTag("https://github.com/eclipse-vertx/vert.x",
+                                    artifact.getVersion());
+                        }
+                        if (s.startsWith("vertx-") && s.endsWith("-client") || s.startsWith("vertx-sql-")) {
+                            return ReleaseIdFactory.forScmAndTag("https://github.com/eclipse-vertx/vertx-sql-client",
+                                    artifact.getVersion());
+                        }
+                        if (s.startsWith("vertx-ext")) {
+                            s = "vertx-ext-parent";
+                        } else if (!s.equals("vertx-bridge-common")) {
+                            int i = s.indexOf('-', "vertx-".length());
+                            if (i > 0) {
+                                s = s.substring(0, i);
+                            }
+                        }
+                        return ReleaseIdFactory.forScmAndTag("https://github.com/vert-x3/" + s, artifact.getVersion());
+                    }
+                });
+        releaseDetectors
+                .addAll(ServiceLoader.load(ReleaseIdDetector.class).stream().map(p -> p.get()).collect(Collectors.toList()));
+
+        return new ReleaseIdResolver(artifactResolver, releaseDetectors, log, validateCodeRepoTags);
+    }
+
+    public static void main(String[] args) throws Exception {
+        ReleaseIdResolver idResolver = newReleaseIdResolver(MavenArtifactResolver.builder().build(), MessageWriter.info(),
+                true);
+        ReleaseId releaseId = idResolver
+                .releaseId(new DefaultArtifact("org.ow2.asm", "asm", "pom", "9.3"));
+        System.out.println("RELEASE ID " + releaseId);
     }
 
     private void order(ReleaseRepo repo, Map<ReleaseId, ReleaseRepo> repos) {

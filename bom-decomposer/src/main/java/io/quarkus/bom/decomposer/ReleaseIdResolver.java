@@ -4,19 +4,30 @@ import io.quarkus.bom.resolver.ArtifactResolver;
 import io.quarkus.bom.resolver.ArtifactResolverProvider;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
+import io.quarkus.devtools.messagewriter.MessageWriter;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse.BodySubscribers;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.resolution.UnresolvableModelException;
 import org.eclipse.aether.artifact.Artifact;
-import org.eclipse.aether.artifact.DefaultArtifact;
 
 public class ReleaseIdResolver {
 
+    private final MessageWriter log;
     private final ArtifactResolver resolver;
-    private Collection<ReleaseIdDetector> releaseDetectors;
+    private final Collection<ReleaseIdDetector> releaseDetectors;
+    private final boolean validateRepoTag;
+    private Set<ReleaseId> validatedReleaseIds;
+    private HttpClient httpClient;
 
     public ReleaseIdResolver(MavenArtifactResolver resolver) {
         this(ArtifactResolverProvider.get(resolver));
@@ -26,6 +37,11 @@ public class ReleaseIdResolver {
         this(ArtifactResolverProvider.get(resolver), releaseDetectors);
     }
 
+    public ReleaseIdResolver(MavenArtifactResolver resolver, Collection<ReleaseIdDetector> releaseDetectors, MessageWriter log,
+            boolean validateRepoTag) {
+        this(ArtifactResolverProvider.get(resolver), releaseDetectors, log, validateRepoTag);
+    }
+
     public ReleaseIdResolver(ArtifactResolver resolver) {
         this(resolver, List.of());
     }
@@ -33,17 +49,27 @@ public class ReleaseIdResolver {
     public ReleaseIdResolver(ArtifactResolver resolver, Collection<ReleaseIdDetector> releaseDetectors) {
         this.resolver = Objects.requireNonNull(resolver);
         this.releaseDetectors = releaseDetectors;
+        this.validateRepoTag = false;
+        this.log = MessageWriter.info();
+    }
+
+    public ReleaseIdResolver(ArtifactResolver resolver, Collection<ReleaseIdDetector> releaseDetectors, MessageWriter log,
+            boolean validateRepoTag) {
+        this.resolver = Objects.requireNonNull(resolver);
+        this.releaseDetectors = releaseDetectors;
+        this.validateRepoTag = validateRepoTag;
+        this.log = log;
     }
 
     public ReleaseId releaseId(Artifact artifact) throws BomDecomposerException, UnresolvableModelException {
         for (ReleaseIdDetector releaseDetector : releaseDetectors) {
             final ReleaseId releaseId = releaseDetector.detectReleaseId(this, artifact);
             if (releaseId != null) {
-                return releaseId;
+                return validateRepoTag ? validateTag(releaseId) : releaseId;
             }
         }
 
-        return defaultReleaseId(artifact);
+        return validateRepoTag ? validateTag(defaultReleaseId(artifact)) : defaultReleaseId(artifact);
     }
 
     public ReleaseId defaultReleaseId(Artifact artifact) throws BomDecomposerException {
@@ -65,19 +91,60 @@ public class ReleaseIdResolver {
 
         Model model = model(artifact);
         Model tmp;
-        while (!hasScmTag(model) && (tmp = workspaceParent(model)) != null) {
+        while (!hasScmInfo(model) && (tmp = workspaceParent(model)) != null) {
             model = tmp;
         }
         return ReleaseIdFactory.forModel(model);
     }
 
-    private static boolean hasScmTag(Model model) {
-        final String scmOrigin = Util.getScmOrigin(model);
-        if (scmOrigin == null) {
-            return false;
+    public ReleaseId validateTag(ReleaseId releaseId) {
+        if (validatedReleaseIds == null) {
+            validatedReleaseIds = new HashSet<>();
         }
-        final String scmTag = Util.getScmTag(model);
-        return !scmTag.isEmpty() && !"HEAD".equals(scmTag);
+        if (!validatedReleaseIds.add(releaseId)) {
+            return releaseId;
+        }
+        String repoUrl = releaseId.origin().toString();
+        if (!repoUrl.startsWith("https:") && !repoUrl.startsWith("http:")) {
+            log.warn("Non-HTTP(s) origin " + repoUrl);
+            return releaseId;
+        }
+        if (repoUrl.charAt(repoUrl.length() - 1) != '/') {
+            repoUrl += "/";
+        }
+        if (repoUrl.contains("github.com")) {
+            repoUrl += "releases/tag/";
+        } else if (repoUrl.contains("gitlab.com")) {
+            repoUrl += "-/tags/";
+        }
+        repoUrl += releaseId.version().asString();
+        if (httpClient == null) {
+            httpClient = HttpClient.newHttpClient();
+        }
+        try {
+            final String tagUrl = repoUrl;
+            httpClient.send(HttpRequest.newBuilder()
+                    .GET()
+                    .uri(URI.create(repoUrl))
+                    .timeout(Duration.ofSeconds(5))
+                    .build(), r -> {
+                        switch (r.statusCode()) {
+                            case 200:
+                            case 429:
+                                break;
+                            default:
+                                log.warn("Got " + r.statusCode() + " response code validating " + tagUrl);
+                        }
+                        return BodySubscribers.discarding();
+                    });
+        } catch (Exception e) {
+            log.warn("Invalid release tag " + repoUrl);
+        }
+        return releaseId;
+    }
+
+    private static boolean hasScmInfo(Model model) {
+        return Util.getScmOrigin(model) != null;
     }
 
     private Model workspaceParent(Model model) throws BomDecomposerException {
@@ -121,14 +188,5 @@ public class ReleaseIdResolver {
 
     private Artifact resolve(Artifact artifact) throws BomDecomposerException {
         return resolver.resolve(artifact).getArtifact();
-    }
-
-    public static void main(String[] args) throws Exception {
-
-        System.out.println("hello");
-
-        ReleaseIdResolver idResolver = new ReleaseIdResolver(MavenArtifactResolver.builder().build());
-        ReleaseId releaseId = idResolver.releaseId(new DefaultArtifact("io.quarkus", "quarkus-spring-api", "jar", "5.2.SP7"));
-        System.out.println("RELEASE ID " + releaseId);
     }
 }

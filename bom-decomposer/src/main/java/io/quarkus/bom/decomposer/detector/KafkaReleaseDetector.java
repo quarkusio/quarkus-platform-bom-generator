@@ -24,7 +24,7 @@ public class KafkaReleaseDetector implements ReleaseIdDetector {
         // includes
         // commitId and version. But for simplicity we are simply using the version of
         // the artifact here
-        return ReleaseIdFactory.create(ReleaseOrigin.Factory.scmConnection("org.apache.kafka"),
+        return ReleaseIdFactory.create(ReleaseOrigin.Factory.scmConnection("https://github.com/apache/kafka"),
                 ReleaseVersion.Factory.version(ModelUtils.getVersion(idResolver.model(artifact))));
     }
 }
