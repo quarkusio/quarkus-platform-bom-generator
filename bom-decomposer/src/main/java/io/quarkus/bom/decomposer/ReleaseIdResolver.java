@@ -11,6 +11,7 @@ import java.util.Objects;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.resolution.UnresolvableModelException;
 import org.eclipse.aether.artifact.Artifact;
+import org.eclipse.aether.artifact.DefaultArtifact;
 
 public class ReleaseIdResolver {
 
@@ -19,6 +20,10 @@ public class ReleaseIdResolver {
 
     public ReleaseIdResolver(MavenArtifactResolver resolver) {
         this(ArtifactResolverProvider.get(resolver));
+    }
+
+    public ReleaseIdResolver(MavenArtifactResolver resolver, Collection<ReleaseIdDetector> releaseDetectors) {
+        this(ArtifactResolverProvider.get(resolver), releaseDetectors);
     }
 
     public ReleaseIdResolver(ArtifactResolver resolver) {
@@ -38,6 +43,10 @@ public class ReleaseIdResolver {
             }
         }
 
+        return defaultReleaseId(artifact);
+    }
+
+    public ReleaseId defaultReleaseId(Artifact artifact) throws BomDecomposerException {
         /* @formatter:off
         final ModelSource ms = modelResolver.resolveModel(artifact.getGroupId(), artifact.getArtifactId(),
                 artifact.getVersion());
@@ -56,10 +65,19 @@ public class ReleaseIdResolver {
 
         Model model = model(artifact);
         Model tmp;
-        while ((tmp = workspaceParent(model)) != null) {
+        while (!hasScmTag(model) && (tmp = workspaceParent(model)) != null) {
             model = tmp;
         }
         return ReleaseIdFactory.forModel(model);
+    }
+
+    private static boolean hasScmTag(Model model) {
+        final String scmOrigin = Util.getScmOrigin(model);
+        if (scmOrigin == null) {
+            return false;
+        }
+        final String scmTag = Util.getScmTag(model);
+        return !scmTag.isEmpty() && !"HEAD".equals(scmTag);
     }
 
     private Model workspaceParent(Model model) throws BomDecomposerException {
@@ -103,5 +121,14 @@ public class ReleaseIdResolver {
 
     private Artifact resolve(Artifact artifact) throws BomDecomposerException {
         return resolver.resolve(artifact).getArtifact();
+    }
+
+    public static void main(String[] args) throws Exception {
+
+        System.out.println("hello");
+
+        ReleaseIdResolver idResolver = new ReleaseIdResolver(MavenArtifactResolver.builder().build());
+        ReleaseId releaseId = idResolver.releaseId(new DefaultArtifact("io.quarkus", "quarkus-spring-api", "jar", "5.2.SP7"));
+        System.out.println("RELEASE ID " + releaseId);
     }
 }

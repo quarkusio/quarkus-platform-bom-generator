@@ -12,7 +12,7 @@ public class ReleaseIdFactory {
             final String scmTag = Util.getScmTag(model);
             return scmTag.isEmpty()
                     || "HEAD".equals(scmTag)
-                    || !scmTag.contains(version) // sometimes the tag could be '1.4.x' and the version '1.4.1', etc
+                            //|| !scmTag.contains(version) // sometimes the tag could be '1.4.x' and the version '1.4.1', etc
                             ? create(ReleaseOrigin.Factory.scmConnection(scmOrigin), ReleaseVersion.Factory.version(version))
                             : create(ReleaseOrigin.Factory.scmConnection(scmOrigin), ReleaseVersion.Factory.tag(scmTag));
         }

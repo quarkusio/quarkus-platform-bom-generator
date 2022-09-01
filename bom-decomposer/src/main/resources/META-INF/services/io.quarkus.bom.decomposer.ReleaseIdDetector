@@ -2,3 +2,4 @@ io.quarkus.bom.decomposer.detector.JUnitPlatformReleaseDetector
 io.quarkus.bom.decomposer.detector.KafkaReleaseDetector
 io.quarkus.bom.decomposer.detector.VertxReleaseDetector
 io.quarkus.bom.decomposer.detector.FasterXmlReleaseDetector
+io.quarkus.bom.decomposer.detector.HibernateReleaseIdDetector
