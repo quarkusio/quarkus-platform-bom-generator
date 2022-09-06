@@ -6,23 +6,30 @@ import io.quarkus.bom.decomposer.ReleaseIdDetector;
 import io.quarkus.bom.decomposer.ReleaseIdFactory;
 import io.quarkus.bom.decomposer.ReleaseIdResolver;
 import io.quarkus.bom.decomposer.ReleaseVersion;
+import java.util.Collection;
 import org.eclipse.aether.artifact.Artifact;
 
-public class HibernateReleaseIdDetector implements ReleaseIdDetector {
+public class PrefixedTagReleaseIdDetector implements ReleaseIdDetector {
+
+    private final String tagPrefix;
+    private final Collection<String> groupIds;
+
+    public PrefixedTagReleaseIdDetector(String tagPrefix, Collection<String> groupIds) {
+        this.tagPrefix = tagPrefix;
+        this.groupIds = groupIds;
+    }
 
     @Override
     public ReleaseId detectReleaseId(ReleaseIdResolver idResolver, Artifact artifact) throws BomDecomposerException {
-        if (!artifact.getGroupId().startsWith("org.hibernate")) {
+        if (!groupIds.contains(artifact.getGroupId())) {
             return null;
         }
+
         final ReleaseId releaseId = idResolver.defaultReleaseId(artifact);
-        final String repo = releaseId.origin().toString();
         final String version = releaseId.version().asString();
-        if (!repo.endsWith("hibernate-orm") && !repo.endsWith("hibernate-reactive")
-                || !version.endsWith(".Final")) {
+        if (version.startsWith(tagPrefix)) {
             return releaseId;
         }
-        return ReleaseIdFactory.create(releaseId.origin(),
-                ReleaseVersion.Factory.version(version.substring(0, version.length() - ".Final".length())));
+        return ReleaseIdFactory.create(releaseId.origin(), ReleaseVersion.Factory.version(tagPrefix + version));
     }
 }

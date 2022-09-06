@@ -158,6 +158,9 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     @Parameter(required = false)
     DependenciesToBuildConfig dependenciesToBuild;
 
+    @Parameter(required = false, property = "validateCodeRepoTags")
+    boolean validateCodeRepoTags;
+
     private Set<ArtifactCoords> targetBomConstraints;
     private Map<ArtifactCoords, List<Dependency>> enforcedConstraintsForBom = new HashMap<>();
 
@@ -318,6 +321,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 .setOutputFile(outputFile)
                 .setAppendOutput(appendOutput)
                 .setResolver(resolver)
+                .setValidateCodeRepoTags(validateCodeRepoTags)
                 .build().generate();
     }
 

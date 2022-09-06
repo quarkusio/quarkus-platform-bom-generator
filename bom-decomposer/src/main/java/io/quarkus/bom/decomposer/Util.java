@@ -1,6 +1,7 @@
 package io.quarkus.bom.decomposer;
 
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
+import io.quarkus.maven.dependency.ArtifactCoords;
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -16,11 +17,14 @@ import org.eclipse.aether.artifact.DefaultArtifact;
 
 public class Util {
 
+    private static final String HTTPS_GITHUB_COM = "https://github.com/";
+
     public static Artifact pom(Artifact artifact) {
-        if ("pom".equals(artifact.getExtension())) {
+        if (ArtifactCoords.TYPE_POM.equals(artifact.getExtension())) {
             return artifact;
         }
-        return new DefaultArtifact(artifact.getGroupId(), artifact.getArtifactId(), "", "pom", artifact.getVersion());
+        return new DefaultArtifact(artifact.getGroupId(), artifact.getArtifactId(), ArtifactCoords.DEFAULT_CLASSIFIER,
+                ArtifactCoords.TYPE_POM, artifact.getVersion());
     }
 
     public static Model model(File pom) throws BomDecomposerException {
@@ -33,7 +37,8 @@ public class Util {
 
     public static Artifact parentArtifact(Model model) {
         return model.getParent() == null ? null
-                : new DefaultArtifact(model.getParent().getGroupId(), model.getParent().getArtifactId(), "", "pom",
+                : new DefaultArtifact(model.getParent().getGroupId(), model.getParent().getArtifactId(),
+                        ArtifactCoords.DEFAULT_CLASSIFIER, ArtifactCoords.TYPE_POM,
                         model.getParent().getVersion());
     }
 
@@ -47,9 +52,13 @@ public class Util {
             s = scmToHttps(s);
             return s;
         }
-        final String url = resolveModelValue(model, model.getUrl());
+        String url = resolveModelValue(model, model.getUrl());
         if (url != null && url.startsWith("https://github.com/")) {
-            return url;
+            return scmToHttps(url);
+        }
+        url = resolveModelValue(model, scm.getUrl());
+        if (url != null && url.startsWith("https://github.com/")) {
+            return scmToHttps(url);
         }
         return null;
     }
@@ -61,17 +70,27 @@ public class Util {
         s = s.replace("ssh:", "");
         s = s.replace("svn:", "");
         s = s.replace(".git", "");
-        if (s.startsWith("https://") || s.startsWith("http://")) {
-            return s;
-        }
-        if (s.startsWith("github.com:")) {
+        if (s.startsWith("http://")) {
+            s = s.replace("http://", "https://");
+        } else if (!s.startsWith("https://")) {
             s = s.replace(':', '/');
+            if (s.startsWith("github.com:")) {
+                s = s.replace(':', '/');
+            }
+            if (s.startsWith("//")) {
+                s = "https:" + s;
+            } else {
+                s = "https://" + s;
+            }
         }
-        if (s.startsWith("//")) {
-            s = "https:" + s;
-        } else {
-            s = "https://" + s;
+        if (s.startsWith(HTTPS_GITHUB_COM)) {
+            var tmp = s.substring(HTTPS_GITHUB_COM.length());
+            final String[] parts = tmp.split("/");
+            if (parts.length > 2) {
+                s = HTTPS_GITHUB_COM + parts[0] + "/" + parts[1];
+            }
         }
+
         return s;
     }
 
