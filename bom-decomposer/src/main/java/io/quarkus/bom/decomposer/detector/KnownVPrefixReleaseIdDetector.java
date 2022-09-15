@@ -21,6 +21,7 @@ public class KnownVPrefixReleaseIdDetector implements ReleaseIdDetector {
             "io.jaegertracing",
             "io.micrometer",
             "io.opentelemetry",
+            "org.elasticsearch.client",
             "org.mockito",
             "org.quartz-scheduler");
 

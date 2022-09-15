@@ -13,7 +13,7 @@ public class JBossParentReleaseIdDetector implements ReleaseIdDetector {
     @Override
     public ReleaseId detectReleaseId(ReleaseIdResolver releaseResolver, Artifact artifact)
             throws BomDecomposerException {
-        if (artifact.getArtifactId().equals("jboss-parent") && artifact.getGroupId().equals("org.jboss")) {
+        if (artifact.getArtifactId().startsWith("jboss-parent") && artifact.getGroupId().equals("org.jboss")) {
             ReleaseId releaseId = releaseResolver.defaultReleaseId(artifact);
             String version = releaseId.version().asString();
             if (version.startsWith("jboss-parent-") ||
