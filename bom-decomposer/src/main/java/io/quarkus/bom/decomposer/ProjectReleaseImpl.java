@@ -8,6 +8,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BiFunction;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.graph.Dependency;
 
@@ -26,13 +27,20 @@ class ProjectReleaseImpl implements ProjectRelease {
         }
 
         @Override
-        public Builder add(ProjectDependency dep) {
+        public Builder add(ProjectDependency dep,
+                BiFunction<ProjectDependency, ProjectDependency, ProjectDependency> conflictResolver) {
             final ProjectDependency existing = deps.put(dep.key(), dep);
             if (existing == null) {
                 artifactVersions.add(dep.artifact().getVersion());
             } else if (!dep.artifact().getVersion().equals(existing.artifact().getVersion())) {
-                throw new IllegalArgumentException(
-                        "Failed to add " + dep + " since the release already includes " + existing);
+                if (conflictResolver == null) {
+                    throw new IllegalArgumentException(
+                            "Failed to add " + dep + " since the release already includes " + existing);
+                }
+                dep = conflictResolver.apply(dep, existing);
+                if (dep == existing) {
+                    deps.put(dep.key(), dep);
+                }
             }
             artifactVersions.add(dep.artifact().getVersion());
             groupIds.add(dep.artifact.getGroupId());

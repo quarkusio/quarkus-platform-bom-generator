@@ -1,10 +1,12 @@
 package io.quarkus.bom.platform;
 
+import io.quarkus.bom.decomposer.ProjectDependency;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.regex.Pattern;
 import org.apache.maven.artifact.versioning.ArtifactVersion;
+import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
 
 public class VersionConstraintComparator implements Comparator<ArtifactVersion> {
 
@@ -35,6 +37,10 @@ public class VersionConstraintComparator implements Comparator<ArtifactVersion> 
 
     public boolean hasVersionPreferences() {
         return !versionPreferences.isEmpty();
+    }
+
+    public boolean isPreferredVersion(ProjectDependency d) {
+        return isPreferredVersion(new DefaultArtifactVersion(d.artifact().getVersion()));
     }
 
     public boolean isPreferredVersion(ArtifactVersion v) {
