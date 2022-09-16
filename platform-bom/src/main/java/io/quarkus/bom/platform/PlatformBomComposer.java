@@ -636,7 +636,16 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             final ProjectRelease.Builder releaseBuilder = extReleaseCollector.getOrCreateReleaseBuilder(release.id(),
                     memberBeingProcessed);
             for (ProjectDependency dep : release.dependencies()) {
-                releaseBuilder.add(dep);
+                releaseBuilder.add(dep, (dep1, dep2) -> {
+                    final VersionConstraintComparator vc = versionConstraintComparator();
+                    if (!vc.hasVersionPreferences()) {
+                        return null;
+                    }
+                    if (vc.isPreferredVersion(dep1)) {
+                        return vc.isPreferredVersion(dep2) ? null : dep1;
+                    }
+                    return vc.isPreferredVersion(dep2) ? dep2 : null;
+                });
             }
             return;
         }
@@ -683,10 +692,8 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             throws BomDecomposerException {
         if (!quarkusBomDep.artifact().getVersion().equals(memberDep.artifact().getVersion())
                 && versionConstraintComparator().hasVersionPreferences()
-                && versionConstraintComparator()
-                        .isPreferredVersion(new DefaultArtifactVersion(memberDep.artifact().getVersion()))
-                && !versionConstraintComparator()
-                        .isPreferredVersion(new DefaultArtifactVersion(quarkusBomDep.artifact().getVersion()))) {
+                && versionConstraintComparator().isPreferredVersion(memberDep)
+                && !versionConstraintComparator().isPreferredVersion(quarkusBomDep)) {
             final StringBuilder buf = new StringBuilder();
             buf.append("Preferred constraint ").append(memberDep.artifact()).append(" was rejected in favor of ")
                     .append(quarkusBomDep.artifact()).append(" managed by the quarkus-bom");
@@ -707,7 +714,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         if (versionComparator == null) {
             final List<Pattern> preferences;
             if (config.versionConstraintPreferences().isEmpty()) {
-                preferences = Collections.emptyList();
+                preferences = List.of();
             } else {
                 preferences = new ArrayList<>(config.versionConstraintPreferences().size());
                 for (String expr : config.versionConstraintPreferences()) {

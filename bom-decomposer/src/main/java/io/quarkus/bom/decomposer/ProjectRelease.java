@@ -3,6 +3,7 @@ package io.quarkus.bom.decomposer;
 import io.quarkus.maven.dependency.ArtifactKey;
 import java.util.Collection;
 import java.util.List;
+import java.util.function.BiFunction;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.graph.Dependency;
 
@@ -26,7 +27,12 @@ public interface ProjectRelease {
 
     interface Builder extends ProjectRelease {
 
-        Builder add(ProjectDependency dep);
+        default Builder add(ProjectDependency dep) {
+            return add(dep, null);
+        }
+
+        Builder add(ProjectDependency dep,
+                BiFunction<ProjectDependency, ProjectDependency, ProjectDependency> conflictResolver);
 
         Builder add(Artifact a);
 
