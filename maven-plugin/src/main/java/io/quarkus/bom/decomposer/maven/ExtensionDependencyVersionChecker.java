@@ -113,7 +113,7 @@ public class ExtensionDependencyVersionChecker {
                         + " is not an instance of java.util.List but " + o.getClass().getName());
                 return;
             }
-            if (!((List<String>) o).stream().filter(i -> CHECK_SUPPORT_LEVELS.contains(i)).findFirst().isPresent()) {
+            if (!((List<?>) o).stream().filter(i -> CHECK_SUPPORT_LEVELS.contains(i)).findFirst().isPresent()) {
                 return;
             }
             var a = new DefaultArtifact(extensionCoords.getGroupId(), extensionCoords.getArtifactId(),
@@ -152,7 +152,7 @@ public class ExtensionDependencyVersionChecker {
     }
 
     private static ArtifactKey toKey(Artifact a) {
-        return ArtifactKey.gact(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension());
+        return ArtifactKey.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension());
     }
 
     private static String toCompactCoords(Artifact a) {
