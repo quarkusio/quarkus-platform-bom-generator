@@ -15,6 +15,7 @@ import io.quarkus.bom.decomposer.maven.MojoMessageWriter;
 import io.quarkus.bom.decomposer.maven.util.Utils;
 import io.quarkus.bom.diff.BomDiff;
 import io.quarkus.bom.diff.HtmlBomDiffReportGenerator;
+import io.quarkus.bom.platform.DependenciesToBuildConfig;
 import io.quarkus.bom.platform.PlatformBomComposer;
 import io.quarkus.bom.platform.PlatformBomConfig;
 import io.quarkus.bom.platform.PlatformBomUtils;
@@ -389,6 +390,66 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                             + getDependencyVersion(pom, m.descriptorCoords())));
             config.addChild(
                     textDomElement("outputFile", prefix + "/" + m.generatedBomCoords().getArtifactId() + "-deps-to-build.txt"));
+
+            final DependenciesToBuildConfig depsToBuildConfig = m.config().getDependenciesToBuild();
+            if (depsToBuildConfig != null) {
+                final Xpp3Dom depsToBuildDom = new Xpp3Dom("dependenciesToBuild");
+                config.addChild(depsToBuildDom);
+                if (!depsToBuildConfig.getExcludeArtifacts().isEmpty()) {
+                    final Xpp3Dom excludeArtifactsDom = new Xpp3Dom("excludeArtifacts");
+                    depsToBuildDom.addChild(excludeArtifactsDom);
+                    for (ArtifactCoords artifact : depsToBuildConfig.getExcludeArtifacts()) {
+                        final Xpp3Dom artifactDom = new Xpp3Dom("artifact");
+                        excludeArtifactsDom.addChild(artifactDom);
+                        artifactDom.setValue(artifact.toGACTVString());
+                    }
+                }
+                if (!depsToBuildConfig.getExcludeGroupIds().isEmpty()) {
+                    final Xpp3Dom excludeGroupIdsDom = new Xpp3Dom("excludeGroupIds");
+                    depsToBuildDom.addChild(excludeGroupIdsDom);
+                    for (String groupId : depsToBuildConfig.getExcludeGroupIds()) {
+                        final Xpp3Dom groupIdDom = new Xpp3Dom("groupId");
+                        excludeGroupIdsDom.addChild(groupIdDom);
+                        groupIdDom.setValue(groupId);
+                    }
+                }
+                if (!depsToBuildConfig.getExcludeKeys().isEmpty()) {
+                    final Xpp3Dom excludeKeysDom = new Xpp3Dom("excludeKeys");
+                    depsToBuildDom.addChild(excludeKeysDom);
+                    for (ArtifactKey key : depsToBuildConfig.getExcludeKeys()) {
+                        final Xpp3Dom keyDom = new Xpp3Dom("key");
+                        excludeKeysDom.addChild(keyDom);
+                        keyDom.setValue(key.toString());
+                    }
+                }
+                if (!depsToBuildConfig.getIncludeArtifacts().isEmpty()) {
+                    final Xpp3Dom includeArtifactsDom = new Xpp3Dom("includeArtifacts");
+                    depsToBuildDom.addChild(includeArtifactsDom);
+                    for (ArtifactCoords artifact : depsToBuildConfig.getIncludeArtifacts()) {
+                        final Xpp3Dom artifactDom = new Xpp3Dom("artifact");
+                        includeArtifactsDom.addChild(artifactDom);
+                        artifactDom.setValue(artifact.toGACTVString());
+                    }
+                }
+                if (!depsToBuildConfig.getIncludeGroupIds().isEmpty()) {
+                    final Xpp3Dom includeGroupIdsDom = new Xpp3Dom("includeGroupIds");
+                    depsToBuildDom.addChild(includeGroupIdsDom);
+                    for (String groupId : depsToBuildConfig.getIncludeGroupIds()) {
+                        final Xpp3Dom groupIdDom = new Xpp3Dom("groupId");
+                        includeGroupIdsDom.addChild(groupIdDom);
+                        groupIdDom.setValue(groupId);
+                    }
+                }
+                if (!depsToBuildConfig.getIncludeKeys().isEmpty()) {
+                    final Xpp3Dom includeKeysDom = new Xpp3Dom("includeKeys");
+                    depsToBuildDom.addChild(includeKeysDom);
+                    for (ArtifactKey key : depsToBuildConfig.getIncludeKeys()) {
+                        final Xpp3Dom keyDom = new Xpp3Dom("key");
+                        includeKeysDom.addChild(keyDom);
+                        keyDom.setValue(key.toString());
+                    }
+                }
+            }
         }
 
         persistPom(pom);

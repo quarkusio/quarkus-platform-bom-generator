@@ -1,4 +1,4 @@
-package io.quarkus.bom.decomposer.maven.platformgen;
+package io.quarkus.bom.platform;
 
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
@@ -13,6 +13,28 @@ public class DependenciesToBuildConfig {
     private Set<String> includeGroupIds = Set.of();
     private Set<ArtifactKey> includeKeys = Set.of();
     private Set<ArtifactCoords> includeArtifacts = Set.of();
+
+    private static <T> Set<T> mergeIn(Set<T> s1, Set<T> s2) {
+        if (s1.isEmpty()) {
+            if (s2.isEmpty()) {
+                return Set.of();
+            }
+            return new HashSet<>(s2);
+        }
+        if (!s2.isEmpty()) {
+            s1.addAll(s2);
+        }
+        return s1;
+    }
+
+    public void merge(DependenciesToBuildConfig other) {
+        excludeGroupIds = mergeIn(excludeGroupIds, other.excludeGroupIds);
+        excludeKeys = mergeIn(excludeKeys, other.excludeKeys);
+        excludeArtifacts = mergeIn(excludeArtifacts, other.excludeArtifacts);
+        includeGroupIds = mergeIn(includeGroupIds, other.includeGroupIds);
+        includeKeys = mergeIn(includeKeys, other.includeKeys);
+        includeArtifacts = mergeIn(includeArtifacts, other.includeArtifacts);
+    }
 
     public Set<String> getExcludeGroupIds() {
         return excludeGroupIds;
