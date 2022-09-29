@@ -1,7 +1,7 @@
 package io.quarkus.bom.decomposer.maven;
 
-import io.quarkus.bom.decomposer.maven.platformgen.DependenciesToBuildConfig;
 import io.quarkus.bom.decomposer.maven.platformgen.PlatformConfig;
+import io.quarkus.bom.platform.DependenciesToBuildConfig;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;

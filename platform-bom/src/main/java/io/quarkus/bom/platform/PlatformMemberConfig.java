@@ -31,6 +31,8 @@ public class PlatformMemberConfig {
 
     private RedHatExtensionDependencyCheck dependencyCheck;
 
+    private DependenciesToBuildConfig depsToBuild;
+
     public void applyOverrides(PlatformMemberConfig overrides) {
         if (overrides.bom != null) {
             bom = overrides.bom;
@@ -271,5 +273,13 @@ public class PlatformMemberConfig {
         var coords = ArtifactCoords.fromString(getRelease().getNext());
         return ArtifactCoords.TYPE_POM.equals(coords.getType()) ? coords
                 : ArtifactCoords.pom(coords.getGroupId(), coords.getArtifactId(), coords.getVersion());
+    }
+
+    public DependenciesToBuildConfig getDependenciesToBuild() {
+        return depsToBuild;
+    }
+
+    public void setDependenciesToBuild(DependenciesToBuildConfig depsToBuild) {
+        this.depsToBuild = depsToBuild;
     }
 }
