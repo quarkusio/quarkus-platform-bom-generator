@@ -12,10 +12,10 @@ public class ApacheQPidReleaseIdDetector implements ReleaseIdDetector {
     @Override
     public ReleaseId detectReleaseId(ReleaseIdResolver releaseResolver, Artifact artifact)
             throws BomDecomposerException {
-        if (!"org.apache.qpid".equals(artifact.getGroupId())) {
-            return null;
+        if (artifact.getArtifactId().startsWith("proton-j") && "org.apache.qpid".equals(artifact.getGroupId())) {
+            return ReleaseIdFactory.forScmAndTag("https://github.com/apache/qpid-proton-j", artifact.getVersion());
         }
-        return ReleaseIdFactory.forScmAndTag("https://github.com/apache/qpid-proton-j", artifact.getVersion());
+        return null;
     }
 
 }
