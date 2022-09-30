@@ -18,8 +18,8 @@ public class PlatformBomGeneratorConfig {
     @Parameter
     Set<String> excludedGroups = new HashSet<>(0);
 
-    @Parameter
-    boolean enableNonMemberQuarkiverseExtensions;
+    @Parameter(defaultValue = "true")
+    boolean enableNonMemberQuarkiverseExtensions = true;
 
     @Parameter
     List<String> versionConstraintPreferences = new ArrayList<>(0);
