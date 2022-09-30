@@ -14,6 +14,7 @@ io.quarkus.bom.decomposer.detector.JandexReleaseIdDetector
 io.quarkus.bom.decomposer.detector.JakartaCdiSpecReleaseIdDetector
 io.quarkus.bom.decomposer.detector.JakartaElReleaseIdDetector
 io.quarkus.bom.decomposer.detector.JakartaInterceptorReleaseIdDetector
+io.quarkus.bom.decomposer.detector.JakartaJmsApiReleaseIdDetector
 io.quarkus.bom.decomposer.detector.JakartaJsonBindReleaseIdDetector
 io.quarkus.bom.decomposer.detector.JakartaPersistenceReleaseIdDetector
 io.quarkus.bom.decomposer.detector.JakartaServletReleaseIdDetector
@@ -25,6 +26,7 @@ io.quarkus.bom.decomposer.detector.JBossLogManagerEmbeddedReleaseIdDetector
 io.quarkus.bom.decomposer.detector.JBossParentReleaseIdDetector
 io.quarkus.bom.decomposer.detector.JBossJaxRsApiReleaseIdDetector
 io.quarkus.bom.decomposer.detector.JBossTransactionSpiReleaseIdDetector
+io.quarkus.bom.decomposer.detector.JsonPathReleaseIdDetector
 io.quarkus.bom.decomposer.detector.JUnitPlatformReleaseDetector
 io.quarkus.bom.decomposer.detector.KafkaReleaseDetector
 io.quarkus.bom.decomposer.detector.KnownVPrefixReleaseIdDetector
@@ -41,3 +43,4 @@ io.quarkus.bom.decomposer.detector.SmallryeStorkReleaseIdDetector
 io.quarkus.bom.decomposer.detector.SonatypeOssParentReleaseIdDetector
 io.quarkus.bom.decomposer.detector.VertxReleaseDetector
 io.quarkus.bom.decomposer.detector.WildFlyCommonReleaseIdDetector
+io.quarkus.bom.decomposer.detector.XStreamReleaseIdDetector

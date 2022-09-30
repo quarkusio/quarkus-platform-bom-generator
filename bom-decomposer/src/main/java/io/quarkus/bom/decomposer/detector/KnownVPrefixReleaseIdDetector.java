@@ -12,6 +12,7 @@ import org.eclipse.aether.artifact.Artifact;
 public class KnownVPrefixReleaseIdDetector implements ReleaseIdDetector {
 
     private static final Set<String> GROUP_IDS = Set.of(
+            "ca.uhn.hapi.fhir",
             "com.google.api.grpc",
             "com.google.cloud",
             "com.google.errorprone",
@@ -21,6 +22,7 @@ public class KnownVPrefixReleaseIdDetector implements ReleaseIdDetector {
             "io.jaegertracing",
             "io.micrometer",
             "io.opentelemetry",
+            "joda-time",
             "org.elasticsearch.client",
             "org.mockito",
             "org.quartz-scheduler");
