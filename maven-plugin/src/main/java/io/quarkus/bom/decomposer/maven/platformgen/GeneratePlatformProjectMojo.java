@@ -1686,13 +1686,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private TransformerFactory getTransformerFactory() throws TransformerFactoryConfigurationError {
-        if (transformerFactory == null) {
-            final TransformerFactory factory = TransformerFactory.newInstance();
-            //factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
-            //factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");
-            transformerFactory = factory;
-        }
-        return transformerFactory;
+        return transformerFactory == null ? transformerFactory = TransformerFactory.newInstance() : transformerFactory;
     }
 
     private Plugin createFailsafeConfig(PlatformMemberTestConfig testConfig, final Xpp3Dom depsToScan, boolean nativeTest) {

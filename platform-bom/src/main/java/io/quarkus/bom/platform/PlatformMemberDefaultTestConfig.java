@@ -1,6 +1,5 @@
 package io.quarkus.bom.platform;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -12,18 +11,18 @@ public class PlatformMemberDefaultTestConfig {
     protected Boolean skipJvm;
     protected Boolean failsafeMavenPlugin;
     protected String transformWith;
-    protected Map<String, String> systemProperties = Collections.emptyMap();
-    protected Map<String, String> jvmSystemProperties = Collections.emptyMap();
-    protected Map<String, String> nativeSystemProperties = Collections.emptyMap();
+    protected Map<String, String> systemProperties = Map.of();
+    protected Map<String, String> jvmSystemProperties = Map.of();
+    protected Map<String, String> nativeSystemProperties = Map.of();
     protected Properties pomProperties;
     protected String groups;
     protected String nativeGroups;
-    protected List<String> dependencies = Collections.emptyList();
-    protected List<String> testDependencies = Collections.emptyList();
-    protected List<String> jvmIncludes = Collections.emptyList();
-    protected List<String> jvmExcludes = Collections.emptyList();
-    protected List<String> nativeIncludes = Collections.emptyList();
-    protected List<String> nativeExcludes = Collections.emptyList();
+    protected List<String> dependencies = List.of();
+    protected List<String> testDependencies = List.of();
+    protected List<String> jvmIncludes = List.of();
+    protected List<String> jvmExcludes = List.of();
+    protected List<String> nativeIncludes = List.of();
+    protected List<String> nativeExcludes = List.of();
     protected Boolean packageApplication;
 
     public PlatformMemberDefaultTestConfig() {
