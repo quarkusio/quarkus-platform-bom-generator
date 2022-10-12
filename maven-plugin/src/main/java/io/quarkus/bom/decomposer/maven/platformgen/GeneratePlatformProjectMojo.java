@@ -779,6 +779,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
             Xpp3Dom pomElements = new Xpp3Dom("pomElements");
             config.addChild(pomElements);
+            pomElements.addChild(textDomElement("dependencyManagement", "keep"));
             pomElements.addChild(textDomElement("repositories", "remove"));
             pomElements.addChild(textDomElement("build", "remove"));
 
