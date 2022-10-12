@@ -595,13 +595,13 @@ public class DependenciesToBuildReportGenerator {
     }
 
     private void order(ReleaseRepo repo, Map<ReleaseId, ReleaseRepo> repos) {
+        repos.putIfAbsent(repo.id(), repo);
         for (ReleaseRepo d : repo.dependencies.values()) {
             if (repos.containsKey(d.id())) {
                 continue;
             }
             order(d, repos);
         }
-        repos.putIfAbsent(repo.id(), repo);
     }
 
     private void logReleaseRepoDep(ReleaseRepo repo, int depth) {
