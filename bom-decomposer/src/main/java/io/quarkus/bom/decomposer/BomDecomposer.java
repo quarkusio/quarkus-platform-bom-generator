@@ -10,6 +10,7 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
 import io.quarkus.devtools.messagewriter.MessageWriter;
+import io.quarkus.maven.dependency.ArtifactCoords;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -163,13 +164,24 @@ public class BomDecomposer {
                 // filter out dependencies that can't be resolved
                 // if an artifact has a classifier we resolve the artifact itself
                 // if an artifact does not have a classifier we will try resolving its pom
-                final String classifier = dep.getArtifact().getClassifier();
+                final Artifact artifact = dep.getArtifact();
+                final String classifier = artifact.getClassifier();
                 if (!classifier.isEmpty() &&
                         !classifier.equals("sources") &&
                         !classifier.equals("javadoc")) {
-                    resolve(dep.getArtifact());
+                    resolve(artifact);
+                } else if (!ArtifactCoords.TYPE_POM.equals(artifact.getExtension())
+                        && ArtifactCoords.TYPE_POM.equals(releaseIdResolver.model(artifact).getPackaging())) {
+                    // if it's not a pom but the packaging in the POM is pom then check whether the artifact is resolvable
+                    try {
+                        resolve(artifact);
+                    } catch (BomDecomposerException | ArtifactNotFoundException e) {
+                        // if it's not resolvable then turn it into a POM artifact
+                        dep = dep.setArtifact(new DefaultArtifact(artifact.getGroupId(),
+                                artifact.getArtifactId(), ArtifactCoords.TYPE_POM, artifact.getVersion()));
+                    }
                 }
-                bomBuilder.bomDependency(releaseIdResolver.releaseId(dep.getArtifact()), dep);
+                bomBuilder.bomDependency(releaseIdResolver.releaseId(artifact), dep);
             } catch (BomDecomposerException e) {
                 throw e;
             } catch (ArtifactNotFoundException | UnresolvableModelException e) {
