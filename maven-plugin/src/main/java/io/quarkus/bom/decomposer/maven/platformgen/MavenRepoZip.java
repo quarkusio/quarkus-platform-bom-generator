@@ -42,6 +42,7 @@ import org.eclipse.aether.repository.LocalMetadataResult;
 import org.eclipse.aether.repository.LocalRepository;
 import org.eclipse.aether.repository.LocalRepositoryManager;
 import org.eclipse.aether.repository.RemoteRepository;
+import org.eclipse.aether.util.artifact.JavaScopes;
 
 public class MavenRepoZip {
 
@@ -182,11 +183,11 @@ public class MavenRepoZip {
 
     private Path repoDir;
     private MavenArtifactResolver resolver;
-    private List<Dependency> managedDeps = Collections.emptyList();
+    private List<Dependency> managedDeps = List.of();
     private MessageWriter log;
-    private Set<String> excludedGroupIds = Collections.emptySet();
-    private Set<ArtifactKey> excludedArtifacts = Collections.emptySet();
-    private List<ArtifactCoords> extraArtifacts = Collections.emptyList();
+    private Set<String> excludedGroupIds = Set.of();
+    private Set<ArtifactKey> excludedArtifacts = Set.of();
+    private List<ArtifactCoords> extraArtifacts = List.of();
     private Pattern includedVersionsPattern;
     private final Set<ArtifactCoords> copiedArtifacts = new HashSet<>();
 
@@ -210,8 +211,8 @@ public class MavenRepoZip {
         }
         final DependencyNode root;
         try {
-            root = resolver.collectManagedDependencies(artifact, Collections.emptyList(), managedDeps,
-                    Collections.emptyList(), Collections.emptyList(), "test", "provided").getRoot();
+            root = resolver.collectManagedDependencies(artifact, List.of(), managedDeps,
+                    List.of(), List.of(), JavaScopes.TEST, JavaScopes.PROVIDED).getRoot();
         } catch (BootstrapMavenException e) {
             throw new MojoExecutionException("Failed to collect dependencies of " + artifact, e);
         }
@@ -220,6 +221,9 @@ public class MavenRepoZip {
 
     private void copyDependencies(DependencyNode node) throws MojoExecutionException {
         for (DependencyNode child : node.getChildren()) {
+            if (child.getDependency() != null && child.getDependency().isOptional()) {
+                continue;
+            }
             copyDependencies(child);
         }
         final Artifact artifact = node.getArtifact();
