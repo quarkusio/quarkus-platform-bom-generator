@@ -170,7 +170,7 @@ public class BomDecomposer {
                         !classifier.equals("sources") &&
                         !classifier.equals("javadoc")) {
                     resolve(artifact);
-                } else if (!ArtifactCoords.TYPE_POM.equals(artifact.getExtension())
+                } else if (ArtifactCoords.TYPE_JAR.equals(artifact.getExtension())
                         && ArtifactCoords.TYPE_POM.equals(releaseIdResolver.model(artifact).getPackaging())) {
                     // if it's not a pom but the packaging in the POM is pom then check whether the artifact is resolvable
                     try {

@@ -12,10 +12,9 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
+import io.quarkus.paths.PathTree;
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -104,22 +103,20 @@ public class ExtensionFilter implements DecomposedBomTransformer {
                     continue;
                 }
 
-                String deploymentStr;
-                try (FileSystem fs = FileSystems.newFileSystem(p, null)) {
-                    final Path propsPath = fs.getPath(BootstrapConstants.DESCRIPTOR_PATH);
-                    if (!Files.exists(propsPath)) {
-                        continue;
+                final String deploymentStr = PathTree.ofArchive(p).apply(BootstrapConstants.DESCRIPTOR_PATH, (visit) -> {
+                    if (visit == null) {
+                        return null;
                     }
                     final Properties props = new Properties();
-                    try (BufferedReader reader = Files.newBufferedReader(propsPath)) {
+                    try (BufferedReader reader = Files.newBufferedReader(visit.getPath())) {
                         props.load(reader);
+                    } catch (IOException e) {
+                        throw new RuntimeException("Failed to read " + visit.getPath() + " from " + p, e);
                     }
-                    deploymentStr = props.getProperty(BootstrapConstants.PROP_DEPLOYMENT_ARTIFACT);
-                    if (deploymentStr == null) {
-                        continue;
-                    }
-                } catch (IOException e) {
-                    throw new BomDecomposerException("Failed to read " + BootstrapConstants.DESCRIPTOR_PATH + " from " + p, e);
+                    return props.getProperty(BootstrapConstants.PROP_DEPLOYMENT_ARTIFACT);
+                });
+                if (deploymentStr == null) {
+                    continue;
                 }
 
                 final ArtifactCoords deploymentCoords = ArtifactCoords.fromString(deploymentStr);
