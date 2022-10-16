@@ -29,10 +29,7 @@ public interface ReleaseOrigin extends Comparable<ReleaseOrigin> {
 
         @Override
         public int hashCode() {
-            final int prime = 31;
-            int result = 1;
-            result = prime * result + ((connection == null) ? 0 : connection.hashCode());
-            return result;
+            return Objects.hash(connection);
         }
 
         @Override
@@ -44,12 +41,7 @@ public interface ReleaseOrigin extends Comparable<ReleaseOrigin> {
             if (getClass() != obj.getClass())
                 return false;
             ScmConnectionOrigin other = (ScmConnectionOrigin) obj;
-            if (connection == null) {
-                if (other.connection != null)
-                    return false;
-            } else if (!connection.equals(other.connection))
-                return false;
-            return true;
+            return Objects.equals(connection, other.connection);
         }
 
         @Override
@@ -74,11 +66,7 @@ public interface ReleaseOrigin extends Comparable<ReleaseOrigin> {
 
         @Override
         public int hashCode() {
-            final int prime = 31;
-            int result = 1;
-            result = prime * result + ((artifactId == null) ? 0 : artifactId.hashCode());
-            result = prime * result + ((groupId == null) ? 0 : groupId.hashCode());
-            return result;
+            return Objects.hash(artifactId, groupId);
         }
 
         @Override
@@ -90,17 +78,7 @@ public interface ReleaseOrigin extends Comparable<ReleaseOrigin> {
             if (getClass() != obj.getClass())
                 return false;
             GaOrigin other = (GaOrigin) obj;
-            if (artifactId == null) {
-                if (other.artifactId != null)
-                    return false;
-            } else if (!artifactId.equals(other.artifactId))
-                return false;
-            if (groupId == null) {
-                if (other.groupId != null)
-                    return false;
-            } else if (!groupId.equals(other.groupId))
-                return false;
-            return true;
+            return Objects.equals(artifactId, other.artifactId) && Objects.equals(groupId, other.groupId);
         }
 
         @Override

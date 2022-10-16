@@ -37,11 +37,7 @@ public interface ReleaseVersion {
 
         @Override
         public int hashCode() {
-            final int prime = 31;
-            int result = 1;
-            result = prime * result + ((type == null) ? 0 : type.hashCode());
-            result = prime * result + ((value == null) ? 0 : value.hashCode());
-            return result;
+            return Objects.hash(type, value);
         }
 
         @Override
@@ -53,17 +49,7 @@ public interface ReleaseVersion {
             if (getClass() != obj.getClass())
                 return false;
             StringReleaseVersion other = (StringReleaseVersion) obj;
-            if (type == null) {
-                if (other.type != null)
-                    return false;
-            } else if (!type.equals(other.type))
-                return false;
-            if (value == null) {
-                if (other.value != null)
-                    return false;
-            } else if (!value.equals(other.value))
-                return false;
-            return true;
+            return Objects.equals(type, other.type) && Objects.equals(value, other.value);
         }
     }
 }
