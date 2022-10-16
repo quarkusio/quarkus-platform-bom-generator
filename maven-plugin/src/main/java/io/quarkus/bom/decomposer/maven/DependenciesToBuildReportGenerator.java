@@ -12,6 +12,7 @@ import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
+import io.quarkus.util.GlobUtil;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -32,7 +33,11 @@ import java.util.Properties;
 import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import org.apache.maven.artifact.versioning.ArtifactVersion;
+import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
 import org.apache.maven.model.DependencyManagement;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Parent;
@@ -315,6 +320,8 @@ public class DependenciesToBuildReportGenerator {
     private final Map<ReleaseId, ReleaseRepo> releaseRepos = new HashMap<>();
     private final Map<ArtifactCoords, Map<String, String>> effectivePomProps = new HashMap<>();
 
+    private final Map<Set<ReleaseId>, List<ReleaseId>> circularRepoDeps = new HashMap<>();
+
     public void generate() {
 
         if (logCodeRepoGraph) {
@@ -351,16 +358,17 @@ public class DependenciesToBuildReportGenerator {
                 logComment("Artifacts to be built from source from " + targetBomCoords.toCompactCoords() + ":");
                 if (logCodeRepos) {
                     initReleaseRepos();
+                    detectCircularRepoDeps();
                     codeReposTotal = releaseRepos.size();
 
-                    final Map<ReleaseId, ReleaseRepo> orderedMap = new LinkedHashMap<>(codeReposTotal);
+                    final List<ReleaseRepo> sorted = new ArrayList<>(codeReposTotal);
                     for (ReleaseRepo r : releaseRepos.values()) {
                         if (r.isRoot()) {
-                            order(r, orderedMap);
+                            sort(r, new HashSet<>(codeReposTotal), sorted);
                         }
                     }
 
-                    for (ReleaseRepo e : orderedMap.values()) {
+                    for (ReleaseRepo e : sorted) {
                         logComment("repo-url " + e.id().origin());
                         logComment("tag " + e.id().version().asString());
                         for (String s : toSortedStrings(e.artifacts, logModulesToBuild)) {
@@ -368,6 +376,16 @@ public class DependenciesToBuildReportGenerator {
                         }
                     }
 
+                    if (!circularRepoDeps.isEmpty()) {
+                        logComment("ERROR: The following circular dependency chains were detected among releases:");
+                        final Iterator<List<ReleaseId>> chains = circularRepoDeps.values().iterator();
+                        int i = 0;
+                        while (chains.hasNext()) {
+                            logComment("  Chain #" + ++i + ":");
+                            chains.next().forEach(id -> logComment("    " + id));
+                            logComment("");
+                        }
+                    }
                     if (logCodeRepoGraph) {
                         logComment("");
                         logComment("Code repository dependency graph");
@@ -510,9 +528,19 @@ public class DependenciesToBuildReportGenerator {
                 a.getType(), a.getVersion());
     }
 
+    private static final String RH_VERSION_SUFFIX = "?redhat-*";
+    private static final Pattern RH_VERSION_SUFFIX_PATTERN = Pattern.compile(GlobUtil.toRegexPattern(RH_VERSION_SUFFIX));
+    private static final String RH_VERSION_EXPR = "*redhat-*";
+    private static final Pattern RH_VERSION_PATTERN = Pattern.compile(GlobUtil.toRegexPattern(RH_VERSION_EXPR));
+
+    private static String ensureNoRhSuffix(String version) {
+        return RH_VERSION_SUFFIX_PATTERN.matcher(version).replaceFirst("");
+    }
+
     private void initReleaseRepos() {
 
-        final ReleaseIdResolver idResolver = newReleaseIdResolver(resolver, log, validateCodeRepoTags);
+        final ReleaseIdResolver idResolver = newReleaseIdResolver(resolver, log, validateCodeRepoTags,
+                getRhCoordsUpstreamVersions());
 
         final Map<ArtifactCoords, ReleaseId> artifactReleases = new HashMap<>();
         for (ArtifactCoords c : allDepsToBuild) {
@@ -540,8 +568,39 @@ public class DependenciesToBuildReportGenerator {
         }
     }
 
+    private Map<ArtifactCoords, String> getRhCoordsUpstreamVersions() {
+        final Map<String, List<ArtifactVersion>> upstreamVersions = new HashMap<>();
+        final List<ArtifactCoords> rhCoords = new ArrayList<>();
+        for (ArtifactCoords c : allDepsToBuild) {
+            if (RH_VERSION_PATTERN.matcher(c.getVersion()).matches()) {
+                rhCoords.add(c);
+            } else {
+                upstreamVersions.computeIfAbsent(c.getGroupId(), k -> new ArrayList<>())
+                        .add(new DefaultArtifactVersion(c.getVersion()));
+            }
+        }
+        if (rhCoords.isEmpty()) {
+            return Map.of();
+        }
+        final Map<ArtifactCoords, String> rhCoordsUpstreamVersions = new HashMap<>(rhCoords.size());
+        for (ArtifactCoords c : rhCoords) {
+            final List<ArtifactVersion> originalVersions = upstreamVersions.get(c.getGroupId());
+            if (originalVersions == null) {
+                continue;
+            }
+            final ArtifactVersion noRhSuffixVersion = new DefaultArtifactVersion(ensureNoRhSuffix(c.getVersion()));
+            for (ArtifactVersion v : originalVersions) {
+                if (v.equals(noRhSuffixVersion)) {
+                    rhCoordsUpstreamVersions.put(c, v.toString());
+                    break;
+                }
+            }
+        }
+        return rhCoordsUpstreamVersions;
+    }
+
     private static ReleaseIdResolver newReleaseIdResolver(MavenArtifactResolver artifactResolver, MessageWriter log,
-            boolean validateCodeRepoTags) {
+            boolean validateCodeRepoTags, Map<ArtifactCoords, String> versionMapping) {
         final List<ReleaseIdDetector> releaseDetectors = new ArrayList<>();
         releaseDetectors.add(new PrefixedTagReleaseIdDetector("jetty-", List.of("org.eclipse.jetty")));
         releaseDetectors.add(
@@ -583,25 +642,36 @@ public class DependenciesToBuildReportGenerator {
         releaseDetectors
                 .addAll(ServiceLoader.load(ReleaseIdDetector.class).stream().map(p -> p.get()).collect(Collectors.toList()));
 
-        return new ReleaseIdResolver(artifactResolver, releaseDetectors, log, validateCodeRepoTags);
+        return new ReleaseIdResolver(artifactResolver, releaseDetectors, log, validateCodeRepoTags, versionMapping);
     }
 
     public static void main(String[] args) throws Exception {
-        ReleaseIdResolver idResolver = newReleaseIdResolver(MavenArtifactResolver.builder().build(), MessageWriter.info(),
-                true);
-        ReleaseId releaseId = idResolver
-                .releaseId(new DefaultArtifact("org.ow2.asm", "asm", "pom", "9.3"));
-        System.out.println("RELEASE ID " + releaseId);
+
+        String versionExpr = "?redhat-*";
+        Pattern pattern = Pattern.compile(GlobUtil.toRegexPattern(versionExpr));
+
+        String version = "2.13.0.CR1-redhat-00001";
+        Matcher matcher = pattern.matcher(version);
+        System.out.println("matches: " + matcher.matches());
+        System.out.println(matcher.replaceAll(""));
+
+        /*
+         * ReleaseIdResolver idResolver = newReleaseIdResolver(MavenArtifactResolver.builder().build(), MessageWriter.info(),
+         * true);
+         * ReleaseId releaseId = idResolver
+         * .releaseId(new DefaultArtifact("org.ow2.asm", "asm", "pom", "9.3"));
+         * System.out.println("RELEASE ID " + releaseId);
+         */
     }
 
-    private void order(ReleaseRepo repo, Map<ReleaseId, ReleaseRepo> repos) {
-        repos.putIfAbsent(repo.id(), repo);
-        for (ReleaseRepo d : repo.dependencies.values()) {
-            if (repos.containsKey(d.id())) {
-                continue;
-            }
-            order(d, repos);
+    private void sort(ReleaseRepo repo, Set<ReleaseId> processed, List<ReleaseRepo> sorted) {
+        if (!processed.add(repo.id)) {
+            return;
         }
+        for (ReleaseRepo d : repo.dependencies.values()) {
+            sort(d, processed, sorted);
+        }
+        sorted.add(repo);
     }
 
     private void logReleaseRepoDep(ReleaseRepo repo, int depth) {
@@ -946,11 +1016,30 @@ public class DependenciesToBuildReportGenerator {
         return Objects.requireNonNull(releaseRepos.get(id));
     }
 
+    private void detectCircularRepoDeps() {
+        for (ReleaseRepo r : releaseRepos.values()) {
+            final List<ReleaseId> chain = new ArrayList<>();
+            detectCircularRepoDeps(r, chain);
+        }
+    }
+
+    private void detectCircularRepoDeps(ReleaseRepo r, List<ReleaseId> chain) {
+        if (chain.contains(r.id)) {
+            circularRepoDeps.computeIfAbsent(new HashSet<>(chain), k -> new ArrayList<>(chain));
+            return;
+        }
+        chain.add(r.id);
+        for (ReleaseRepo d : r.dependencies.values()) {
+            detectCircularRepoDeps(d, chain);
+        }
+        chain.remove(chain.size() - 1);
+    }
+
     private static class ReleaseRepo {
 
         final ReleaseId id;
         final List<ArtifactCoords> artifacts = new ArrayList<>();
-        final Map<ReleaseId, ReleaseRepo> parents = new HashMap<>();
+        final Map<ReleaseId, ReleaseRepo> dependants = new HashMap<>();
         final Map<ReleaseId, ReleaseRepo> dependencies = new LinkedHashMap<>();
 
         ReleaseRepo(ReleaseId release) {
@@ -964,12 +1053,12 @@ public class DependenciesToBuildReportGenerator {
         void addRepoDependency(ReleaseRepo repo) {
             if (repo != this) {
                 dependencies.putIfAbsent(repo.id(), repo);
-                repo.parents.putIfAbsent(id(), this);
+                repo.dependants.putIfAbsent(id(), this);
             }
         }
 
         boolean isRoot() {
-            return parents.isEmpty();
+            return dependants.isEmpty();
         }
     }
 

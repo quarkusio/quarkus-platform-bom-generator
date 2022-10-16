@@ -22,11 +22,7 @@ public class DefaultReleaseId implements ReleaseId {
 
     @Override
     public int hashCode() {
-        final int prime = 31;
-        int result = 1;
-        result = prime * result + ((origin == null) ? 0 : origin.hashCode());
-        result = prime * result + ((version == null) ? 0 : version.hashCode());
-        return result;
+        return Objects.hash(origin, version);
     }
 
     @Override
@@ -38,17 +34,7 @@ public class DefaultReleaseId implements ReleaseId {
         if (getClass() != obj.getClass())
             return false;
         DefaultReleaseId other = (DefaultReleaseId) obj;
-        if (origin == null) {
-            if (other.origin != null)
-                return false;
-        } else if (!origin.equals(other.origin))
-            return false;
-        if (version == null) {
-            if (other.version != null)
-                return false;
-        } else if (!version.equals(other.version))
-            return false;
-        return true;
+        return Objects.equals(origin, other.origin) && Objects.equals(version, other.version);
     }
 
     @Override

@@ -51,12 +51,14 @@ public class MavenRepoZip {
 
     public class Generator {
 
+        private static final String REPOSITORY = "repository";
+
         private Generator() {
         }
 
         public Generator setConfig(GenerateMavenRepoZip config) {
-            repoDir = Paths.get(config == null ? "repository"
-                    : config.getRepositoryDir() == null ? "repository" : config.getRepositoryDir()).normalize()
+            repoDir = Paths.get(config == null ? REPOSITORY
+                    : config.getRepositoryDir() == null ? REPOSITORY : config.getRepositoryDir()).normalize()
                     .toAbsolutePath();
             excludedGroupIds = config.getExcludedGroupIds();
             if (!config.getExcludedArtifacts().isEmpty()) {
@@ -90,7 +92,7 @@ public class MavenRepoZip {
 
         public void generate() throws MojoExecutionException {
             if (repoDir == null) {
-                repoDir = Paths.get("repository");
+                repoDir = Path.of(REPOSITORY);
             }
             if (log == null) {
                 log = MessageWriter.info();
