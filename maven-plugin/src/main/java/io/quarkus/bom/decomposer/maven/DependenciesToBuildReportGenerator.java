@@ -322,6 +322,8 @@ public class DependenciesToBuildReportGenerator {
 
     private final Map<Set<ReleaseId>, List<ReleaseId>> circularRepoDeps = new HashMap<>();
 
+    private final boolean excludeProductizedDeps = true;
+
     public void generate() {
 
         if (logCodeRepoGraph) {
@@ -350,6 +352,10 @@ public class DependenciesToBuildReportGenerator {
             for (ArtifactCoords coords : includeArtifacts) {
                 processTopLevelArtifact(artifactConstraintsProvider.apply(coords), coords);
             }
+        }
+
+        if (excludeProductizedDeps) {
+            removeProductizedDeps();
         }
 
         try {
@@ -458,6 +464,24 @@ public class DependenciesToBuildReportGenerator {
         }
     }
 
+    private void removeProductizedDeps() {
+        final Set<ArtifactKey> alreadyBuiltKeys = allDepsToBuild.stream().filter(c -> isRhVersion(c.getVersion()))
+                .map(ArtifactCoords::getKey).collect(Collectors.toSet());
+        if (!alreadyBuiltKeys.isEmpty()) {
+            Iterator<ArtifactCoords> i = allDepsToBuild.iterator();
+            while (i.hasNext()) {
+                final ArtifactCoords coords = i.next();
+                if (alreadyBuiltKeys.contains(coords.getKey())) {
+                    i.remove();
+                    artifactDeps.remove(coords);
+                    artifactDeps.values().forEach(d -> {
+                        d.removeDependency(coords);
+                    });
+                }
+            }
+        }
+    }
+
     protected Iterable<ArtifactCoords> getTopLevelArtifactsToBuild() {
         if (topLevelArtifactsToBuild == null || topLevelArtifactsToBuild.isEmpty()) {
             final List<ArtifactCoords> result = new ArrayList<>();
@@ -533,6 +557,10 @@ public class DependenciesToBuildReportGenerator {
     private static final String RH_VERSION_EXPR = "*redhat-*";
     private static final Pattern RH_VERSION_PATTERN = Pattern.compile(GlobUtil.toRegexPattern(RH_VERSION_EXPR));
 
+    private boolean isRhVersion(String version) {
+        return RH_VERSION_PATTERN.matcher(version).matches();
+    }
+
     private static String ensureNoRhSuffix(String version) {
         return RH_VERSION_SUFFIX_PATTERN.matcher(version).replaceFirst("");
     }
@@ -569,10 +597,14 @@ public class DependenciesToBuildReportGenerator {
     }
 
     private Map<ArtifactCoords, String> getRhCoordsUpstreamVersions() {
+        if (excludeProductizedDeps) {
+            // already excluded
+            return Map.of();
+        }
         final Map<String, List<ArtifactVersion>> upstreamVersions = new HashMap<>();
         final List<ArtifactCoords> rhCoords = new ArrayList<>();
         for (ArtifactCoords c : allDepsToBuild) {
-            if (RH_VERSION_PATTERN.matcher(c.getVersion()).matches()) {
+            if (isRhVersion(c.getVersion())) {
                 rhCoords.add(c);
             } else {
                 upstreamVersions.computeIfAbsent(c.getGroupId(), k -> new ArrayList<>())
@@ -978,6 +1010,18 @@ public class DependenciesToBuildReportGenerator {
             list.addAll(bomImports.values());
             list.addAll(children.values());
             return list;
+        }
+
+        private void removeDependency(ArtifactCoords coords) {
+            if (children.remove(coords) != null) {
+                return;
+            }
+            if (bomImports.remove(coords) != null) {
+                return;
+            }
+            if (parentPom != null && parentPom.coords.equals(coords)) {
+                parentPom = null;
+            }
         }
 
         private void logBomImportsAndParents() {
