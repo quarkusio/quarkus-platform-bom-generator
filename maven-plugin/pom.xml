@@ -54,6 +54,10 @@
             <artifactId>quarkus-platform-bom-generator</artifactId>
         </dependency>
         <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-devtools-common</artifactId>
+        </dependency>
+        <dependency>
             <groupId>nu.studer</groupId>
             <artifactId>java-ordered-properties</artifactId>
         </dependency>

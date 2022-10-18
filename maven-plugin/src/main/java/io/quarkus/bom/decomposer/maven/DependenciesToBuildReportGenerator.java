@@ -465,7 +465,8 @@ public class DependenciesToBuildReportGenerator {
     }
 
     private void removeProductizedDeps() {
-        final Set<ArtifactKey> alreadyBuiltKeys = allDepsToBuild.stream().filter(c -> isRhVersion(c.getVersion()))
+        final Set<ArtifactKey> alreadyBuiltKeys = allDepsToBuild.stream()
+                .filter(c -> RhVersionPattern.isRhVersion(c.getVersion()))
                 .map(ArtifactCoords::getKey).collect(Collectors.toSet());
         if (!alreadyBuiltKeys.isEmpty()) {
             Iterator<ArtifactCoords> i = allDepsToBuild.iterator();
@@ -552,19 +553,6 @@ public class DependenciesToBuildReportGenerator {
                 a.getType(), a.getVersion());
     }
 
-    private static final String RH_VERSION_SUFFIX = "?redhat-*";
-    private static final Pattern RH_VERSION_SUFFIX_PATTERN = Pattern.compile(GlobUtil.toRegexPattern(RH_VERSION_SUFFIX));
-    private static final String RH_VERSION_EXPR = "*redhat-*";
-    private static final Pattern RH_VERSION_PATTERN = Pattern.compile(GlobUtil.toRegexPattern(RH_VERSION_EXPR));
-
-    private boolean isRhVersion(String version) {
-        return RH_VERSION_PATTERN.matcher(version).matches();
-    }
-
-    private static String ensureNoRhSuffix(String version) {
-        return RH_VERSION_SUFFIX_PATTERN.matcher(version).replaceFirst("");
-    }
-
     private void initReleaseRepos() {
 
         final ReleaseIdResolver idResolver = newReleaseIdResolver(resolver, log, validateCodeRepoTags,
@@ -604,7 +592,7 @@ public class DependenciesToBuildReportGenerator {
         final Map<String, List<ArtifactVersion>> upstreamVersions = new HashMap<>();
         final List<ArtifactCoords> rhCoords = new ArrayList<>();
         for (ArtifactCoords c : allDepsToBuild) {
-            if (isRhVersion(c.getVersion())) {
+            if (RhVersionPattern.isRhVersion(c.getVersion())) {
                 rhCoords.add(c);
             } else {
                 upstreamVersions.computeIfAbsent(c.getGroupId(), k -> new ArrayList<>())
@@ -620,7 +608,8 @@ public class DependenciesToBuildReportGenerator {
             if (originalVersions == null) {
                 continue;
             }
-            final ArtifactVersion noRhSuffixVersion = new DefaultArtifactVersion(ensureNoRhSuffix(c.getVersion()));
+            final ArtifactVersion noRhSuffixVersion = new DefaultArtifactVersion(
+                    RhVersionPattern.ensureNoRhSuffix(c.getVersion()));
             for (ArtifactVersion v : originalVersions) {
                 if (v.equals(noRhSuffixVersion)) {
                     rhCoordsUpstreamVersions.put(c, v.toString());
