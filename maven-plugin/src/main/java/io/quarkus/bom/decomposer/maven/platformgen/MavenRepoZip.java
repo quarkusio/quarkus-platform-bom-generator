@@ -2,13 +2,14 @@ package io.quarkus.bom.decomposer.maven.platformgen;
 
 import io.quarkus.bom.decomposer.maven.GenerateMavenRepoZip;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
+import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContextConfig;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
-import io.quarkus.bootstrap.util.IoUtils;
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.util.GlobUtil;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
@@ -16,33 +17,26 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import org.apache.maven.plugin.MojoExecutionException;
-import org.eclipse.aether.DefaultRepositorySystemSession;
-import org.eclipse.aether.RepositorySystemSession;
+import org.apache.maven.settings.Profile;
+import org.apache.maven.settings.Repository;
+import org.apache.maven.settings.RepositoryPolicy;
+import org.apache.maven.settings.Settings;
+import org.apache.maven.settings.io.DefaultSettingsReader;
+import org.apache.maven.settings.io.DefaultSettingsWriter;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.graph.Dependency;
-import org.eclipse.aether.graph.DependencyNode;
-import org.eclipse.aether.metadata.Metadata;
-import org.eclipse.aether.repository.LocalArtifactRegistration;
-import org.eclipse.aether.repository.LocalArtifactRequest;
-import org.eclipse.aether.repository.LocalArtifactResult;
-import org.eclipse.aether.repository.LocalMetadataRegistration;
-import org.eclipse.aether.repository.LocalMetadataRequest;
-import org.eclipse.aether.repository.LocalMetadataResult;
-import org.eclipse.aether.repository.LocalRepository;
-import org.eclipse.aether.repository.LocalRepositoryManager;
 import org.eclipse.aether.repository.RemoteRepository;
-import org.eclipse.aether.util.artifact.JavaScopes;
 
 public class MavenRepoZip {
 
@@ -51,13 +45,15 @@ public class MavenRepoZip {
 
     public class Generator {
 
+        private static final String ORIGINAL_LOCAL_REPO = "original-local";
+        private static final String MAVEN_REPO_ZIP = "maven-repo-zip";
         private static final String REPOSITORY = "repository";
 
         private Generator() {
         }
 
         public Generator setConfig(GenerateMavenRepoZip config) {
-            repoDir = Paths.get(config == null ? REPOSITORY
+            repoDir = Path.of(config == null ? REPOSITORY
                     : config.getRepositoryDir() == null ? REPOSITORY : config.getRepositoryDir()).normalize()
                     .toAbsolutePath();
             excludedGroupIds = config.getExcludedGroupIds();
@@ -90,93 +86,122 @@ public class MavenRepoZip {
             return this;
         }
 
-        public void generate() throws MojoExecutionException {
+        public void generate() {
             if (repoDir == null) {
                 repoDir = Path.of(REPOSITORY);
             }
+            repoDir = repoDir.toAbsolutePath().normalize();
+
             if (log == null) {
                 log = MessageWriter.info();
             }
+
+            final BootstrapMavenContext mavenContext;
+            try {
+                mavenContext = new BootstrapMavenContext(
+                        BootstrapMavenContext.config().setWorkspaceDiscovery(false));
+            } catch (BootstrapMavenException e) {
+                throw new RuntimeException("Failed to initialize Maven context", e);
+            }
+            final Settings settings = getBaseMavenSettings(mavenContext.getUserSettings());
+            settings.setLocalRepository(repoDir.toString());
+
+            final Profile profile = new Profile();
+            profile.setId(MAVEN_REPO_ZIP);
+            settings.addActiveProfile(MAVEN_REPO_ZIP);
+            settings.addProfile(profile);
+
+            Repository repo;
+            try {
+                repo = configureRepo(ORIGINAL_LOCAL_REPO,
+                        Path.of(mavenContext.getLocalRepo()).toUri().toURL().toExternalForm());
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to configure repository", e);
+            }
+            profile.addRepository(repo);
+            profile.addPluginRepository(repo);
+
+            final Path settingsXml = repoDir.resolve("settings.xml");
+            try {
+                Files.createDirectories(repoDir);
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to create directory " + repoDir, e);
+            }
+            try (BufferedWriter writer = Files.newBufferedWriter(settingsXml)) {
+                new DefaultSettingsWriter().write(writer, Map.of(), settings);
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to persist Maven settings to " + settingsXml, e);
+            }
+
+            final BootstrapMavenContextConfig<?> resolverConfig = BootstrapMavenContext.config();
             if (resolver != null) {
-                final DefaultRepositorySystemSession session = new DefaultRepositorySystemSession(resolver.getSession());
-                final LocalRepositoryManager original = resolver.getSession().getLocalRepositoryManager();
-                session.setLocalRepositoryManager(new LocalRepositoryManager() {
+                resolverConfig.setRepositorySystem(resolver.getSystem());
+                resolverConfig.setRemoteRepositoryManager(resolver.getRemoteRepositoryManager());
+                resolverConfig.setCurrentProject(resolver.getMavenContext().getCurrentProject());
+            }
+            try {
+                resolver = new MavenArtifactResolver(
+                        new BootstrapMavenContext(resolverConfig.setUserSettings(settingsXml.toFile())));
+            } catch (BootstrapMavenException e) {
+                throw new RuntimeException("Failed to initialize Maven artifact resolver", e);
+            }
 
-                    @Override
-                    public LocalRepository getRepository() {
-                        return original.getRepository();
-                    }
-
-                    @Override
-                    public String getPathForLocalArtifact(Artifact artifact) {
-                        return original.getPathForLocalArtifact(artifact);
-                    }
-
-                    @Override
-                    public String getPathForRemoteArtifact(Artifact artifact, RemoteRepository repository,
-                            String context) {
-                        return original.getPathForRemoteArtifact(artifact, repository, context);
-                    }
-
-                    @Override
-                    public String getPathForLocalMetadata(Metadata metadata) {
-                        return original.getPathForLocalMetadata(metadata);
-                    }
-
-                    @Override
-                    public String getPathForRemoteMetadata(Metadata metadata, RemoteRepository repository,
-                            String context) {
-                        return original.getPathForRemoteMetadata(metadata, repository, context);
-                    }
-
-                    @Override
-                    public LocalArtifactResult find(RepositorySystemSession session, LocalArtifactRequest request) {
-                        final LocalArtifactResult result = original.find(session, request);
-                        if (result.isAvailable() && !isFilteredOut(request.getArtifact())) {
-                            try {
-                                copyArtifact(request.getArtifact());
-                            } catch (MojoExecutionException e) {
-                                throw new RuntimeException(e);
-                            }
-                        }
-                        return result;
-                    }
-
-                    @Override
-                    public void add(RepositorySystemSession session, LocalArtifactRegistration request) {
-                        original.add(session, request);
-                        if (!isFilteredOut(request.getArtifact())) {
-                            try {
-                                copyArtifact(request.getArtifact());
-                            } catch (MojoExecutionException e) {
-                                throw new RuntimeException(e);
-                            }
-                        }
-                    }
-
-                    @Override
-                    public LocalMetadataResult find(RepositorySystemSession session, LocalMetadataRequest request) {
-                        return original.find(session, request);
-                    }
-
-                    @Override
-                    public void add(RepositorySystemSession session, LocalMetadataRegistration request) {
-                        original.add(session, request);
-                    }
-                });
-                try {
-                    resolver = new MavenArtifactResolver(new BootstrapMavenContext(BootstrapMavenContext.config()
-                            .setRepositorySystem(resolver.getSystem())
-                            .setRepositorySystemSession(session)
-                            .setRemoteRepositoryManager(resolver.getRemoteRepositoryManager())
-                            .setRemoteRepositories(resolver.getRepositories())
-                            .setCurrentProject(resolver.getMavenContext().getCurrentProject())));
-                } catch (BootstrapMavenException e) {
-                    throw new MojoExecutionException("Failed to initialize Maven artifact resolver", e);
+            // prefer the original-local over the others
+            List<RemoteRepository> finalRepos = new ArrayList<>(resolver.getRepositories());
+            final Iterator<RemoteRepository> ir = finalRepos.iterator();
+            RemoteRepository originalLocalRepo = null;
+            while (ir.hasNext()) {
+                final RemoteRepository r = ir.next();
+                if (r.getId().equals(ORIGINAL_LOCAL_REPO)) {
+                    originalLocalRepo = r;
+                    ir.remove();
+                    break;
                 }
             }
+            if (originalLocalRepo != null) {
+                final List<RemoteRepository> tmp = new ArrayList<>(finalRepos.size() + 1);
+                tmp.add(originalLocalRepo);
+                tmp.addAll(finalRepos);
+                finalRepos = tmp;
+                try {
+                    resolver = MavenArtifactResolver.builder()
+                            .setRemoteRepositoryManager(resolver.getRemoteRepositoryManager())
+                            .setRepositorySystem(resolver.getSystem())
+                            .setRepositorySystemSession(resolver.getSession())
+                            .setRemoteRepositories(finalRepos)
+                            .setCurrentProject(resolver.getMavenContext().getCurrentProject())
+                            .build();
+                } catch (BootstrapMavenException e) {
+                    throw new RuntimeException("Failed to initialize Maven artifact resolver", e);
+                }
+            }
+
             MavenRepoZip.this.doGenerate();
         }
+
+        private Repository configureRepo(String id, String url) {
+            final Repository repo = new Repository();
+            repo.setId(id);
+            repo.setLayout("default");
+            repo.setUrl(url);
+            RepositoryPolicy policy = new RepositoryPolicy();
+            policy.setEnabled(true);
+            repo.setReleases(policy);
+            repo.setSnapshots(policy);
+            return repo;
+        }
+
+        private Settings getBaseMavenSettings(File mavenSettings) {
+            if (mavenSettings != null && mavenSettings.exists()) {
+                try {
+                    return new DefaultSettingsReader().read(mavenSettings, Map.of());
+                } catch (IOException e) {
+                    throw new RuntimeException("Failed to read Maven settings from " + mavenSettings, e);
+                }
+            }
+            return new Settings();
+        }
+
     }
 
     public static Generator newGenerator() {
@@ -191,11 +216,10 @@ public class MavenRepoZip {
     private Set<ArtifactKey> excludedArtifacts = Set.of();
     private List<ArtifactCoords> extraArtifacts = List.of();
     private Pattern includedVersionsPattern;
-    private final Set<ArtifactCoords> copiedArtifacts = new HashSet<>();
 
-    private void doGenerate() throws MojoExecutionException {
+    private void doGenerate() {
         log.info("Generating Maven repository at " + repoDir);
-        IoUtils.recursiveDelete(repoDir);
+        //IoUtils.recursiveDelete(repoDir);
 
         for (Dependency d : managedDeps) {
             collectDependencies(d.getArtifact());
@@ -206,50 +230,26 @@ public class MavenRepoZip {
         }
     }
 
-    private void collectDependencies(Artifact artifact)
-            throws MojoExecutionException {
+    private void collectDependencies(Artifact artifact) {
         if (isFilteredOut(artifact)) {
             return;
         }
-        final DependencyNode root;
         try {
-            root = resolver.collectManagedDependencies(artifact, List.of(), managedDeps,
-                    List.of(), List.of(), JavaScopes.TEST, JavaScopes.PROVIDED).getRoot();
+            resolver.resolveDependencies(artifact, managedDeps);
         } catch (BootstrapMavenException e) {
-            throw new MojoExecutionException("Failed to collect dependencies of " + artifact, e);
+            throw new RuntimeException("Failed to collect dependencies of " + artifact, e);
         }
-        copyDependencies(root);
-    }
 
-    private void copyDependencies(DependencyNode node) throws MojoExecutionException {
-        for (DependencyNode child : node.getChildren()) {
-            if (child.getDependency() != null && child.getDependency().isOptional()) {
-                continue;
-            }
-            copyDependencies(child);
-        }
-        final Artifact artifact = node.getArtifact();
-        if (isFilteredOut(artifact)) {
-            return;
-        }
-        copyArtifact(artifact);
         if (artifact.getExtension().equals(ArtifactCoords.TYPE_POM)) {
             return;
         }
-
         if (ArtifactCoords.TYPE_JAR.equals(artifact.getExtension())) {
             // sources
-            Artifact a = resolveOrNull(new DefaultArtifact(artifact.getGroupId(), artifact.getArtifactId(), SOURCES,
+            resolveOrNull(new DefaultArtifact(artifact.getGroupId(), artifact.getArtifactId(), SOURCES,
                     ArtifactCoords.TYPE_JAR, artifact.getVersion()));
-            if (a != null) {
-                copyArtifact(a);
-            }
             // javadoc
-            a = resolveOrNull(new DefaultArtifact(artifact.getGroupId(), artifact.getArtifactId(), JAVADOC,
+            resolveOrNull(new DefaultArtifact(artifact.getGroupId(), artifact.getArtifactId(), JAVADOC,
                     ArtifactCoords.TYPE_JAR, artifact.getVersion()));
-            if (a != null) {
-                copyArtifact(a);
-            }
         }
     }
 
@@ -263,27 +263,6 @@ public class MavenRepoZip {
                 || excludedArtifacts.contains(getKey(artifact));
     }
 
-    private void copyArtifact(final Artifact artifact) throws MojoExecutionException {
-        if (!copiedArtifacts.add(toCoords(artifact))) {
-            return;
-        }
-        File resolved = artifact.getFile();
-        if (resolved == null) {
-            resolved = resolve(artifact).getFile();
-        }
-        final Path target = repoDir
-                .resolve(resolver.getSession().getLocalRepositoryManager().getPathForLocalArtifact(artifact));
-        copyFile(resolved.toPath(), target);
-    }
-
-    private Artifact resolve(Artifact rtArtifact) throws MojoExecutionException {
-        try {
-            return resolver.resolve(rtArtifact).getArtifact();
-        } catch (BootstrapMavenException e) {
-            throw new MojoExecutionException("Failed to resolve " + rtArtifact, e);
-        }
-    }
-
     private Artifact resolveOrNull(Artifact rtArtifact) {
         try {
             return resolver.resolve(rtArtifact).getArtifact();
@@ -294,23 +273,6 @@ public class MavenRepoZip {
 
     private static ArtifactKey getKey(Artifact a) {
         return ArtifactKey.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension());
-    }
-
-    private static ArtifactCoords toCoords(Artifact a) {
-        return ArtifactCoords.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(), a.getVersion());
-    }
-
-    public static void copyFile(Path source, Path target) throws MojoExecutionException {
-        try {
-            Files.createDirectories(target.getParent());
-        } catch (IOException e) {
-            throw new MojoExecutionException("Failed to create directories " + target.getParent(), e);
-        }
-        try {
-            Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException e) {
-            throw new MojoExecutionException("Failed to copy " + source + " to " + target, e);
-        }
     }
 
     public static void main(String[] args) throws Exception {
