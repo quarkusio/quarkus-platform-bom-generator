@@ -77,8 +77,18 @@ public class TraceDependencyMojo extends AbstractMojo {
     @Parameter(property = "redhatSupported")
     boolean redhatSupported;
 
+    /**
+     * Detailed option enables logging the relevant dependency branch from the extension root artifact
+     * to the dependency being traced.
+     */
     @Parameter(property = "detailed")
     boolean detailed;
+
+    /**
+     * Deployment option enables tracing dependencies in the deployment classpath
+     */
+    @Parameter(property = "deployment")
+    boolean deployment;
 
     private MavenArtifactResolver resolver;
     private Map<ArtifactCoords, List<Dependency>> platformManagedDeps = new HashMap<>();
@@ -171,7 +181,7 @@ public class TraceDependencyMojo extends AbstractMojo {
         }
         final List<Dependency> managedDeps = getPlatformManagedDeps(platformBom, quarkusBom);
         TargetInfo found = walkLooking(collectDeps(toAetherArtifact(e.getArtifact()), managedDeps), 0);
-        if (found == null) {
+        if (found == null && deployment) {
             found = walkLooking(collectDeps(toAetherDeploymentArtifact(e.getArtifact()), managedDeps), 0);
         }
         if (found != null) {
