@@ -171,6 +171,9 @@ public class NonQuarkusDepsToBuildMojo extends AbstractMojo {
     @Parameter(required = false)
     Set<String> includeKeys = Set.of();
 
+    @Parameter(required = false, property = "validateCodeRepoTags")
+    boolean validateCodeRepoTags;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
 
@@ -217,6 +220,7 @@ public class NonQuarkusDepsToBuildMojo extends AbstractMojo {
                 .setMessageWriter(new MojoMessageWriter(getLog()))
                 .setOutputFile(outputFile)
                 .setAppendOutput(appendOutput)
+                .setValidateCodeRepoTags(validateCodeRepoTags)
                 .setResolver(resolver)
                 .build().generate();
     }

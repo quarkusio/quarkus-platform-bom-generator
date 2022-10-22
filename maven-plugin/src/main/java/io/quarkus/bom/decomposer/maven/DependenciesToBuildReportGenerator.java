@@ -301,6 +301,11 @@ public class DependenciesToBuildReportGenerator {
      */
     private boolean validateCodeRepoTags;
 
+    /*
+     * Whether to include test JARs
+     */
+    private boolean includeTestJars;
+
     private Set<String> excludeGroupIds = Set.of();
     private Set<ArtifactKey> excludeKeys = Set.of();
     private Set<ArtifactCoords> excludeArtifacts = Set.of();
@@ -627,6 +632,31 @@ public class DependenciesToBuildReportGenerator {
         releaseDetectors.add(
                 // Vert.X
                 new ReleaseIdDetector() {
+
+                    final Set<String> artifactIdRepos = Set.of("vertx-service-proxy",
+                            "vertx-amqp-client",
+                            "vertx-health-check",
+                            "vertx-camel-bridge",
+                            "vertx-redis-client",
+                            "vertx-json-schema",
+                            "vertx-lang-groovy",
+                            "vertx-mail-client",
+                            "vertx-http-service-factory",
+                            "vertx-tcp-eventbus-bridge",
+                            "vertx-dropwizard-metrics",
+                            "vertx-consul-client",
+                            "vertx-maven-service-factory",
+                            "vertx-cassandra-client",
+                            "vertx-circuit-breaker",
+                            "vertx-jdbc-client",
+                            "vertx-reactive-streams",
+                            "vertx-rabbitmq-client",
+                            "vertx-mongo-client",
+                            "vertx-sockjs-service-proxy",
+                            "vertx-kafka-client",
+                            "vertx-micrometer-metrics",
+                            "vertx-service-factory");
+
                     @Override
                     public ReleaseId detectReleaseId(ReleaseIdResolver releaseResolver, Artifact artifact)
                             throws BomDecomposerException {
@@ -637,7 +667,9 @@ public class DependenciesToBuildReportGenerator {
                         if (!s.startsWith("vertx-")) {
                             return releaseResolver.defaultReleaseId(artifact);
                         }
-                        if (s.equals("vertx-uri-template") || s.equals("vertx-codegen")) {
+                        if (s.equals("vertx-uri-template")
+                                || s.equals("vertx-codegen")
+                                || s.equals("vertx-http-proxy")) {
                             return ReleaseIdFactory.forScmAndTag("https://github.com/eclipse-vertx/" + s,
                                     artifact.getVersion());
                         }
@@ -645,18 +677,37 @@ public class DependenciesToBuildReportGenerator {
                             return ReleaseIdFactory.forScmAndTag("https://github.com/eclipse-vertx/vert.x",
                                     artifact.getVersion());
                         }
-                        if (s.startsWith("vertx-") && s.endsWith("-client") || s.startsWith("vertx-sql-")) {
-                            return ReleaseIdFactory.forScmAndTag("https://github.com/eclipse-vertx/vertx-sql-client",
+                        if (s.startsWith("vertx-tracing")
+                                || s.equals("vertx-opentelemetry")
+                                || s.equals("vertx-opentracing")
+                                || s.equals("vertx-zipkin")) {
+                            return ReleaseIdFactory.forScmAndTag("https://github.com/eclipse-vertx/vertx-tracing",
                                     artifact.getVersion());
                         }
+                        var defaultReleaseId = releaseResolver.defaultReleaseId(artifact);
+                        if (defaultReleaseId.origin().toString().endsWith("vertx-sql-client")) {
+                            return defaultReleaseId;
+                        }
+
                         if (s.startsWith("vertx-ext")) {
                             s = "vertx-ext-parent";
+                        } else if (artifactIdRepos.contains(s)) {
+                            // keep the artifactId
+                        } else if (s.startsWith("vertx-lang-kotlin")) {
+                            s = "vertx-lang-kotlin";
+                        } else if (s.startsWith("vertx-service-discovery")) {
+                            s = "vertx-service-discovery";
+                        } else if (s.equals("vertx-template-engines")) {
+                            s = "vertx-web";
+                        } else if (s.equals("vertx-web-sstore-infinispan")) {
+                            s = "vertx-infinispan";
                         } else if (!s.equals("vertx-bridge-common")) {
                             int i = s.indexOf('-', "vertx-".length());
                             if (i > 0) {
                                 s = s.substring(0, i);
                             }
                         }
+
                         return ReleaseIdFactory.forScmAndTag("https://github.com/vert-x3/" + s, artifact.getVersion());
                     }
                 });
@@ -939,7 +990,8 @@ public class DependenciesToBuildReportGenerator {
     private boolean isExcluded(ArtifactCoords coords) {
         return excludeGroupIds.contains(coords.getGroupId())
                 || excludeKeys.contains(coords.getKey())
-                || excludeArtifacts.contains(coords);
+                || excludeArtifacts.contains(coords)
+                || !includeTestJars && coords.getClassifier().equals("tests");
     }
 
     private boolean isIncluded(ArtifactCoords coords) {
@@ -1058,7 +1110,9 @@ public class DependenciesToBuildReportGenerator {
 
     private void detectCircularRepoDeps(ReleaseRepo r, List<ReleaseId> chain) {
         if (chain.contains(r.id)) {
+            chain.add(r.id);
             circularRepoDeps.computeIfAbsent(new HashSet<>(chain), k -> new ArrayList<>(chain));
+            chain.remove(chain.size() - 1);
             return;
         }
         chain.add(r.id);
