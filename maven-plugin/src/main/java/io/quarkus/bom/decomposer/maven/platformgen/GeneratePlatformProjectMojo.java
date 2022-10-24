@@ -393,58 +393,58 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
             final DependenciesToBuildConfig depsToBuildConfig = m.config().getDependenciesToBuild();
             if (depsToBuildConfig != null) {
-                final Xpp3Dom depsToBuildDom = new Xpp3Dom("dependenciesToBuild");
+                final Xpp3Dom depsToBuildDom = newDomSelfAppend("dependenciesToBuild");
                 config.addChild(depsToBuildDom);
                 if (!depsToBuildConfig.getExcludeArtifacts().isEmpty()) {
-                    final Xpp3Dom excludeArtifactsDom = new Xpp3Dom("excludeArtifacts");
+                    final Xpp3Dom excludeArtifactsDom = newDomChildrenAppend("excludeArtifacts");
                     depsToBuildDom.addChild(excludeArtifactsDom);
                     for (ArtifactCoords artifact : depsToBuildConfig.getExcludeArtifacts()) {
-                        final Xpp3Dom artifactDom = new Xpp3Dom("artifact");
+                        final Xpp3Dom artifactDom = newDom("artifact");
                         excludeArtifactsDom.addChild(artifactDom);
                         artifactDom.setValue(artifact.toGACTVString());
                     }
                 }
                 if (!depsToBuildConfig.getExcludeGroupIds().isEmpty()) {
-                    final Xpp3Dom excludeGroupIdsDom = new Xpp3Dom("excludeGroupIds");
+                    final Xpp3Dom excludeGroupIdsDom = newDomChildrenAppend("excludeGroupIds");
                     depsToBuildDom.addChild(excludeGroupIdsDom);
                     for (String groupId : depsToBuildConfig.getExcludeGroupIds()) {
-                        final Xpp3Dom groupIdDom = new Xpp3Dom("groupId");
+                        final Xpp3Dom groupIdDom = newDom("groupId");
                         excludeGroupIdsDom.addChild(groupIdDom);
                         groupIdDom.setValue(groupId);
                     }
                 }
                 if (!depsToBuildConfig.getExcludeKeys().isEmpty()) {
-                    final Xpp3Dom excludeKeysDom = new Xpp3Dom("excludeKeys");
+                    final Xpp3Dom excludeKeysDom = newDomChildrenAppend("excludeKeys");
                     depsToBuildDom.addChild(excludeKeysDom);
                     for (ArtifactKey key : depsToBuildConfig.getExcludeKeys()) {
-                        final Xpp3Dom keyDom = new Xpp3Dom("key");
+                        final Xpp3Dom keyDom = newDom("key");
                         excludeKeysDom.addChild(keyDom);
                         keyDom.setValue(key.toString());
                     }
                 }
                 if (!depsToBuildConfig.getIncludeArtifacts().isEmpty()) {
-                    final Xpp3Dom includeArtifactsDom = new Xpp3Dom("includeArtifacts");
+                    final Xpp3Dom includeArtifactsDom = newDomChildrenAppend("includeArtifacts");
                     depsToBuildDom.addChild(includeArtifactsDom);
                     for (ArtifactCoords artifact : depsToBuildConfig.getIncludeArtifacts()) {
-                        final Xpp3Dom artifactDom = new Xpp3Dom("artifact");
+                        final Xpp3Dom artifactDom = newDom("artifact");
                         includeArtifactsDom.addChild(artifactDom);
                         artifactDom.setValue(artifact.toGACTVString());
                     }
                 }
                 if (!depsToBuildConfig.getIncludeGroupIds().isEmpty()) {
-                    final Xpp3Dom includeGroupIdsDom = new Xpp3Dom("includeGroupIds");
+                    final Xpp3Dom includeGroupIdsDom = newDomChildrenAppend("includeGroupIds");
                     depsToBuildDom.addChild(includeGroupIdsDom);
                     for (String groupId : depsToBuildConfig.getIncludeGroupIds()) {
-                        final Xpp3Dom groupIdDom = new Xpp3Dom("groupId");
+                        final Xpp3Dom groupIdDom = newDom("groupId");
                         includeGroupIdsDom.addChild(groupIdDom);
                         groupIdDom.setValue(groupId);
                     }
                 }
                 if (!depsToBuildConfig.getIncludeKeys().isEmpty()) {
-                    final Xpp3Dom includeKeysDom = new Xpp3Dom("includeKeys");
+                    final Xpp3Dom includeKeysDom = newDomChildrenAppend("includeKeys");
                     depsToBuildDom.addChild(includeKeysDom);
                     for (ArtifactKey key : depsToBuildConfig.getIncludeKeys()) {
-                        final Xpp3Dom keyDom = new Xpp3Dom("key");
+                        final Xpp3Dom keyDom = newDom("key");
                         includeKeysDom.addChild(keyDom);
                         keyDom.setValue(key.toString());
                     }
@@ -797,6 +797,22 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Xpp3Dom e = new Xpp3Dom(name);
         e.setValue(value);
         return e;
+    }
+
+    private static Xpp3Dom newDomChildrenAppend(String name) {
+        final Xpp3Dom dom = newDom(name);
+        dom.setAttribute("combine.children", "append");
+        return dom;
+    }
+
+    private static Xpp3Dom newDomSelfAppend(String name) {
+        final Xpp3Dom dom = newDom(name);
+        dom.setAttribute("combine.self", "append");
+        return dom;
+    }
+
+    private static Xpp3Dom newDom(String name) {
+        return new Xpp3Dom(name);
     }
 
     private ArtifactKey getKey(Dependency d) {
