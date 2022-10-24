@@ -4,7 +4,6 @@ import io.quarkus.bom.decomposer.maven.platformgen.MavenRepoZip;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.maven.dependency.ArtifactCoords;
-import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.apache.maven.plugin.AbstractMojo;
@@ -60,7 +59,7 @@ public class GenerateMavenRepoZipMojo extends AbstractMojo {
         final List<Dependency> managedDeps;
         if (bomStr == null) {
             final List<org.apache.maven.model.Dependency> modelDeps = project.getDependencyManagement() == null
-                    ? Collections.emptyList()
+                    ? List.of()
                     : project.getDependencyManagement().getDependencies();
             managedDeps = modelDeps.stream().map(d -> {
                 final DefaultArtifact a = new DefaultArtifact(d.getGroupId(), d.getArtifactId(), d.getClassifier(), d.getType(),
