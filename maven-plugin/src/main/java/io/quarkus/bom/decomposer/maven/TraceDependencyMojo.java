@@ -85,10 +85,10 @@ public class TraceDependencyMojo extends AbstractMojo {
     boolean detailed;
 
     /**
-     * Deployment option enables tracing dependencies in the deployment classpath
+     * Limits tracing dependencies only to the runtime classpath
      */
-    @Parameter(property = "deployment")
-    boolean deployment;
+    @Parameter(property = "runtimeOnly")
+    boolean runtimeOnly;
 
     private MavenArtifactResolver resolver;
     private Map<ArtifactCoords, List<Dependency>> platformManagedDeps = new HashMap<>();
@@ -180,12 +180,15 @@ public class TraceDependencyMojo extends AbstractMojo {
             return;
         }
         final List<Dependency> managedDeps = getPlatformManagedDeps(platformBom, quarkusBom);
-        TargetInfo found = walkLooking(collectDeps(toAetherArtifact(e.getArtifact()), managedDeps), 0);
-        if (found == null && deployment) {
-            found = walkLooking(collectDeps(toAetherDeploymentArtifact(e.getArtifact()), managedDeps), 0);
+        ArtifactCoords root = e.getArtifact();
+        TargetInfo found = walkLooking(collectDeps(toAetherArtifact(root), managedDeps), 0);
+        if (found == null && !runtimeOnly) {
+            root = ArtifactCoords.of(root.getGroupId(), root.getArtifactId() + "-deployment", root.getClassifier(),
+                    root.getType(), root.getVersion());
+            found = walkLooking(collectDeps(toAetherArtifact(root), managedDeps), 0);
         }
         if (found != null) {
-            traces.computeIfAbsent(platformBom, k -> new HashMap<>()).put(e.getArtifact(), found);
+            traces.computeIfAbsent(platformBom, k -> new HashMap<>()).put(root, found);
         }
     }
 
@@ -278,11 +281,6 @@ public class TraceDependencyMojo extends AbstractMojo {
     private DefaultArtifact toAetherArtifact(ArtifactCoords coords) {
         return new DefaultArtifact(coords.getGroupId(), coords.getArtifactId(), coords.getClassifier(), coords.getType(),
                 coords.getVersion());
-    }
-
-    private DefaultArtifact toAetherDeploymentArtifact(ArtifactCoords coords) {
-        return new DefaultArtifact(coords.getGroupId(), coords.getArtifactId() + "-deployment", coords.getClassifier(),
-                coords.getType(), coords.getVersion());
     }
 
     private ArtifactCoords getPlatformOrigin(Extension e) {
