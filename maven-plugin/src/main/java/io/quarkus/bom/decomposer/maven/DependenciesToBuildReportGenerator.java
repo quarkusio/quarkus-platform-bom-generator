@@ -12,7 +12,6 @@ import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
-import io.quarkus.util.GlobUtil;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -33,8 +32,6 @@ import java.util.Properties;
 import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.apache.maven.artifact.versioning.ArtifactVersion;
 import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
@@ -366,7 +363,8 @@ public class DependenciesToBuildReportGenerator {
         try {
             int codeReposTotal = 0;
             if (logArtifactsToBuild && !allDepsToBuild.isEmpty()) {
-                logComment("Artifacts to be built from source from " + targetBomCoords.toCompactCoords() + ":");
+                logComment("Artifacts to be built from source from "
+                        + (targetBomCoords == null ? "" : targetBomCoords.toCompactCoords()) + ":");
                 if (logCodeRepos) {
                     initReleaseRepos();
                     detectCircularRepoDeps();
@@ -443,8 +441,11 @@ public class DependenciesToBuildReportGenerator {
                 } else {
                     sb.append(" managed (stopping at the first non-managed one)");
                 }
-                sb.append(" dependencies of supported extensions from ").append(targetBomCoords.toCompactCoords())
-                        .append(" will result in:");
+                sb.append(" dependencies of supported extensions");
+                if (targetBomCoords != null) {
+                    sb.append(" from ").append(targetBomCoords.toCompactCoords());
+                }
+                sb.append(" will result in:");
                 logComment(sb.toString());
 
                 sb.setLength(0);
@@ -719,13 +720,35 @@ public class DependenciesToBuildReportGenerator {
 
     public static void main(String[] args) throws Exception {
 
-        String versionExpr = "?redhat-*";
-        Pattern pattern = Pattern.compile(GlobUtil.toRegexPattern(versionExpr));
-
-        String version = "2.13.0.CR1-redhat-00001";
-        Matcher matcher = pattern.matcher(version);
-        System.out.println("matches: " + matcher.matches());
-        System.out.println(matcher.replaceAll(""));
+        DependenciesToBuildReportGenerator.builder()
+                .setTopLevelArtifactsToBuild(List.of(
+                        ArtifactCoords.jar("org.apache.kafka", "kafka-clients", "3.3.1"),
+                        ArtifactCoords.jar("org.apache.kafka", "connect", "3.3.1"),
+                        ArtifactCoords.jar("org.apache.kafka", "connect-api", "3.3.1"),
+                        ArtifactCoords.jar("org.apache.kafka", "connect-basic-auth-extension", "3.3.1"),
+                        ArtifactCoords.jar("org.apache.kafka", "connect-file", "3.3.1"),
+                        ArtifactCoords.jar("org.apache.kafka", "connect-json", "3.3.1"),
+                        ArtifactCoords.jar("org.apache.kafka", "connect-mirror", "3.3.1"),
+                        ArtifactCoords.jar("org.apache.kafka", "connect-mirror-client", "3.3.1"),
+                        ArtifactCoords.jar("org.apache.kafka", "connect-runtime", "3.3.1"),
+                        ArtifactCoords.jar("org.apache.kafka", "connect-transforms", "3.3.1"),
+                        ArtifactCoords.jar("org.apache.kafka", "kafka_2.13", "3.3.1"),
+                        ArtifactCoords.jar("org.apache.kafka", "generator", "3.3.1"),
+                        ArtifactCoords.jar("org.apache.kafka", "kafka-log4j-appender", "3.3.1"),
+                        ArtifactCoords.jar("org.apache.kafka", "kafka-metadata", "3.3.1"),
+                        ArtifactCoords.jar("org.apache.kafka", "kafka-raft", "3.3.1"),
+                        ArtifactCoords.jar("org.apache.kafka", "kafka-server-common", "3.3.1"),
+                        ArtifactCoords.jar("org.apache.kafka", "kafka-shell", "3.3.1"),
+                        ArtifactCoords.jar("org.apache.kafka", "kafka-storage", "3.3.1"),
+                        ArtifactCoords.jar("org.apache.kafka", "kafka-storage-api", "3.3.1"),
+                        ArtifactCoords.jar("org.apache.kafka", "kafka-streams", "3.3.1"),
+                        ArtifactCoords.jar("org.apache.kafka", "kafka-tools", "3.3.1"),
+                        ArtifactCoords.jar("org.apache.kafka", "trogdor", "3.3.1")))
+                .setIncludeNonManaged(true)
+                .setLogCodeRepos(true)
+                .setLogTrees(true)
+                .build()
+                .generate();
 
         /*
          * ReleaseIdResolver idResolver = newReleaseIdResolver(MavenArtifactResolver.builder().build(), MessageWriter.info(),
@@ -1001,6 +1024,9 @@ public class DependenciesToBuildReportGenerator {
     }
 
     private List<Dependency> getBomConstraints(ArtifactCoords bomCoords) {
+        if (bomCoords == null) {
+            return List.of();
+        }
         final Artifact bomArtifact = new DefaultArtifact(bomCoords.getGroupId(), bomCoords.getArtifactId(),
                 ArtifactCoords.DEFAULT_CLASSIFIER, ArtifactCoords.TYPE_POM, bomCoords.getVersion());
         List<Dependency> managedDeps;
