@@ -5,6 +5,7 @@ import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.decomposer.ReleaseIdDetector;
 import io.quarkus.bom.decomposer.ReleaseIdFactory;
 import io.quarkus.bom.decomposer.ReleaseIdResolver;
+import io.quarkus.bom.decomposer.ReleaseOrigin;
 import io.quarkus.bom.decomposer.ReleaseVersion;
 import org.eclipse.aether.artifact.Artifact;
 
@@ -20,6 +21,11 @@ public class FasterXmlReleaseIdDetector implements ReleaseIdDetector {
         int i = repoUrl.lastIndexOf('/');
         if (i < 0) {
             return releaseId;
+        }
+        if (repoUrl.contains("jackson-module-scala")) {
+            repoUrl = repoUrl.replace("api@", "");
+            return ReleaseIdFactory.create(ReleaseOrigin.Factory.scmConnection(repoUrl),
+                    ReleaseVersion.Factory.tag("v" + artifact.getVersion()));
         }
         String repoName = repoUrl.substring(i + 1);
         String tag = releaseId.version().asString();

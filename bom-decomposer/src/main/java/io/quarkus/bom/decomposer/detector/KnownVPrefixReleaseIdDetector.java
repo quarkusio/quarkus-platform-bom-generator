@@ -13,10 +13,12 @@ public class KnownVPrefixReleaseIdDetector implements ReleaseIdDetector {
 
     private static final Set<String> GROUP_IDS = Set.of(
             "ca.uhn.hapi.fhir",
+            "com.github.luben",
             "com.google.api.grpc",
             "com.google.cloud",
             "com.google.errorprone",
             "com.google.protobuf",
+            "com.typesafe.scala-logging",
             "io.fabric8",
             "io.grpc",
             "io.jaegertracing",
@@ -24,7 +26,10 @@ public class KnownVPrefixReleaseIdDetector implements ReleaseIdDetector {
             "joda-time",
             "org.elasticsearch.client",
             "org.mockito",
-            "org.quartz-scheduler");
+            "org.quartz-scheduler",
+            "org.rocksdb",
+            "org.scala-lang",
+            "org.scala-lang.modules");
 
     @Override
     public ReleaseId detectReleaseId(ReleaseIdResolver idResolver, Artifact artifact) throws BomDecomposerException {

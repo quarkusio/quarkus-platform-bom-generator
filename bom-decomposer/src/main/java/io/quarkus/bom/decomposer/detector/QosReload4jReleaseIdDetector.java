@@ -5,15 +5,21 @@ import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.decomposer.ReleaseIdDetector;
 import io.quarkus.bom.decomposer.ReleaseIdFactory;
 import io.quarkus.bom.decomposer.ReleaseIdResolver;
+import io.quarkus.bom.decomposer.ReleaseVersion;
 import org.eclipse.aether.artifact.Artifact;
 
-public class ComSunActivationReleaseIdDetector implements ReleaseIdDetector {
+public class QosReload4jReleaseIdDetector implements ReleaseIdDetector {
 
     @Override
     public ReleaseId detectReleaseId(ReleaseIdResolver releaseResolver, Artifact artifact)
             throws BomDecomposerException {
-        if ("com.sun.activation".equals(artifact.getGroupId())) {
-            return ReleaseIdFactory.forScmAndTag("https://github.com/jakartaee/jaf-api", artifact.getVersion());
+        if (artifact.getGroupId().equals("ch.qos.reload4j")) {
+            ReleaseId releaseId = releaseResolver.defaultReleaseId(artifact);
+            String version = releaseId.version().asString();
+            if (version.startsWith("v_")) {
+                return releaseId;
+            }
+            return ReleaseIdFactory.create(releaseId.origin(), ReleaseVersion.Factory.tag("v_" + version));
         }
         return null;
     }
