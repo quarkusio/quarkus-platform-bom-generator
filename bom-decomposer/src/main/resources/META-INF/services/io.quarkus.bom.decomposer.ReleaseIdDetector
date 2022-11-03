@@ -31,6 +31,7 @@ io.quarkus.bom.decomposer.detector.JUnitPlatformReleaseDetector
 io.quarkus.bom.decomposer.detector.KafkaReleaseDetector
 io.quarkus.bom.decomposer.detector.KnownVPrefixReleaseIdDetector
 io.quarkus.bom.decomposer.detector.MongoDbReleaseIdDetector
+io.quarkus.bom.decomposer.detector.OpentelemetryReleaseIdDetector
 io.quarkus.bom.decomposer.detector.PgJdbcReleaseIdDetector
 io.quarkus.bom.decomposer.detector.QuarkusSecurityReleaseIdDetector
 io.quarkus.bom.decomposer.detector.ReactiveStreamsReleaseIdDetector

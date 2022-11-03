@@ -6,34 +6,21 @@ import io.quarkus.bom.decomposer.ReleaseIdDetector;
 import io.quarkus.bom.decomposer.ReleaseIdFactory;
 import io.quarkus.bom.decomposer.ReleaseIdResolver;
 import io.quarkus.bom.decomposer.ReleaseVersion;
-import java.util.Set;
 import org.eclipse.aether.artifact.Artifact;
 
-public class KnownVPrefixReleaseIdDetector implements ReleaseIdDetector {
-
-    private static final Set<String> GROUP_IDS = Set.of(
-            "ca.uhn.hapi.fhir",
-            "com.google.api.grpc",
-            "com.google.cloud",
-            "com.google.errorprone",
-            "com.google.protobuf",
-            "io.fabric8",
-            "io.grpc",
-            "io.jaegertracing",
-            "io.micrometer",
-            "joda-time",
-            "org.elasticsearch.client",
-            "org.mockito",
-            "org.quartz-scheduler");
+public class OpentelemetryReleaseIdDetector implements ReleaseIdDetector {
 
     @Override
     public ReleaseId detectReleaseId(ReleaseIdResolver idResolver, Artifact artifact) throws BomDecomposerException {
-        if (!GROUP_IDS.contains(artifact.getGroupId())) {
+        if (!artifact.getGroupId().startsWith("io.opentelemetry")) {
             return null;
         }
 
         final ReleaseId releaseId = idResolver.defaultReleaseId(artifact);
-        final String version = releaseId.version().asString();
+        String version = releaseId.version().asString();
+        if (version.endsWith("-alpha")) {
+            version = version.substring(0, version.length() - "-alpha".length());
+        }
         if (version.charAt(0) == 'v') {
             return releaseId;
         }
