@@ -15,6 +15,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.ServiceLoader;
+import org.apache.maven.model.DistributionManagement;
+import org.apache.maven.model.Model;
 import org.apache.maven.model.resolution.UnresolvableModelException;
 import org.apache.maven.project.ProjectBuildingRequest;
 import org.apache.maven.project.ProjectModelResolver;
@@ -170,15 +172,20 @@ public class BomDecomposer {
                         !classifier.equals("sources") &&
                         !classifier.equals("javadoc")) {
                     resolve(artifact);
-                } else if (ArtifactCoords.TYPE_JAR.equals(artifact.getExtension())
-                        && ArtifactCoords.TYPE_POM.equals(releaseIdResolver.model(artifact).getPackaging())) {
-                    // if it's not a pom but the packaging in the POM is pom then check whether the artifact is resolvable
-                    try {
-                        resolve(artifact);
-                    } catch (BomDecomposerException | ArtifactNotFoundException e) {
-                        // if it's not resolvable then turn it into a POM artifact
-                        dep = dep.setArtifact(new DefaultArtifact(artifact.getGroupId(),
-                                artifact.getArtifactId(), ArtifactCoords.TYPE_POM, artifact.getVersion()));
+                } else if (ArtifactCoords.TYPE_JAR.equals(artifact.getExtension())) {
+                    final Model model = releaseIdResolver.model(artifact);
+                    if (ArtifactCoords.TYPE_POM.equals(model.getPackaging())) {
+                        // if an artifact has type JAR but the packaging is POM then check whether the artifact is resolvable
+                        try {
+                            resolve(artifact);
+                        } catch (BomDecomposerException | ArtifactNotFoundException e) {
+                            final DistributionManagement distr = model.getDistributionManagement();
+                            if (distr == null || distr.getRelocation() == null) {
+                                // there is no relocation, so it can be removed
+                                throw e;
+                            }
+                            logger().debug("Found relocation for %s", artifact);
+                        }
                     }
                 }
                 bomBuilder.bomDependency(releaseIdResolver.releaseId(artifact), dep);
@@ -186,7 +193,7 @@ public class BomDecomposer {
                 throw e;
             } catch (ArtifactNotFoundException | UnresolvableModelException e) {
                 // there are plenty of BOMs that include artifacts that don't exist
-                logger().debug("Failed to resolve POM for %s", dep);
+                logger().debug("Failed to resolve %s", dep);
             }
         }
         return transformer == null ? bomBuilder.build() : transformer.transform(bomBuilder.build());
