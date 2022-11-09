@@ -6,18 +6,18 @@ import java.io.File;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
 import picocli.CommandLine;
 
-@CommandLine.Command
-public class DepsToBuildMain implements Runnable {
+public class BaseDepsToBuildCommand implements Callable<Integer> {
 
     @CommandLine.Option(names = {
             "--bom" }, description = "BOM whose constraints should be used as top level artifacts to be built")
     public String bom;
 
     @CommandLine.Option(names = { "--include-non-managed" }, description = "Include non-managed dependencies")
-    public boolean includeNonManaged;
+    public Boolean includeNonManaged;
 
     @CommandLine.Option(names = {
             "--root-artifacts" }, description = "Root artifacts whose dependencies should be built from source")
@@ -61,9 +61,10 @@ public class DepsToBuildMain implements Runnable {
 
     @CommandLine.Option(names = {
             "--log-code-repos" }, description = "Whether to log code repository info for the artifacts to be built from source")
-    public boolean logCodeRepos;
+    public boolean logCodeRepos = true;
 
-    @CommandLine.Option(names = { "--log-code-repo-graph" }, description = "Whether to log code repository dependency graph.")
+    @CommandLine.Option(names = {
+            "--log-code-repo-graph" }, description = "Whether to log code repository dependency graph.")
     public boolean logCodeRepoGraph;
 
     @CommandLine.Option(names = {
@@ -87,8 +88,12 @@ public class DepsToBuildMain implements Runnable {
     public boolean includeAlreadyBuilt;
 
     @Override
-    public void run() {
+    public Integer call() throws Exception {
         DependenciesToBuildReportGenerator.Builder builder = DependenciesToBuildReportGenerator.builder();
+
+        if (bom != null) {
+            builder.setBom(ArtifactCoords.fromString(bom));
+        }
 
         if (warnOnResolutionErrors != null) {
             builder.setWarnOnResolutionErrors(warnOnResolutionErrors);
@@ -96,8 +101,13 @@ public class DepsToBuildMain implements Runnable {
             builder.setWarnOnResolutionErrors(true);
         }
 
+        if (includeNonManaged != null) {
+            builder.setIncludeNonManaged(includeNonManaged);
+        } else if (bom == null) {
+            builder.setIncludeNonManaged(true);
+        }
+
         builder.setAppendOutput(appendOutput)
-                .setBom(bom == null ? null : ArtifactCoords.fromString(bom))
                 .setExcludeArtifacts(Set.of()) // TODO
                 .setExcludeBomImports(excludeBomImports)
                 .setExcludeGroupIds(Set.of()) // TODO
@@ -107,7 +117,6 @@ public class DepsToBuildMain implements Runnable {
                 .setIncludeArtifacts(Set.of()) // TODO
                 .setIncludeGroupIds(Set.of()) // TODO
                 .setIncludeKeys(Set.of()) // TODO
-                .setIncludeNonManaged(includeNonManaged)
                 .setLevel(level)
                 .setLogArtifactsToBuild(logArtifactsToBuild)
                 .setLogCodeRepoGraph(logCodeRepoGraph)
@@ -122,5 +131,7 @@ public class DepsToBuildMain implements Runnable {
                         rootArtifacts.stream().map(ArtifactCoords::fromString).collect(Collectors.toList()))
                 .setValidateCodeRepoTags(validateCodeRepoTags)
                 .build().generate();
+
+        return CommandLine.ExitCode.OK;
     }
 }

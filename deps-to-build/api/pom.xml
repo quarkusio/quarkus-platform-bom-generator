@@ -2,11 +2,11 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>io.quarkus</groupId>
-    <artifactId>quarkus-platform-bom-deps-to-build</artifactId>
+    <artifactId>deps-to-build-parent</artifactId>
     <version>0.0.66-SNAPSHOT</version>
   </parent>
 
-  <artifactId>quarkus-platform-bom-deps-to-build-api</artifactId>
+  <artifactId>deps-to-build-api</artifactId>
   <name>Quarkus - Platform BOM Tools - Dependencies to build tool - API</name>
 
   <dependencies>
