@@ -189,6 +189,11 @@ public class DependenciesToBuildReportGenerator {
             return this;
         }
 
+        public Builder setIncludeAlreadyBuilt(boolean include) {
+            includeAlreadyBuilt = include;
+            return this;
+        }
+
         public DependenciesToBuildReportGenerator build() {
             if (resolver == null) {
                 try {
@@ -313,6 +318,11 @@ public class DependenciesToBuildReportGenerator {
      */
     private boolean warnOnResolutionErrors;
 
+    /*
+     * Whether to include dependencies that have already been built
+     */
+    private boolean includeAlreadyBuilt;
+
     private Set<String> excludeGroupIds = Set.of();
     private Set<ArtifactKey> excludeKeys = Set.of();
     private Set<ArtifactCoords> excludeArtifacts = Set.of();
@@ -333,8 +343,6 @@ public class DependenciesToBuildReportGenerator {
     private final Map<ArtifactCoords, Map<String, String>> effectivePomProps = new HashMap<>();
 
     private final Map<Set<ReleaseId>, List<ReleaseId>> circularRepoDeps = new HashMap<>();
-
-    private final boolean excludeProductizedDeps = true;
 
     public void generate() {
 
@@ -366,7 +374,7 @@ public class DependenciesToBuildReportGenerator {
             }
         }
 
-        if (excludeProductizedDeps) {
+        if (!includeAlreadyBuilt) {
             removeProductizedDeps();
         }
 
@@ -616,7 +624,7 @@ public class DependenciesToBuildReportGenerator {
     }
 
     private Map<ArtifactCoords, String> getRhCoordsUpstreamVersions() {
-        if (excludeProductizedDeps) {
+        if (!includeAlreadyBuilt) {
             // already excluded
             return Map.of();
         }
