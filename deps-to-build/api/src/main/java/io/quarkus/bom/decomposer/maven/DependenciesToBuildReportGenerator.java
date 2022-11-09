@@ -184,6 +184,11 @@ public class DependenciesToBuildReportGenerator {
             return this;
         }
 
+        public Builder setWarnOnResolutionErrors(boolean warn) {
+            warnOnResolutionErrors = warn;
+            return this;
+        }
+
         public DependenciesToBuildReportGenerator build() {
             if (resolver == null) {
                 try {
@@ -303,6 +308,11 @@ public class DependenciesToBuildReportGenerator {
      */
     private boolean includeTestJars;
 
+    /*
+     * Whether to warn about errors not being able to resolve top level artifacts or fail the process
+     */
+    private boolean warnOnResolutionErrors;
+
     private Set<String> excludeGroupIds = Set.of();
     private Set<ArtifactKey> excludeKeys = Set.of();
     private Set<ArtifactCoords> excludeArtifacts = Set.of();
@@ -370,13 +380,7 @@ public class DependenciesToBuildReportGenerator {
                     detectCircularRepoDeps();
                     codeReposTotal = releaseRepos.size();
 
-                    final List<ReleaseRepo> sorted = new ArrayList<>(codeReposTotal);
-                    for (ReleaseRepo r : releaseRepos.values()) {
-                        if (r.isRoot()) {
-                            sort(r, new HashSet<>(codeReposTotal), sorted);
-                        }
-                    }
-
+                    final List<ReleaseRepo> sorted = sortReleaseRepos();
                     for (ReleaseRepo e : sorted) {
                         logComment("repo-url " + e.id().origin());
                         logComment("tag " + e.id().version().asString());
@@ -465,9 +469,22 @@ public class DependenciesToBuildReportGenerator {
             }
         } finally {
             if (fileOutput != null) {
+                log.info("Saving the report in " + outputFile.getAbsolutePath());
                 fileOutput.close();
             }
         }
+    }
+
+    private List<ReleaseRepo> sortReleaseRepos() {
+        final int codeReposTotal = releaseRepos.size();
+        final List<ReleaseRepo> sorted = new ArrayList<>(codeReposTotal);
+        final Set<ReleaseId> processedRepos = new HashSet<>(codeReposTotal);
+        for (ReleaseRepo r : releaseRepos.values()) {
+            if (r.isRoot()) {
+                sort(r, processedRepos, sorted);
+            }
+        }
+        return sorted;
     }
 
     private void removeProductizedDeps() {
@@ -516,8 +533,13 @@ public class DependenciesToBuildReportGenerator {
             if (root.getChildren().isEmpty()) {
                 resolver.resolve(a);
             }
-        } catch (Exception e1) {
-            throw new RuntimeException("Failed to collect dependencies of " + topLevelArtifact.toCompactCoords(), e1);
+        } catch (Exception e) {
+            if (warnOnResolutionErrors) {
+                log.warn(e.getCause() == null ? e.getLocalizedMessage() : e.getCause().getLocalizedMessage());
+                allDepsToBuild.remove(topLevelArtifact);
+                return;
+            }
+            throw new RuntimeException("Failed to collect dependencies of " + topLevelArtifact.toCompactCoords(), e);
         }
 
         if (logTrees) {
@@ -540,6 +562,9 @@ public class DependenciesToBuildReportGenerator {
                 extDep.logBomImportsAndParents();
             }
             for (DependencyNode d : root.getChildren()) {
+                if (d.getDependency().isOptional()) {
+                    continue;
+                }
                 processNodes(extDep, d, 1, false);
             }
         } else if (logRemaining) {
@@ -749,14 +774,6 @@ public class DependenciesToBuildReportGenerator {
                 .setLogTrees(true)
                 .build()
                 .generate();
-
-        /*
-         * ReleaseIdResolver idResolver = newReleaseIdResolver(MavenArtifactResolver.builder().build(), MessageWriter.info(),
-         * true);
-         * ReleaseId releaseId = idResolver
-         * .releaseId(new DefaultArtifact("org.ow2.asm", "asm", "pom", "9.3"));
-         * System.out.println("RELEASE ID " + releaseId);
-         */
     }
 
     private void sort(ReleaseRepo repo, Set<ReleaseId> processed, List<ReleaseRepo> sorted) {
@@ -804,7 +821,7 @@ public class DependenciesToBuildReportGenerator {
             return System.out;
         }
         if (fileOutput == null) {
-            outputFile.getParentFile().mkdirs();
+            outputFile.getAbsoluteFile().getParentFile().mkdirs();
             try {
                 fileOutput = new PrintStream(new FileOutputStream(outputFile, appendOutput), false);
             } catch (FileNotFoundException e) {
@@ -1135,10 +1152,14 @@ public class DependenciesToBuildReportGenerator {
     }
 
     private void detectCircularRepoDeps(ReleaseRepo r, List<ReleaseId> chain) {
-        if (chain.contains(r.id)) {
-            chain.add(r.id);
-            circularRepoDeps.computeIfAbsent(new HashSet<>(chain), k -> new ArrayList<>(chain));
-            chain.remove(chain.size() - 1);
+        final int i = chain.indexOf(r.id);
+        if (i >= 0) {
+            final List<ReleaseId> loop = new ArrayList<>(chain.size() - i + 1);
+            for (int j = i; j < chain.size(); ++j) {
+                loop.add(chain.get(j));
+            }
+            loop.add(r.id);
+            circularRepoDeps.computeIfAbsent(new HashSet<>(loop), k -> loop);
             return;
         }
         chain.add(r.id);
