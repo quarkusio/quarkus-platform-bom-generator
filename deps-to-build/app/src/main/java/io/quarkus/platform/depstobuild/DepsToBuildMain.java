@@ -82,6 +82,10 @@ public class DepsToBuildMain implements Runnable {
             "--warn-on-resolution-errors" }, description = "Whether to warn about artifact resolution errors instead of failing the process")
     public Boolean warnOnResolutionErrors;
 
+    @CommandLine.Option(names = {
+            "--include-already-built" }, description = "Whether to include dependencies that have already been built")
+    public boolean includeAlreadyBuilt;
+
     @Override
     public void run() {
         DependenciesToBuildReportGenerator.Builder builder = DependenciesToBuildReportGenerator.builder();
@@ -99,6 +103,7 @@ public class DepsToBuildMain implements Runnable {
                 .setExcludeGroupIds(Set.of()) // TODO
                 .setExcludeKeys(Set.of()) // TODO
                 .setExcludeParentPoms(excludeParentPoms)
+                .setIncludeAlreadyBuilt(includeAlreadyBuilt)
                 .setIncludeArtifacts(Set.of()) // TODO
                 .setIncludeGroupIds(Set.of()) // TODO
                 .setIncludeKeys(Set.of()) // TODO

@@ -161,6 +161,12 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     @Parameter(required = false, property = "validateCodeRepoTags")
     boolean validateCodeRepoTags;
 
+    /*
+     * Whether to include dependencies that have already been built
+     */
+    @Parameter(property = "includeAlreadyBuilt", required = false)
+    boolean includeAlreadyBuilt;
+
     private Set<ArtifactCoords> targetBomConstraints;
     private Map<ArtifactCoords, List<Dependency>> enforcedConstraintsForBom = new HashMap<>();
 
@@ -299,6 +305,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 })
                 .setTopLevelArtifactsToBuild(supported.keySet())
                 .setBom(targetBomCoords)
+                .setIncludeAlreadyBuilt(includeAlreadyBuilt)
                 .setIncludeArtifacts(dependenciesToBuild.getIncludeArtifacts())
                 .setIncludeGroupIds(dependenciesToBuild.getIncludeGroupIds())
                 .setIncludeKeys(dependenciesToBuild.getIncludeKeys())
