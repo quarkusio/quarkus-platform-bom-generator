@@ -758,39 +758,45 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         if (pluginConfig.isFlattenPom()) {
-            Build build = pom.getBuild();
-            if (build == null) {
-                build = new Build();
-                pom.setBuild(build);
-            }
-            Plugin plugin = new Plugin();
-            build.addPlugin(plugin);
-            plugin.setGroupId("org.codehaus.mojo");
-            plugin.setArtifactId("flatten-maven-plugin");
-            PluginExecution e = new PluginExecution();
-            plugin.addExecution(e);
-            e.setId("flatten");
-            e.setPhase("process-resources");
-            e.addGoal("flatten");
-            Xpp3Dom config = new Xpp3Dom("configuration");
-            e.setConfiguration(config);
-
-            config.addChild(textDomElement("flattenMode", "oss"));
-
-            Xpp3Dom pomElements = new Xpp3Dom("pomElements");
-            config.addChild(pomElements);
-            pomElements.addChild(textDomElement("dependencyManagement", "keep"));
-            pomElements.addChild(textDomElement("repositories", "remove"));
-            pomElements.addChild(textDomElement("build", "remove"));
-
-            e = new PluginExecution();
-            plugin.addExecution(e);
-            e.setId("flatten.clean");
-            e.setPhase("clean");
-            e.addGoal("clean");
+            configureFlattenPlugin(pom, Map.of("dependencyManagement", "keep"));
         }
 
         persistPom(pom);
+    }
+
+    private void configureFlattenPlugin(Model pom, Map<String, String> elementConfig) {
+        Build build = pom.getBuild();
+        if (build == null) {
+            build = new Build();
+            pom.setBuild(build);
+        }
+        Plugin plugin = new Plugin();
+        build.addPlugin(plugin);
+        plugin.setGroupId("org.codehaus.mojo");
+        plugin.setArtifactId("flatten-maven-plugin");
+        PluginExecution e = new PluginExecution();
+        plugin.addExecution(e);
+        e.setId("flatten");
+        e.setPhase("process-resources");
+        e.addGoal("flatten");
+        Xpp3Dom config = new Xpp3Dom("configuration");
+        e.setConfiguration(config);
+
+        config.addChild(textDomElement("flattenMode", "oss"));
+
+        Xpp3Dom pomElements = new Xpp3Dom("pomElements");
+        config.addChild(pomElements);
+        pomElements.addChild(textDomElement("repositories", "remove"));
+        pomElements.addChild(textDomElement("build", "remove"));
+        for (Map.Entry<String, String> ec : elementConfig.entrySet()) {
+            pomElements.addChild(textDomElement(ec.getKey(), ec.getValue()));
+        }
+
+        e = new PluginExecution();
+        plugin.addExecution(e);
+        e.setId("flatten.clean");
+        e.setPhase("clean");
+        e.addGoal("clean");
     }
 
     private static Xpp3Dom textDomElement(String name, String value) {
@@ -2064,9 +2070,18 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             Utils.skipInstallAndDeploy(pom);
         }
 
+        configureFlattenPluginForMetadataArtifacts(pom);
+
         final Path pomXml = moduleDir.resolve("pom.xml");
         pom.setPomFile(pomXml.toFile());
         persistPom(pom);
+    }
+
+    private void configureFlattenPluginForMetadataArtifacts(final Model pom) {
+        configureFlattenPlugin(pom, Map.of(
+                "dependencyManagement", "remove",
+                "dependencies", "remove",
+                "mailingLists", "remove"));
     }
 
     private void addExtensionDependencyCheck(final RedHatExtensionDependencyCheck depCheckConfig,
@@ -2241,6 +2256,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         if (member.config().isHidden()) {
             Utils.skipInstallAndDeploy(pom);
         }
+
+        configureFlattenPluginForMetadataArtifacts(pom);
 
         final Path pomXml = moduleDir.resolve("pom.xml");
         pom.setPomFile(pomXml.toFile());
