@@ -150,32 +150,44 @@ public class DependenciesToBuildReportGenerator {
         }
 
         public Builder setExcludeGroupIds(Set<String> groupIds) {
-            excludeGroupIds = groupIds;
+            for (String s : groupIds) {
+                excludeSet.add(GavPattern.builder().groupIdPattern(s).build());
+            }
             return this;
         }
 
         public Builder setExcludeKeys(Set<ArtifactKey> artifactKeys) {
-            excludeKeys = artifactKeys;
+            for (ArtifactKey key : artifactKeys) {
+                excludeSet.add(toPattern(key));
+            }
             return this;
         }
 
         public Builder setExcludeArtifacts(Set<ArtifactCoords> artifacts) {
-            excludeArtifacts = artifacts;
+            for (ArtifactCoords c : artifacts) {
+                excludeSet.add(toPattern(c));
+            }
             return this;
         }
 
         public Builder setIncludeGroupIds(Set<String> groupIds) {
-            includeGroupIds = groupIds;
+            for (String s : groupIds) {
+                includeSet.add(GavPattern.builder().groupIdPattern(s).build());
+            }
             return this;
         }
 
         public Builder setIncludeKeys(Set<ArtifactKey> artifactKeys) {
-            includeKeys = artifactKeys;
+            for (ArtifactKey key : artifactKeys) {
+                includeSet.add(toPattern(key));
+            }
             return this;
         }
 
         public Builder setIncludeArtifacts(Set<ArtifactCoords> artifacts) {
-            includeArtifacts = artifacts;
+            for (ArtifactCoords c : artifacts) {
+                includeSet.add(toPattern(c));
+            }
             return this;
         }
 
@@ -211,6 +223,34 @@ public class DependenciesToBuildReportGenerator {
         protected DependenciesToBuildReportGenerator doBuild() {
             return DependenciesToBuildReportGenerator.this;
         }
+
+    }
+
+    private static GavPattern toPattern(ArtifactKey key) {
+        final GavPattern.Builder pattern = GavPattern.builder();
+        pattern.groupIdPattern(key.getGroupId());
+        pattern.artifactIdPattern(key.getArtifactId());
+        if (key.getClassifier() != null && !key.getClassifier().isEmpty()) {
+            pattern.classifierPattern(key.getClassifier());
+        }
+        if (key.getType() != null && !key.getType().isEmpty()) {
+            pattern.typePattern(key.getType());
+        }
+        return pattern.build();
+    }
+
+    private static GavPattern toPattern(ArtifactCoords c) {
+        final GavPattern.Builder pattern = GavPattern.builder();
+        pattern.groupIdPattern(c.getGroupId());
+        pattern.artifactIdPattern(c.getArtifactId());
+        if (c.getClassifier() != null && !c.getClassifier().isEmpty()) {
+            pattern.classifierPattern(c.getClassifier());
+        }
+        if (c.getType() != null && !c.getType().isEmpty()) {
+            pattern.typePattern(c.getType());
+        }
+        pattern.versionPattern(c.getVersion());
+        return pattern.build();
     }
 
     public static Builder builder() {
@@ -223,6 +263,8 @@ public class DependenciesToBuildReportGenerator {
     private MavenArtifactResolver resolver;
     private ArtifactCoords targetBomCoords;
     private MessageWriter log;
+    private List<GavPattern> excludeSet = new ArrayList<>();
+    private List<GavPattern> includeSet = new ArrayList<>();
 
     private Collection<ArtifactCoords> topLevelArtifactsToBuild = List.of();
 
@@ -323,13 +365,6 @@ public class DependenciesToBuildReportGenerator {
      */
     private boolean includeAlreadyBuilt;
 
-    private Set<String> excludeGroupIds = Set.of();
-    private Set<ArtifactKey> excludeKeys = Set.of();
-    private Set<ArtifactCoords> excludeArtifacts = Set.of();
-    private Set<String> includeGroupIds = Set.of();
-    private Set<ArtifactKey> includeKeys = Set.of();
-    private Set<ArtifactCoords> includeArtifacts = Set.of();
-
     private Function<ArtifactCoords, List<Dependency>> artifactConstraintsProvider;
     private Set<ArtifactCoords> targetBomConstraints;
     private List<Dependency> targetBomManagedDeps;
@@ -360,16 +395,7 @@ public class DependenciesToBuildReportGenerator {
         }
 
         for (ArtifactCoords coords : getTopLevelArtifactsToBuild()) {
-            if (isExcluded(coords)) {
-                continue;
-            }
-            processTopLevelArtifact(artifactConstraintsProvider.apply(coords), coords);
-        }
-
-        if (!includeArtifacts.isEmpty()) {
-            // this is a tricky case, these artifacts will be resolved against all the member BOMs
-            // we may want to have them configured per member instead of in the global config
-            for (ArtifactCoords coords : includeArtifacts) {
+            if (isIncluded(coords) || !isExcluded(coords)) {
                 processTopLevelArtifact(artifactConstraintsProvider.apply(coords), coords);
             }
         }
@@ -529,6 +555,7 @@ public class DependenciesToBuildReportGenerator {
     }
 
     private void processTopLevelArtifact(List<Dependency> managedDeps, ArtifactCoords topLevelArtifact) {
+
         final DependencyNode root;
         try {
             final Artifact a = toAetherArtifact(topLevelArtifact);
@@ -749,39 +776,6 @@ public class DependenciesToBuildReportGenerator {
                 .addAll(ServiceLoader.load(ReleaseIdDetector.class).stream().map(p -> p.get()).collect(Collectors.toList()));
 
         return new ReleaseIdResolver(artifactResolver, releaseDetectors, log, validateCodeRepoTags, versionMapping);
-    }
-
-    public static void main(String[] args) throws Exception {
-
-        DependenciesToBuildReportGenerator.builder()
-                .setTopLevelArtifactsToBuild(List.of(
-                        ArtifactCoords.jar("org.apache.kafka", "kafka-clients", "3.3.1"),
-                        ArtifactCoords.jar("org.apache.kafka", "connect", "3.3.1"),
-                        ArtifactCoords.jar("org.apache.kafka", "connect-api", "3.3.1"),
-                        ArtifactCoords.jar("org.apache.kafka", "connect-basic-auth-extension", "3.3.1"),
-                        ArtifactCoords.jar("org.apache.kafka", "connect-file", "3.3.1"),
-                        ArtifactCoords.jar("org.apache.kafka", "connect-json", "3.3.1"),
-                        ArtifactCoords.jar("org.apache.kafka", "connect-mirror", "3.3.1"),
-                        ArtifactCoords.jar("org.apache.kafka", "connect-mirror-client", "3.3.1"),
-                        ArtifactCoords.jar("org.apache.kafka", "connect-runtime", "3.3.1"),
-                        ArtifactCoords.jar("org.apache.kafka", "connect-transforms", "3.3.1"),
-                        ArtifactCoords.jar("org.apache.kafka", "kafka_2.13", "3.3.1"),
-                        ArtifactCoords.jar("org.apache.kafka", "generator", "3.3.1"),
-                        ArtifactCoords.jar("org.apache.kafka", "kafka-log4j-appender", "3.3.1"),
-                        ArtifactCoords.jar("org.apache.kafka", "kafka-metadata", "3.3.1"),
-                        ArtifactCoords.jar("org.apache.kafka", "kafka-raft", "3.3.1"),
-                        ArtifactCoords.jar("org.apache.kafka", "kafka-server-common", "3.3.1"),
-                        ArtifactCoords.jar("org.apache.kafka", "kafka-shell", "3.3.1"),
-                        ArtifactCoords.jar("org.apache.kafka", "kafka-storage", "3.3.1"),
-                        ArtifactCoords.jar("org.apache.kafka", "kafka-storage-api", "3.3.1"),
-                        ArtifactCoords.jar("org.apache.kafka", "kafka-streams", "3.3.1"),
-                        ArtifactCoords.jar("org.apache.kafka", "kafka-tools", "3.3.1"),
-                        ArtifactCoords.jar("org.apache.kafka", "trogdor", "3.3.1")))
-                .setIncludeNonManaged(true)
-                .setLogCodeRepos(true)
-                .setLogTrees(true)
-                .build()
-                .generate();
     }
 
     private void sort(ReleaseRepo repo, Set<ReleaseId> processed, List<ReleaseRepo> sorted) {
@@ -1036,16 +1030,25 @@ public class DependenciesToBuildReportGenerator {
     }
 
     private boolean isExcluded(ArtifactCoords coords) {
-        return excludeGroupIds.contains(coords.getGroupId())
-                || excludeKeys.contains(coords.getKey())
-                || excludeArtifacts.contains(coords)
-                || !includeTestJars && coords.getClassifier().equals("tests");
+        for (GavPattern pattern : excludeSet) {
+            boolean matches = pattern.matches(coords.getGroupId(), coords.getArtifactId(), coords.getType(),
+                    coords.getClassifier(),
+                    coords.getVersion());
+            if (matches) {
+                return true;
+            }
+        }
+        return !includeTestJars && coords.getClassifier().equals("tests");
     }
 
     private boolean isIncluded(ArtifactCoords coords) {
-        return includeGroupIds.contains(coords.getGroupId())
-                || includeKeys.contains(coords.getKey())
-                || includeArtifacts.contains(coords);
+        for (GavPattern pattern : includeSet) {
+            if (pattern.matches(coords.getGroupId(), coords.getArtifactId(), coords.getType(), coords.getClassifier(),
+                    coords.getVersion())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private List<Dependency> getBomConstraints(ArtifactCoords bomCoords) {

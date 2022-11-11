@@ -298,17 +298,25 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             supported.put(deploymentCoords, ext);
         }
 
+        final Set<ArtifactCoords> topArtifacts;
+        if (dependenciesToBuild.getIncludeArtifacts().isEmpty()) {
+            topArtifacts = supported.keySet();
+        } else {
+            topArtifacts = new HashSet<>(supported.keySet());
+            topArtifacts.addAll(dependenciesToBuild.getIncludeArtifacts());
+        }
+
         DependenciesToBuildReportGenerator.builder()
                 .setArtifactConstraintsProvider(coords -> {
                     final Extension ext = supported.get(coords);
                     return ext == null ? targetBomManagedDeps : getConstraintsForExtension(ext);
                 })
-                .setTopLevelArtifactsToBuild(supported.keySet())
+                .setTopLevelArtifactsToBuild(topArtifacts)
                 .setBom(targetBomCoords)
                 .setIncludeAlreadyBuilt(includeAlreadyBuilt)
-                .setIncludeArtifacts(dependenciesToBuild.getIncludeArtifacts())
                 .setIncludeGroupIds(dependenciesToBuild.getIncludeGroupIds())
                 .setIncludeKeys(dependenciesToBuild.getIncludeKeys())
+                .setIncludeArtifacts(dependenciesToBuild.getIncludeArtifacts())
                 .setExcludeArtifacts(dependenciesToBuild.getExcludeArtifacts())
                 .setExcludeGroupIds(dependenciesToBuild.getExcludeGroupIds())
                 .setExcludeKeys(dependenciesToBuild.getExcludeKeys())
