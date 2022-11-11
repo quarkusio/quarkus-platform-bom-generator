@@ -1,5 +1,6 @@
 package io.quarkus.bom.platform;
 
+import io.quarkus.bom.decomposer.ProjectDependency;
 import io.quarkus.bom.decomposer.ProjectRelease;
 import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.decomposer.ReleaseOrigin;
@@ -7,8 +8,8 @@ import io.quarkus.bom.decomposer.ReleaseVersion;
 import io.quarkus.maven.dependency.ArtifactKey;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 class ProjectReleaseCollector {
@@ -33,11 +34,26 @@ class ProjectReleaseCollector {
                 result.add(releases);
             } else {
                 for (ProjectRelease.Builder builder : originReleases.builders.values()) {
-                    result.add(Collections.singletonList(builder.build()));
+                    result.add(List.of(builder.build()));
                 }
             }
         }
         return result;
+    }
+
+    void enforce(ProjectDependency preferred, ProjectDependency current) {
+        final ReleaseOriginBuilder rob = originBuilders.get(current.releaseId().origin());
+        if (rob == null) {
+            return;
+        }
+        final ProjectRelease.Builder rb = rob.builders.get(current.releaseId().version());
+        if (rb == null) {
+            return;
+        }
+        System.out.println("ENFORCED " + preferred.artifact() + " for " + rob.members.keySet());
+        final ProjectDependency preferredDep = ProjectDependency.create(current.releaseId(),
+                current.dependency().setArtifact(current.artifact()));
+        rb.add(preferredDep, (d1, d2) -> preferredDep);
     }
 
     private static class ReleaseOriginBuilder {

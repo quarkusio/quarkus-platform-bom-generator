@@ -1,6 +1,5 @@
 package io.quarkus.bom.decomposer.maven.platformgen;
 
-import io.quarkus.bom.platform.NotPreferredQuarkusBomConstraint;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -24,6 +23,12 @@ public class PlatformBomGeneratorConfig {
     @Parameter
     List<String> versionConstraintPreferences = new ArrayList<>(0);
 
+    /**
+     * @deprecated in favor of {@link #foreignPreferredConstraint}
+     */
     @Parameter
-    NotPreferredQuarkusBomConstraint notPreferredQuarkusBomConstraint = NotPreferredQuarkusBomConstraint.ERROR;
+    @Deprecated(forRemoval = true, since = "0.0.68")
+    String notPreferredQuarkusBomConstraint;
+
+    String foreignPreferredConstraint;
 }
