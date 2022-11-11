@@ -16,6 +16,7 @@ import io.quarkus.bom.decomposer.maven.util.Utils;
 import io.quarkus.bom.diff.BomDiff;
 import io.quarkus.bom.diff.HtmlBomDiffReportGenerator;
 import io.quarkus.bom.platform.DependenciesToBuildConfig;
+import io.quarkus.bom.platform.ForeignPreferredConstraint;
 import io.quarkus.bom.platform.PlatformBomComposer;
 import io.quarkus.bom.platform.PlatformBomConfig;
 import io.quarkus.bom.platform.PlatformBomUtils;
@@ -2339,7 +2340,24 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 }
             }
             configBuilder.versionConstraintPreference(bomGen.versionConstraintPreferences);
-            configBuilder.notPreferredQuarkusBomConstraint(bomGen.notPreferredQuarkusBomConstraint);
+
+            int foreignPreferredConstraint = 0;
+            if (bomGen.notPreferredQuarkusBomConstraint != null) {
+                if (bomGen.foreignPreferredConstraint != null) {
+                    throw new IllegalStateException(
+                            "Deprecated notPreferredQuarkusBomConstraint is configured in addition to foreignPreferredConstrait");
+                }
+                foreignPreferredConstraint = ForeignPreferredConstraint.valueOf(bomGen.notPreferredQuarkusBomConstraint).flag();
+            } else if (bomGen.foreignPreferredConstraint != null) {
+                for (String s : bomGen.foreignPreferredConstraint.split("\\s*,\\s*")) {
+                    if (!s.isEmpty()) {
+                        foreignPreferredConstraint |= ForeignPreferredConstraint.valueOf(s).flag();
+                    }
+                }
+            }
+            if (foreignPreferredConstraint > 0) {
+                configBuilder.foreignPreferredConstraint(foreignPreferredConstraint);
+            }
         }
 
         final PlatformBomConfig config = configBuilder.build();

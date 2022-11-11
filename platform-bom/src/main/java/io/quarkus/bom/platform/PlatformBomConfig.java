@@ -88,8 +88,8 @@ public class PlatformBomConfig {
             return this;
         }
 
-        public Builder notPreferredQuarkusBomConstraint(NotPreferredQuarkusBomConstraint notPreferredQuarkusBomConstraint) {
-            config.notPreferredQuarkusBomConstraint = notPreferredQuarkusBomConstraint;
+        public Builder foreignPreferredConstraint(int flags) {
+            config.foreignPreferredConstraint = flags;
             return this;
         }
 
@@ -120,7 +120,8 @@ public class PlatformBomConfig {
     private boolean enableNonMemberQuarkiverseExtensions;
     private ArtifactResolver artifactResolver;
     private List<String> versionConstraintPreferences = Collections.emptyList();
-    private NotPreferredQuarkusBomConstraint notPreferredQuarkusBomConstraint = NotPreferredQuarkusBomConstraint.ERROR;
+    private int foreignPreferredConstraint = (ForeignPreferredConstraint.WARN.flag()
+            | ForeignPreferredConstraint.ACCEPT_IF_COMPATIBLE.flag());
 
     private PlatformBomConfig() {
     }
@@ -173,8 +174,8 @@ public class PlatformBomConfig {
         return versionConstraintPreferences;
     }
 
-    public NotPreferredQuarkusBomConstraint notPreferredQuarkusBomConstraint() {
-        return notPreferredQuarkusBomConstraint;
+    public int foreignPreferredConstraint() {
+        return foreignPreferredConstraint;
     }
 
     boolean excluded(ArtifactKey key) {
