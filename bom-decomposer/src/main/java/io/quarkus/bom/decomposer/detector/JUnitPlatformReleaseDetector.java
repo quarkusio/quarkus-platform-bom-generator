@@ -13,9 +13,15 @@ public class JUnitPlatformReleaseDetector implements ReleaseIdDetector {
 
     @Override
     public ReleaseId detectReleaseId(ReleaseIdResolver idResolver, Artifact artifact) throws BomDecomposerException {
-        if (artifact.getGroupId().startsWith("org.junit") && artifact.getVersion().startsWith("5.")) {
-            return ReleaseIdFactory.create(ReleaseOrigin.Factory.scmConnection("https://github.com/junit-team/junit5"),
-                    ReleaseVersion.Factory.version("r" + artifact.getVersion()));
+        if (artifact.getGroupId().startsWith("org.junit")) {
+            if (artifact.getVersion().startsWith("5.")) {
+                return ReleaseIdFactory.create(ReleaseOrigin.Factory.scmConnection("https://github.com/junit-team/junit5"),
+                        ReleaseVersion.Factory.version("r" + artifact.getVersion()));
+            }
+            if (artifact.getVersion().startsWith("1.")) {
+                return ReleaseIdFactory.create(ReleaseOrigin.Factory.scmConnection("https://github.com/junit-team/junit5"),
+                        ReleaseVersion.Factory.version("r" + artifact.getVersion().replace("1.", "5.")));
+            }
         }
         return null;
     }
