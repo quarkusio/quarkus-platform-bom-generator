@@ -12,7 +12,7 @@ import java.util.regex.Pattern;
  * details.
  * <p>
  * {@link GavPattern} overrides {@link #hashCode()} and {@link #equals(Object)} and can thus be used as a key in a
- * {@link Map}.
+ * {@link java.util.Map}.
  *
  * @author <a href="https://github.com/ppalaga">Peter Palaga</a>
  */
@@ -356,11 +356,11 @@ public class GavPattern {
      * Matches the given {@code groupId}, {@code artifactId}, {@code type}, {@code classifier}, {@code version}
      * quintuple against this {@link GavPattern}.
      *
-     * @param groupId
-     * @param artifactId
+     * @param groupId groupId
+     * @param artifactId artifactId
      * @param type cannot be {@code null}
      * @param classifier can be {@code null}
-     * @param version
+     * @param version version
      * @return {@code true} if this {@link GavPattern} matches the given {@code groupId}, {@code artifactId},
      *         {@code type}, {@code classifier}, {@code version} quintuple and {@code false otherwise}
      */

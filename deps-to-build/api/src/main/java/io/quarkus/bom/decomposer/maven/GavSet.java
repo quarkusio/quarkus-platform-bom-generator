@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.StringTokenizer;
 
 /**
- * A set of {@link Gav}s defined by includes and excludes {@link GavPattern}s.
+ * A set of GAVs defined by includes and excludes {@link GavPattern}s.
  *
  * @author <a href="https://github.com/ppalaga">Peter Palaga</a>
  */
@@ -37,7 +37,7 @@ public class GavSet {
         /**
          * Exclude a single GAV pattern.
          *
-         * @param rawPattern
+         * @param rawPattern raw pattern
          * @return this {@link Builder}
          */
         public Builder exclude(String rawPattern) {
@@ -109,7 +109,7 @@ public class GavSet {
         /**
          * Include a single GAV pattern.
          *
-         * @param rawPattern
+         * @param rawPattern raw pattern
          * @return this {@link Builder}
          */
         public Builder include(String rawPattern) {
@@ -225,7 +225,7 @@ public class GavSet {
      * Appends {@link #excludes} to the given {@code out} separating them by comma.
      *
      * @param out an {@link Appendable} to append to
-     * @throws IOException
+     * @throws IOException in case of a failure
      */
     public void appendExcludes(Appendable out) throws IOException {
         append(excludes, out);
@@ -235,7 +235,7 @@ public class GavSet {
      * Appends {@link #includes} to the given {@code out} separating them by comma.
      *
      * @param out an {@link Appendable} to append to
-     * @throws IOException
+     * @throws IOException in case of a failure
      */
     public void appendIncludes(Appendable out) throws IOException {
         append(includes, out);
@@ -243,11 +243,11 @@ public class GavSet {
 
     /**
      *
-     * @param groupId
-     * @param artifactId
+     * @param groupId groupId
+     * @param artifactId artifactId
      * @param type cannot be {@code null}
      * @param classifier can be {@code null}
-     * @param version
+     * @param version version
      * @return {@code true} if the given GAV triple is a member of this {@link GavSet} and {@code false} otherwise
      */
     public boolean contains(String groupId, String artifactId, String type, String classifier, String version) {
