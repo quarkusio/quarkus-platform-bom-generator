@@ -987,11 +987,12 @@ public class DependenciesToBuildReportGenerator {
         for (org.apache.maven.model.Dependency d : dm.getDependencies()) {
             if ("import".equals(d.getScope()) && ArtifactCoords.TYPE_POM.equals(d.getType())) {
                 final String groupId = resolveProperty(d.getGroupId(), d, effectiveProps);
+                final String artifactId = resolveProperty(d.getArtifactId(), d, effectiveProps);
                 final String version = resolveProperty(d.getVersion(), d, effectiveProps);
-                if (groupId == null || version == null) {
+                if (groupId == null || version == null || artifactId == null) {
                     continue;
                 }
-                final ArtifactCoords bomCoords = ArtifactCoords.pom(groupId, d.getArtifactId(), version);
+                final ArtifactCoords bomCoords = ArtifactCoords.pom(groupId, artifactId, version);
                 if (!isExcluded(bomCoords)) {
                     if (pomArtDep != null) {
                         final ArtifactDependency bomDep = getOrCreateArtifactDep(bomCoords);
