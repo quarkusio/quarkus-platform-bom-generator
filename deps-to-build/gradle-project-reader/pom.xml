@@ -3,7 +3,7 @@
   <parent>
     <groupId>io.quarkus</groupId>
     <artifactId>deps-to-build-parent</artifactId>
-    <version>0.0.68</version>
+    <version>0.0.69-SNAPSHOT</version>
   </parent>
 
   <artifactId>deps-to-build-gradle-project-reader</artifactId>
