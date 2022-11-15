@@ -787,10 +787,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         Xpp3Dom pomElements = new Xpp3Dom("pomElements");
         config.addChild(pomElements);
-        pomElements.addChild(textDomElement("repositories", "remove"));
         pomElements.addChild(textDomElement("build", "remove"));
-        for (Map.Entry<String, String> ec : elementConfig.entrySet()) {
-            pomElements.addChild(textDomElement(ec.getKey(), ec.getValue()));
+        pomElements.addChild(textDomElement("repositories", "remove"));
+        final List<String> elementNames = new ArrayList<>(elementConfig.keySet());
+        Collections.sort(elementNames);
+        for (String elementName : elementNames) {
+            pomElements.addChild(textDomElement(elementName, elementConfig.get(elementName)));
         }
 
         e = new PluginExecution();
