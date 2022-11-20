@@ -8,25 +8,25 @@ import java.util.List;
 import java.util.StringTokenizer;
 
 /**
- * A set of GAVs defined by includes and excludes {@link GavPattern}s.
+ * A set of GAVs defined by includes and excludes {@link ArtifactCoordsPattern}s.
  *
  * @author <a href="https://github.com/ppalaga">Peter Palaga</a>
  */
 public class GavSet {
     public static class Builder {
-        private List<GavPattern> excludes = new ArrayList<>();
-        private List<GavPattern> includes = new ArrayList<>();
+        private List<ArtifactCoordsPattern> excludes = new ArrayList<>();
+        private List<ArtifactCoordsPattern> includes = new ArrayList<>();
 
         private Builder() {
         }
 
         public GavSet build() {
             if (includes.isEmpty()) {
-                includes.add(GavPattern.matchAll());
+                includes.add(ArtifactCoordsPattern.matchAll());
             }
 
-            List<GavPattern> useIncludes = Collections.unmodifiableList(includes);
-            List<GavPattern> useExcludes = Collections.unmodifiableList(excludes);
+            List<ArtifactCoordsPattern> useIncludes = Collections.unmodifiableList(includes);
+            List<ArtifactCoordsPattern> useExcludes = Collections.unmodifiableList(excludes);
 
             this.includes = null;
             this.excludes = null;
@@ -41,11 +41,11 @@ public class GavSet {
          * @return this {@link Builder}
          */
         public Builder exclude(String rawPattern) {
-            this.excludes.add(GavPattern.of(rawPattern));
+            this.excludes.add(ArtifactCoordsPattern.of(rawPattern));
             return this;
         }
 
-        public Builder exclude(GavPattern pattern) {
+        public Builder exclude(ArtifactCoordsPattern pattern) {
             this.excludes.add(pattern);
             return this;
         }
@@ -53,13 +53,13 @@ public class GavSet {
         /**
          * Parses the entries of the given {@link Collection} of {@code rawPatterns} and excludes those.
          *
-         * @param rawPatterns {@link Collection} of GAV patterns to parse via {@link GavPattern#of(String)}
+         * @param rawPatterns {@link Collection} of GAV patterns to parse via {@link ArtifactCoordsPattern#of(String)}
          * @return this {@link Builder}
          */
         public Builder excludes(Collection<String> rawPatterns) {
             if (rawPatterns != null) {
                 for (String rawPattern : rawPatterns) {
-                    this.excludes.add(GavPattern.of(rawPattern));
+                    this.excludes.add(ArtifactCoordsPattern.of(rawPattern));
                 }
             }
             return this;
@@ -68,13 +68,13 @@ public class GavSet {
         /**
          * Parses the entries of the given array of {@code rawPatterns} and excludes those.
          *
-         * @param rawPatterns a list of GAV patterns to parse via {@link GavPattern#of(String)}
+         * @param rawPatterns a list of GAV patterns to parse via {@link ArtifactCoordsPattern#of(String)}
          * @return this {@link Builder}
          */
         public Builder excludes(String... rawPatterns) {
             if (rawPatterns != null) {
                 for (String rawPattern : rawPatterns) {
-                    this.excludes.add(GavPattern.of(rawPattern));
+                    this.excludes.add(ArtifactCoordsPattern.of(rawPattern));
                 }
             }
             return this;
@@ -90,19 +90,19 @@ public class GavSet {
             if (rawPatterns != null) {
                 StringTokenizer st = new StringTokenizer(rawPatterns, ", \t\n\r\f");
                 while (st.hasMoreTokens()) {
-                    this.excludes.add(GavPattern.of(st.nextToken()));
+                    this.excludes.add(ArtifactCoordsPattern.of(st.nextToken()));
                 }
             }
             return this;
         }
 
         /**
-         * Adds {@link GavPattern#matchSnapshots()} to {@link #excludes}.
+         * Adds {@link ArtifactCoordsPattern#matchSnapshots()} to {@link #excludes}.
          *
          * @return this {@link Builder}
          */
         public Builder excludeSnapshots() {
-            this.excludes.add(GavPattern.matchSnapshots());
+            this.excludes.add(ArtifactCoordsPattern.matchSnapshots());
             return this;
         }
 
@@ -113,11 +113,11 @@ public class GavSet {
          * @return this {@link Builder}
          */
         public Builder include(String rawPattern) {
-            this.includes.add(GavPattern.of(rawPattern));
+            this.includes.add(ArtifactCoordsPattern.of(rawPattern));
             return this;
         }
 
-        public Builder include(GavPattern pattern) {
+        public Builder include(ArtifactCoordsPattern pattern) {
             this.includes.add(pattern);
             return this;
         }
@@ -125,13 +125,13 @@ public class GavSet {
         /**
          * Parses the entries of the given {@link Collection} of {@code rawPatterns} and includes those.
          *
-         * @param rawPatterns {@link Collection} of GAV patterns to parse via {@link GavPattern#of(String)}
+         * @param rawPatterns {@link Collection} of GAV patterns to parse via {@link ArtifactCoordsPattern#of(String)}
          * @return this {@link Builder}
          */
         public Builder includes(Collection<String> rawPatterns) {
             if (rawPatterns != null) {
                 for (String rawPattern : rawPatterns) {
-                    this.includes.add(GavPattern.of(rawPattern));
+                    this.includes.add(ArtifactCoordsPattern.of(rawPattern));
                 }
             }
             return this;
@@ -147,7 +147,7 @@ public class GavSet {
             if (rawPatterns != null) {
                 StringTokenizer st = new StringTokenizer(rawPatterns, ", \t\n\r\f");
                 while (st.hasMoreTokens()) {
-                    this.includes.add(GavPattern.of(st.nextToken()));
+                    this.includes.add(ArtifactCoordsPattern.of(st.nextToken()));
                 }
             }
             return this;
@@ -156,13 +156,13 @@ public class GavSet {
         /**
          * Parses the entries of the given array of {@code rawPatterns} and includes those.
          *
-         * @param rawPatterns a list of GAV patterns to parse via {@link GavPattern#of(String)}
+         * @param rawPatterns a list of GAV patterns to parse via {@link ArtifactCoordsPattern#of(String)}
          * @return this {@link Builder}
          */
         public Builder includes(String... rawPatterns) {
             if (rawPatterns != null) {
                 for (String rawPattern : rawPatterns) {
-                    this.includes.add(GavPattern.of(rawPattern));
+                    this.includes.add(ArtifactCoordsPattern.of(rawPattern));
                 }
             }
             return this;
@@ -170,13 +170,14 @@ public class GavSet {
 
     }
 
-    private static final List<GavPattern> EMPTY_LIST = Collections.emptyList();
+    private static final List<ArtifactCoordsPattern> EMPTY_LIST = Collections.emptyList();
 
-    private static final GavSet INCLUDE_ALL = new GavSet(Collections.singletonList(GavPattern.matchAll()), EMPTY_LIST);
+    private static final GavSet INCLUDE_ALL = new GavSet(Collections.singletonList(ArtifactCoordsPattern.matchAll()),
+            EMPTY_LIST);
 
-    private static void append(List<GavPattern> cludes, Appendable out) throws IOException {
+    private static void append(List<ArtifactCoordsPattern> cludes, Appendable out) throws IOException {
         boolean first = true;
-        for (GavPattern gavPattern : cludes) {
+        for (ArtifactCoordsPattern gavPattern : cludes) {
             if (first) {
                 first = false;
             } else {
@@ -200,21 +201,21 @@ public class GavSet {
             String type,
             String classifier,
             String version,
-            List<GavPattern> patterns) {
-        for (GavPattern pattern : patterns) {
-            if (pattern.matches(groupId, artifactId, type, classifier, version)) {
+            List<ArtifactCoordsPattern> patterns) {
+        for (ArtifactCoordsPattern pattern : patterns) {
+            if (pattern.matches(groupId, artifactId, classifier, type, version)) {
                 return true;
             }
         }
         return false;
     }
 
-    private final List<GavPattern> excludes;
+    private final List<ArtifactCoordsPattern> excludes;
     private final int hashcode;
 
-    private final List<GavPattern> includes;
+    private final List<ArtifactCoordsPattern> includes;
 
-    GavSet(List<GavPattern> includes, List<GavPattern> excludes) {
+    GavSet(List<ArtifactCoordsPattern> includes, List<ArtifactCoordsPattern> excludes) {
         super();
         this.includes = includes;
         this.excludes = excludes;
@@ -280,14 +281,14 @@ public class GavSet {
     /**
      * @return the list of excludes
      */
-    public List<GavPattern> getExcludes() {
+    public List<ArtifactCoordsPattern> getExcludes() {
         return excludes;
     }
 
     /**
      * @return the list of includes
      */
-    public List<GavPattern> getIncludes() {
+    public List<ArtifactCoordsPattern> getIncludes() {
         return includes;
     }
 

@@ -151,7 +151,7 @@ public class DependenciesToBuildReportGenerator {
 
         public Builder setExcludeGroupIds(Set<String> groupIds) {
             for (String s : groupIds) {
-                excludeSet.add(GavPattern.builder().groupIdPattern(s).build());
+                excludeSet.add(ArtifactCoordsPattern.builder().groupIdPattern(s).build());
             }
             return this;
         }
@@ -172,7 +172,7 @@ public class DependenciesToBuildReportGenerator {
 
         public Builder setIncludeGroupIds(Set<String> groupIds) {
             for (String s : groupIds) {
-                includeSet.add(GavPattern.builder().groupIdPattern(s).build());
+                includeSet.add(ArtifactCoordsPattern.builder().groupIdPattern(s).build());
             }
             return this;
         }
@@ -226,8 +226,8 @@ public class DependenciesToBuildReportGenerator {
 
     }
 
-    private static GavPattern toPattern(ArtifactKey key) {
-        final GavPattern.Builder pattern = GavPattern.builder();
+    private static ArtifactCoordsPattern toPattern(ArtifactKey key) {
+        final ArtifactCoordsPattern.Builder pattern = ArtifactCoordsPattern.builder();
         pattern.groupIdPattern(key.getGroupId());
         pattern.artifactIdPattern(key.getArtifactId());
         if (key.getClassifier() != null && !key.getClassifier().isEmpty()) {
@@ -239,8 +239,8 @@ public class DependenciesToBuildReportGenerator {
         return pattern.build();
     }
 
-    private static GavPattern toPattern(ArtifactCoords c) {
-        final GavPattern.Builder pattern = GavPattern.builder();
+    private static ArtifactCoordsPattern toPattern(ArtifactCoords c) {
+        final ArtifactCoordsPattern.Builder pattern = ArtifactCoordsPattern.builder();
         pattern.groupIdPattern(c.getGroupId());
         pattern.artifactIdPattern(c.getArtifactId());
         if (c.getClassifier() != null && !c.getClassifier().isEmpty()) {
@@ -263,8 +263,8 @@ public class DependenciesToBuildReportGenerator {
     private MavenArtifactResolver resolver;
     private ArtifactCoords targetBomCoords;
     private MessageWriter log;
-    private List<GavPattern> excludeSet = new ArrayList<>();
-    private List<GavPattern> includeSet = new ArrayList<>();
+    private List<ArtifactCoordsPattern> excludeSet = new ArrayList<>();
+    private List<ArtifactCoordsPattern> includeSet = new ArrayList<>();
 
     private Collection<ArtifactCoords> topLevelArtifactsToBuild = List.of();
 
@@ -1070,9 +1070,9 @@ public class DependenciesToBuildReportGenerator {
     }
 
     private boolean isExcluded(ArtifactCoords coords) {
-        for (GavPattern pattern : excludeSet) {
-            boolean matches = pattern.matches(coords.getGroupId(), coords.getArtifactId(), coords.getType(),
-                    coords.getClassifier(),
+        for (ArtifactCoordsPattern pattern : excludeSet) {
+            boolean matches = pattern.matches(coords.getGroupId(), coords.getArtifactId(), coords.getClassifier(),
+                    coords.getType(),
                     coords.getVersion());
             if (matches) {
                 return true;
@@ -1082,8 +1082,8 @@ public class DependenciesToBuildReportGenerator {
     }
 
     private boolean isIncluded(ArtifactCoords coords) {
-        for (GavPattern pattern : includeSet) {
-            if (pattern.matches(coords.getGroupId(), coords.getArtifactId(), coords.getType(), coords.getClassifier(),
+        for (ArtifactCoordsPattern pattern : includeSet) {
+            if (pattern.matches(coords.getGroupId(), coords.getArtifactId(), coords.getClassifier(), coords.getType(),
                     coords.getVersion())) {
                 return true;
             }

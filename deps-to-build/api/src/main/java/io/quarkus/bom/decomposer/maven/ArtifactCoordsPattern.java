@@ -4,36 +4,37 @@ import java.util.StringTokenizer;
 import java.util.regex.Pattern;
 
 /**
- * A general purpose pattern for matching GAVs (i.e. quintupless consisting of {@code groupId}, {@code artifactId},
- * {@code type} {@code classifier} and {@code version}).
+ * A general purpose pattern for matching artifact coordinates (i.e. quintupless consisting of {@code groupId},
+ * {@code artifactId},
+ * {@code classifier}, {@code type} and {@code version}).
  * <p>
- * To create a new {@link GavPattern}, use either {@link #of(String)} or {@link #builder()}, both of which accept
+ * To create a new {@link ArtifactCoordsPattern}, use either {@link #of(String)} or {@link #builder()}, both of which accept
  * wildcard patterns (rather than regular expression patterns). See the JavaDocs of the two respective methods for more
  * details.
  * <p>
- * {@link GavPattern} overrides {@link #hashCode()} and {@link #equals(Object)} and can thus be used as a key in a
+ * {@link ArtifactCoordsPattern} overrides {@link #hashCode()} and {@link #equals(Object)} and can thus be used as a key in a
  * {@link java.util.Map}.
  *
  * @author <a href="https://github.com/ppalaga">Peter Palaga</a>
  */
-public class GavPattern {
+public class ArtifactCoordsPattern {
 
     /**
-     * A {@link GavPattern} builder.
+     * A {@link ArtifactCoordsPattern} builder.
      */
     public static class Builder {
 
-        private GavSegmentPattern groupIdPattern = GavSegmentPattern.MATCH_ALL;
-        private GavSegmentPattern artifactIdPattern = GavSegmentPattern.MATCH_ALL;
-        private GavSegmentPattern typePattern = GavSegmentPattern.MATCH_ALL;
-        private GavSegmentPattern classifierPattern = GavSegmentPattern.MATCH_ALL;
-        private GavSegmentPattern versionPattern = GavSegmentPattern.MATCH_ALL;
+        private ArtifactCoordsSegmentPattern groupIdPattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
+        private ArtifactCoordsSegmentPattern artifactIdPattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
+        private ArtifactCoordsSegmentPattern typePattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
+        private ArtifactCoordsSegmentPattern classifierPattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
+        private ArtifactCoordsSegmentPattern versionPattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
 
         private Builder() {
         }
 
-        public GavPattern build() {
-            return new GavPattern(groupIdPattern, artifactIdPattern, typePattern, classifierPattern, versionPattern);
+        public ArtifactCoordsPattern build() {
+            return new ArtifactCoordsPattern(groupIdPattern, artifactIdPattern, classifierPattern, typePattern, versionPattern);
         }
 
         /**
@@ -43,7 +44,7 @@ public class GavPattern {
          * @return this {@link Builder}
          */
         public Builder groupIdPattern(String wildcardPattern) {
-            this.groupIdPattern = new GavSegmentPattern(wildcardPattern);
+            this.groupIdPattern = new ArtifactCoordsSegmentPattern(wildcardPattern);
             return this;
         }
 
@@ -54,7 +55,7 @@ public class GavPattern {
          * @return this {@link Builder}
          */
         public Builder artifactIdPattern(String wildcardPattern) {
-            this.artifactIdPattern = new GavSegmentPattern(wildcardPattern);
+            this.artifactIdPattern = new ArtifactCoordsSegmentPattern(wildcardPattern);
             return this;
         }
 
@@ -65,12 +66,12 @@ public class GavPattern {
          * @return this {@link Builder}
          */
         public Builder classifierPattern(String wildcardPattern) {
-            this.classifierPattern = new GavSegmentPattern(wildcardPattern);
+            this.classifierPattern = new ArtifactCoordsSegmentPattern(wildcardPattern);
             return this;
         }
 
         public Builder typePattern(String wildcardPattern) {
-            this.typePattern = new GavSegmentPattern(wildcardPattern);
+            this.typePattern = new ArtifactCoordsSegmentPattern(wildcardPattern);
             return this;
         }
 
@@ -81,7 +82,7 @@ public class GavPattern {
          * @return this {@link Builder}
          */
         public Builder versionPattern(String wildcardPattern) {
-            this.versionPattern = new GavSegmentPattern(wildcardPattern);
+            this.versionPattern = new ArtifactCoordsSegmentPattern(wildcardPattern);
             return this;
         }
 
@@ -90,20 +91,21 @@ public class GavPattern {
     /**
      * A pair of a {@link Pattern} and its wildcard source.
      */
-    static class GavSegmentPattern {
-        private static final GavSegmentPattern MATCH_ALL = new GavSegmentPattern(GavPattern.MULTI_WILDCARD);
+    static class ArtifactCoordsSegmentPattern {
+        private static final ArtifactCoordsSegmentPattern MATCH_ALL = new ArtifactCoordsSegmentPattern(
+                ArtifactCoordsPattern.MULTI_WILDCARD);
         private static final String MATCH_ALL_PATTERN_SOURCE = ".*";
 
         private final Pattern pattern;
         private final String source;
 
-        GavSegmentPattern(String wildcardSource) {
+        ArtifactCoordsSegmentPattern(String wildcardSource) {
             super();
             final StringBuilder sb = new StringBuilder(wildcardSource.length() + 2);
-            final StringTokenizer st = new StringTokenizer(wildcardSource, GavPattern.MULTI_WILDCARD, true);
+            final StringTokenizer st = new StringTokenizer(wildcardSource, ArtifactCoordsPattern.MULTI_WILDCARD, true);
             while (st.hasMoreTokens()) {
                 String token = st.nextToken();
-                if (GavPattern.MULTI_WILDCARD.equals(token)) {
+                if (ArtifactCoordsPattern.MULTI_WILDCARD.equals(token)) {
                     sb.append(MATCH_ALL_PATTERN_SOURCE);
                 } else {
                     sb.append(Pattern.quote(token));
@@ -119,7 +121,7 @@ public class GavPattern {
                 return false;
             if (getClass() != obj.getClass())
                 return false;
-            GavSegmentPattern other = (GavSegmentPattern) obj;
+            ArtifactCoordsSegmentPattern other = (ArtifactCoordsSegmentPattern) obj;
             return source.equals(other.source);
         }
 
@@ -144,7 +146,7 @@ public class GavPattern {
         }
 
         /**
-         * @return {@code true} if this {@link GavSegmentPattern} is equal to {@link #MATCH_ALL}; {@code false}
+         * @return {@code true} if this {@link ArtifactCoordsSegmentPattern} is equal to {@link #MATCH_ALL}; {@code false}
          *         otherwise
          */
         public boolean matchesAll() {
@@ -159,8 +161,8 @@ public class GavPattern {
 
     private static final char DELIMITER = ':';
     private static final String DELIMITER_STRING;
-    private static final GavPattern MATCH_ALL;
-    private static final GavPattern MATCH_SNAPSHOTS;
+    private static final ArtifactCoordsPattern MATCH_ALL;
+    private static final ArtifactCoordsPattern MATCH_SNAPSHOTS;
     static final String MULTI_WILDCARD;
     static final String MULTI_WILDCARD_CHAR = "*";
     private static final String SNAPSHOT_SUFFIX = "-SNAPSHOT";
@@ -168,18 +170,18 @@ public class GavPattern {
     static {
         MULTI_WILDCARD = String.valueOf(MULTI_WILDCARD_CHAR);
         DELIMITER_STRING = String.valueOf(DELIMITER);
-        MATCH_ALL = new GavPattern(
-                GavSegmentPattern.MATCH_ALL,
-                GavSegmentPattern.MATCH_ALL,
-                GavSegmentPattern.MATCH_ALL,
-                GavSegmentPattern.MATCH_ALL,
-                GavSegmentPattern.MATCH_ALL);
-        MATCH_SNAPSHOTS = new GavPattern(
-                GavSegmentPattern.MATCH_ALL,
-                GavSegmentPattern.MATCH_ALL,
-                GavSegmentPattern.MATCH_ALL,
-                GavSegmentPattern.MATCH_ALL,
-                new GavSegmentPattern(MULTI_WILDCARD + SNAPSHOT_SUFFIX));
+        MATCH_ALL = new ArtifactCoordsPattern(
+                ArtifactCoordsSegmentPattern.MATCH_ALL,
+                ArtifactCoordsSegmentPattern.MATCH_ALL,
+                ArtifactCoordsSegmentPattern.MATCH_ALL,
+                ArtifactCoordsSegmentPattern.MATCH_ALL,
+                ArtifactCoordsSegmentPattern.MATCH_ALL);
+        MATCH_SNAPSHOTS = new ArtifactCoordsPattern(
+                ArtifactCoordsSegmentPattern.MATCH_ALL,
+                ArtifactCoordsSegmentPattern.MATCH_ALL,
+                ArtifactCoordsSegmentPattern.MATCH_ALL,
+                ArtifactCoordsSegmentPattern.MATCH_ALL,
+                new ArtifactCoordsSegmentPattern(MULTI_WILDCARD + SNAPSHOT_SUFFIX));
     }
 
     /**
@@ -192,29 +194,30 @@ public class GavPattern {
     /**
      * @return a singleton that matches all possible GAVs
      */
-    public static GavPattern matchAll() {
+    public static ArtifactCoordsPattern matchAll() {
         return MATCH_ALL;
     }
 
     /**
      * @return a singleton that matches any GAV that has a version ending with {@value #SNAPSHOT_SUFFIX}
      */
-    public static GavPattern matchSnapshots() {
+    public static ArtifactCoordsPattern matchSnapshots() {
         return MATCH_SNAPSHOTS;
     }
 
     /**
-     * Creates a new {@link GavPattern} out of the given {@code wildcardPattern}. A wildcard pattern consists of string
+     * Creates a new {@link ArtifactCoordsPattern} out of the given {@code wildcardPattern}. A wildcard pattern consists of
+     * string
      * literals and asterisk wildcard {@code *}. {@code *} matches zero or many arbitrary characters. Wildcard patterns
-     * for groupId, artifactId, classifier and version need to be delimited by colon {@value #DELIMITER}.
+     * for groupId, artifactId, classifier, type and version need to be delimited by colon {@value #DELIMITER}.
      * <p>
-     * The general syntax of a {@link GavPattern} follows the pattern
-     * <code>groupIdPattern:[artifactIdPattern:[[typePattern:classifierIdPattern]:versionPattern]]</code>. Note that
-     * type and classifier need to be specified both or none and that they may occur on the third and fourth position
-     * respectively. Hence a {@link GavPattern} with three segments {@code org.my-group:my-artifact:1.2.3} is a short
-     * hand for {@code org.my-group:*:*:my-artifact:1.2.3} matching any type and any classifier.
+     * The general syntax of a {@link ArtifactCoordsPattern} follows the pattern
+     * <code>groupIdPattern:[artifactIdPattern:[[classifierIdPattern:typePattern]:versionPattern]]</code>. Note that
+     * classifier and type need to be specified both or none and that they may occur on the third and fourth position
+     * respectively. Hence a {@link ArtifactCoordsPattern} with three segments {@code org.my-group:my-artifact:1.2.3} is a short
+     * hand for {@code org.my-group:my-artifact:*:*:1.2.3} matching any type and any classifier.
      * <p>
-     * GAV pattern examples:
+     * {@link ArtifactCoordsPattern} pattern examples:
      * <p>
      * {@code org.my-group} - an equivalent of {@code org.my-group:*:*:*}. It will match any version of any artifact
      * having groupId {@code org.my-group}.
@@ -229,106 +232,106 @@ public class GavPattern {
      * {@code org.my-group:my-artifact:1.2.3} - will match just the version 1.2.3 of artifacts
      * {@code org.my-group:my-artifact}.
      * <p>
-     * {@code org.my-group:my-artifact:*:linux-x86_64:1.2.3} - will match artifacts of all types having classifier
+     * {@code org.my-group:my-artifact:linux-x86_64:*:1.2.3} - will match artifacts of all types having classifier
      * linux-x86_64 and version 1.2.3 of {@code org.my-group:my-artifact}.
      * <p>
-     * {@code org.my-group:my-artifact:*::1.2.3} - will match artifacts of all types having no classifier and version
+     * {@code org.my-group:my-artifact::*:1.2.3} - will match artifacts of all types having no classifier and version
      * 1.2.3 of {@code org.my-group:my-artifact}.
      * <p>
      * {@code org.my-group:my-artifact:jar:1.2.3} - Illegal because both type and classifier have to be specified.
      * <p>
-     * {@code org.my-group:my-artifact:jar::1.2.3} - will match the jar having no classifier and version 1.2.3 of
+     * {@code org.my-group:my-artifact::jar:1.2.3} - will match the jar having no classifier and version 1.2.3 of
      * {@code org.my-group:my-artifact}.
      *
-     * @param wildcardPattern a string pattern to parse and create a new {@link GavPattern} from
-     * @return a new {@link GavPattern}
+     * @param wildcardPattern a string pattern to parse and create a new {@link ArtifactCoordsPattern} from
+     * @return a new {@link ArtifactCoordsPattern}
      */
-    public static GavPattern of(String wildcardPattern) {
-        final GavSegmentPattern groupIdPattern;
+    public static ArtifactCoordsPattern of(String wildcardPattern) {
+        final ArtifactCoordsSegmentPattern groupIdPattern;
         StringTokenizer st = new StringTokenizer(wildcardPattern, DELIMITER_STRING);
         if (st.hasMoreTokens()) {
-            groupIdPattern = new GavSegmentPattern(st.nextToken());
+            groupIdPattern = new ArtifactCoordsSegmentPattern(st.nextToken());
         } else {
-            groupIdPattern = GavSegmentPattern.MATCH_ALL;
+            groupIdPattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
         }
-        final GavSegmentPattern artifactIdPattern;
+        final ArtifactCoordsSegmentPattern artifactIdPattern;
         if (st.hasMoreTokens()) {
-            artifactIdPattern = new GavSegmentPattern(st.nextToken());
+            artifactIdPattern = new ArtifactCoordsSegmentPattern(st.nextToken());
         } else {
-            artifactIdPattern = GavSegmentPattern.MATCH_ALL;
+            artifactIdPattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
         }
-        final GavSegmentPattern typePattern;
-        final GavSegmentPattern classifierPattern;
-        final GavSegmentPattern versionPattern;
+        final ArtifactCoordsSegmentPattern typePattern;
+        final ArtifactCoordsSegmentPattern classifierPattern;
+        final ArtifactCoordsSegmentPattern versionPattern;
         if (st.hasMoreTokens()) {
             final String third = st.nextToken();
             if (st.hasMoreTokens()) {
                 final String fourth = st.nextToken();
                 if (st.hasMoreTokens()) {
                     final String fifth = st.nextToken();
-                    typePattern = new GavSegmentPattern(third);
-                    classifierPattern = new GavSegmentPattern(fourth);
-                    versionPattern = new GavSegmentPattern(fifth);
+                    classifierPattern = new ArtifactCoordsSegmentPattern(third);
+                    typePattern = new ArtifactCoordsSegmentPattern(fourth);
+                    versionPattern = new ArtifactCoordsSegmentPattern(fifth);
                 } else {
                     throw new IllegalStateException(
-                            GavSegmentPattern.class.getName()
-                                    + ".of() expects groupId:artifactId:version or groupId:artifactId:type:classifier:version; found: "
+                            ArtifactCoordsSegmentPattern.class.getName()
+                                    + ".of() expects groupId:artifactId:version or groupId:artifactId:classifier:type:version; found: "
                                     + wildcardPattern);
                 }
             } else {
-                typePattern = GavSegmentPattern.MATCH_ALL;
-                classifierPattern = GavSegmentPattern.MATCH_ALL;
-                versionPattern = new GavSegmentPattern(third);
+                classifierPattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
+                typePattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
+                versionPattern = new ArtifactCoordsSegmentPattern(third);
             }
         } else {
-            typePattern = GavSegmentPattern.MATCH_ALL;
-            classifierPattern = GavSegmentPattern.MATCH_ALL;
-            versionPattern = GavSegmentPattern.MATCH_ALL;
+            classifierPattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
+            typePattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
+            versionPattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
         }
-        return new GavPattern(groupIdPattern, artifactIdPattern, typePattern, classifierPattern, versionPattern);
+        return new ArtifactCoordsPattern(groupIdPattern, artifactIdPattern, classifierPattern, typePattern, versionPattern);
     }
 
-    final GavSegmentPattern groupIdPattern;
-    final GavSegmentPattern artifactIdPattern;
-    final GavSegmentPattern typePattern;
-    final GavSegmentPattern classifierPattern;
-    final GavSegmentPattern versionPattern;
+    final ArtifactCoordsSegmentPattern groupIdPattern;
+    final ArtifactCoordsSegmentPattern artifactIdPattern;
+    final ArtifactCoordsSegmentPattern classifierPattern;
+    final ArtifactCoordsSegmentPattern typePattern;
+    final ArtifactCoordsSegmentPattern versionPattern;
     private final String source;
 
-    GavPattern(
-            GavSegmentPattern groupIdPattern,
-            GavSegmentPattern artifactIdPattern,
-            GavSegmentPattern typePattern,
-            GavSegmentPattern classifierPattern,
-            GavSegmentPattern versionPattern) {
+    ArtifactCoordsPattern(
+            ArtifactCoordsSegmentPattern groupIdPattern,
+            ArtifactCoordsSegmentPattern artifactIdPattern,
+            ArtifactCoordsSegmentPattern classifierPattern,
+            ArtifactCoordsSegmentPattern typePattern,
+            ArtifactCoordsSegmentPattern versionPattern) {
         super();
         this.groupIdPattern = groupIdPattern;
         this.artifactIdPattern = artifactIdPattern;
-        this.typePattern = typePattern;
         this.classifierPattern = classifierPattern;
+        this.typePattern = typePattern;
         this.versionPattern = versionPattern;
 
         StringBuilder source = new StringBuilder(
                 groupIdPattern.getSource().length() + artifactIdPattern.getSource().length()
-                        + typePattern.getSource().length() + classifierPattern.getSource().length()
+                        + classifierPattern.getSource().length() + typePattern.getSource().length()
                         + versionPattern.getSource().length() + 3);
 
         source.append(groupIdPattern.getSource());
         final boolean artifactMatchesAll = artifactIdPattern.matchesAll();
-        final boolean typeMatchesAll = typePattern.matchesAll();
         final boolean classifierMatchesAll = classifierPattern.matchesAll();
+        final boolean typeMatchesAll = typePattern.matchesAll();
         final boolean versionMatchesAll = versionPattern.matchesAll();
         if (!versionMatchesAll) {
             source.append(DELIMITER).append(artifactIdPattern.getSource());
             if (!typeMatchesAll || !classifierMatchesAll) {
-                source.append(DELIMITER).append(typePattern.getSource());
                 source.append(DELIMITER).append(classifierPattern.getSource());
+                source.append(DELIMITER).append(typePattern.getSource());
             }
             source.append(DELIMITER).append(versionPattern.getSource());
         } else if (!typeMatchesAll || !classifierMatchesAll) {
             source.append(DELIMITER).append(artifactIdPattern.getSource());
-            source.append(DELIMITER).append(typePattern.getSource());
             source.append(DELIMITER).append(classifierPattern.getSource());
+            source.append(DELIMITER).append(typePattern.getSource());
         } else if (!artifactMatchesAll) {
             source.append(DELIMITER).append(artifactIdPattern.getSource());
         }
@@ -343,7 +346,7 @@ public class GavPattern {
             return false;
         if (getClass() != obj.getClass())
             return false;
-        GavPattern other = (GavPattern) obj;
+        ArtifactCoordsPattern other = (ArtifactCoordsPattern) obj;
         return this.source.equals(other.source);
     }
 
@@ -354,21 +357,21 @@ public class GavPattern {
 
     /**
      * Matches the given {@code groupId}, {@code artifactId}, {@code type}, {@code classifier}, {@code version}
-     * quintuple against this {@link GavPattern}.
+     * quintuple against this {@link ArtifactCoordsPattern}.
      *
      * @param groupId groupId
      * @param artifactId artifactId
-     * @param type cannot be {@code null}
      * @param classifier can be {@code null}
+     * @param type cannot be {@code null}
      * @param version version
-     * @return {@code true} if this {@link GavPattern} matches the given {@code groupId}, {@code artifactId},
+     * @return {@code true} if this {@link ArtifactCoordsPattern} matches the given {@code groupId}, {@code artifactId},
      *         {@code type}, {@code classifier}, {@code version} quintuple and {@code false otherwise}
      */
-    public boolean matches(String groupId, String artifactId, String type, String classifier, String version) {
+    public boolean matches(String groupId, String artifactId, String classifier, String type, String version) {
         return groupIdPattern.matches(groupId) && //
                 artifactIdPattern.matches(artifactId) && //
-                typePattern.matches(type) && //
                 classifierPattern.matches(classifier) && //
+                typePattern.matches(type) && //
                 versionPattern.matches(version);
     }
 
