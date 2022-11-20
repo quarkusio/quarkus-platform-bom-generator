@@ -379,30 +379,24 @@ public class DependenciesToBuildReportGenerator {
 
     private final Map<Set<ReleaseId>, List<ReleaseId>> circularRepoDeps = new HashMap<>();
 
+    public Collection<ReleaseRepo> getReleaseRepos() {
+        buildModel();
+        initReleaseRepos();
+        detectCircularRepoDeps();
+        return new ArrayList<>(releaseRepos.values());
+    }
+
+    public Collection<ReleaseRepo> getSortedReleaseRepos() {
+        return sortReleaseRepos(getReleaseRepos());
+    }
+
     public void generate() {
 
         if (logCodeRepoGraph) {
             logCodeRepos = true;
         }
 
-        targetBomManagedDeps = getBomConstraints(targetBomCoords);
-        targetBomConstraints = new HashSet<>(targetBomManagedDeps.size());
-        for (Dependency d : targetBomManagedDeps) {
-            targetBomConstraints.add(toCoords(d.getArtifact()));
-        }
-        if (artifactConstraintsProvider == null) {
-            artifactConstraintsProvider = t -> targetBomManagedDeps;
-        }
-
-        for (ArtifactCoords coords : getTopLevelArtifactsToBuild()) {
-            if (isIncluded(coords) || !isExcluded(coords)) {
-                processTopLevelArtifact(artifactConstraintsProvider.apply(coords), coords);
-            }
-        }
-
-        if (!includeAlreadyBuilt) {
-            removeProductizedDeps();
-        }
+        buildModel();
 
         try {
             int codeReposTotal = 0;
@@ -414,7 +408,7 @@ public class DependenciesToBuildReportGenerator {
                     detectCircularRepoDeps();
                     codeReposTotal = releaseRepos.size();
 
-                    final List<ReleaseRepo> sorted = sortReleaseRepos();
+                    final List<ReleaseRepo> sorted = sortReleaseRepos(releaseRepos.values());
                     for (ReleaseRepo e : sorted) {
                         logComment("repo-url " + e.id().origin());
                         logComment("tag " + e.id().version().asString());
@@ -509,16 +503,47 @@ public class DependenciesToBuildReportGenerator {
         }
     }
 
-    private List<ReleaseRepo> sortReleaseRepos() {
+    private void buildModel() {
+        targetBomManagedDeps = getBomConstraints(targetBomCoords);
+        targetBomConstraints = new HashSet<>(targetBomManagedDeps.size());
+        for (Dependency d : targetBomManagedDeps) {
+            targetBomConstraints.add(toCoords(d.getArtifact()));
+        }
+        if (artifactConstraintsProvider == null) {
+            artifactConstraintsProvider = t -> targetBomManagedDeps;
+        }
+
+        for (ArtifactCoords coords : getTopLevelArtifactsToBuild()) {
+            if (isIncluded(coords) || !isExcluded(coords)) {
+                processTopLevelArtifact(artifactConstraintsProvider.apply(coords), coords);
+            }
+        }
+
+        if (!includeAlreadyBuilt) {
+            removeProductizedDeps();
+        }
+    }
+
+    private static List<ReleaseRepo> sortReleaseRepos(Collection<ReleaseRepo> releaseRepos) {
         final int codeReposTotal = releaseRepos.size();
         final List<ReleaseRepo> sorted = new ArrayList<>(codeReposTotal);
         final Set<ReleaseId> processedRepos = new HashSet<>(codeReposTotal);
-        for (ReleaseRepo r : releaseRepos.values()) {
+        for (ReleaseRepo r : releaseRepos) {
             if (r.isRoot()) {
                 sort(r, processedRepos, sorted);
             }
         }
         return sorted;
+    }
+
+    private static void sort(ReleaseRepo repo, Set<ReleaseId> processed, List<ReleaseRepo> sorted) {
+        if (!processed.add(repo.id)) {
+            return;
+        }
+        for (ReleaseRepo d : repo.dependencies.values()) {
+            sort(d, processed, sorted);
+        }
+        sorted.add(repo);
     }
 
     private void removeProductizedDeps() {
@@ -642,6 +667,28 @@ public class DependenciesToBuildReportGenerator {
                 i.remove();
             }
         }
+
+        for (ArtifactDependency d : artifactDeps.values()) {
+            final ArtifactCoords c = d.coords;
+            final List<Dependency> directDeps;
+            try {
+                directDeps = resolver
+                        .resolveDescriptor(
+                                new DefaultArtifact(c.getGroupId(), c.getArtifactId(), ArtifactCoords.TYPE_POM, c.getVersion()))
+                        .getDependencies();
+            } catch (BootstrapMavenException e) {
+                throw new RuntimeException("Failed to resolve artifact descriptor for " + c, e);
+            }
+            for (Dependency directDep : directDeps) {
+                final Artifact a = directDep.getArtifact();
+                final ArtifactDependency dirArt = artifactDeps.get(ArtifactCoords.of(a.getGroupId(), a.getArtifactId(),
+                        a.getClassifier(), a.getExtension(), a.getVersion()));
+                if (dirArt != null) {
+                    d.addDependency(dirArt);
+                }
+            }
+        }
+
         for (ArtifactDependency d : artifactDeps.values()) {
             final ReleaseRepo repo = getRepo(artifactReleases.get(d.coords));
             for (ArtifactDependency c : d.getAllDependencies()) {
@@ -762,6 +809,8 @@ public class DependenciesToBuildReportGenerator {
                             s = "vertx-web";
                         } else if (s.equals("vertx-web-sstore-infinispan")) {
                             s = "vertx-infinispan";
+                        } else if (s.startsWith("vertx-junit5-rx")) {
+                            s = "vertx-rx";
                         } else if (!s.equals("vertx-bridge-common")) {
                             int i = s.indexOf('-', "vertx-".length());
                             if (i > 0) {
@@ -776,16 +825,6 @@ public class DependenciesToBuildReportGenerator {
                 .addAll(ServiceLoader.load(ReleaseIdDetector.class).stream().map(p -> p.get()).collect(Collectors.toList()));
 
         return new ReleaseIdResolver(artifactResolver, releaseDetectors, log, validateCodeRepoTags, versionMapping);
-    }
-
-    private void sort(ReleaseRepo repo, Set<ReleaseId> processed, List<ReleaseRepo> sorted) {
-        if (!processed.add(repo.id)) {
-            return;
-        }
-        for (ReleaseRepo d : repo.dependencies.values()) {
-            sort(d, processed, sorted);
-        }
-        sorted.add(repo);
     }
 
     private void logReleaseRepoDep(ReleaseRepo repo, int depth) {
@@ -1179,33 +1218,6 @@ public class DependenciesToBuildReportGenerator {
             detectCircularRepoDeps(d, chain);
         }
         chain.remove(chain.size() - 1);
-    }
-
-    private static class ReleaseRepo {
-
-        final ReleaseId id;
-        final List<ArtifactCoords> artifacts = new ArrayList<>();
-        final Map<ReleaseId, ReleaseRepo> dependants = new HashMap<>();
-        final Map<ReleaseId, ReleaseRepo> dependencies = new LinkedHashMap<>();
-
-        ReleaseRepo(ReleaseId release) {
-            this.id = release;
-        }
-
-        ReleaseId id() {
-            return id;
-        }
-
-        void addRepoDependency(ReleaseRepo repo) {
-            if (repo != this) {
-                dependencies.putIfAbsent(repo.id(), repo);
-                repo.dependants.putIfAbsent(id(), this);
-            }
-        }
-
-        boolean isRoot() {
-            return dependants.isEmpty();
-        }
     }
 
     private static Map<String, String> toMap(Properties props) {
