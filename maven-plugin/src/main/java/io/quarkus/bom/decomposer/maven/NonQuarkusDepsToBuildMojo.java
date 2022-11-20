@@ -196,9 +196,9 @@ public class NonQuarkusDepsToBuildMojo extends AbstractMojo {
             throw new MojoExecutionException("Failed to initialize Maven artifact resolver", e);
         }
 
-        DependenciesToBuildReportGenerator.builder()
-                .setBom(targetBomCoords)
-                .setTopLevelArtifactsToBuild(
+        ProjectDependencyResolver.builder()
+                .setProjectBom(targetBomCoords)
+                .setProjectArtifacts(
                         topLevelArtifactsToBuild.stream().map(ArtifactCoords::fromString).collect(Collectors.toList()))
                 .setIncludeGroupIds(includeGroupIds)
                 .setIncludeKeys(toKeySet(includeKeys))
@@ -221,8 +221,8 @@ public class NonQuarkusDepsToBuildMojo extends AbstractMojo {
                 .setOutputFile(outputFile)
                 .setAppendOutput(appendOutput)
                 .setValidateCodeRepoTags(validateCodeRepoTags)
-                .setResolver(resolver)
-                .build().generate();
+                .setArtifactResolver(resolver)
+                .build().log();
     }
 
     private static Set<ArtifactCoords> toCoordsSet(Collection<String> set) {

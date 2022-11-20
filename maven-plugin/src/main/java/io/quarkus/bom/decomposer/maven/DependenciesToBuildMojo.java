@@ -306,13 +306,13 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             topArtifacts.addAll(dependenciesToBuild.getIncludeArtifacts());
         }
 
-        DependenciesToBuildReportGenerator.builder()
+        ProjectDependencyResolver.builder()
                 .setArtifactConstraintsProvider(coords -> {
                     final Extension ext = supported.get(coords);
                     return ext == null ? targetBomManagedDeps : getConstraintsForExtension(ext);
                 })
-                .setTopLevelArtifactsToBuild(topArtifacts)
-                .setBom(targetBomCoords)
+                .setProjectArtifacts(topArtifacts)
+                .setProjectBom(targetBomCoords)
                 .setIncludeAlreadyBuilt(includeAlreadyBuilt)
                 .setIncludeGroupIds(dependenciesToBuild.getIncludeGroupIds())
                 .setIncludeKeys(dependenciesToBuild.getIncludeKeys())
@@ -335,9 +335,9 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 .setMessageWriter(new MojoMessageWriter(getLog()))
                 .setOutputFile(outputFile)
                 .setAppendOutput(appendOutput)
-                .setResolver(resolver)
+                .setArtifactResolver(resolver)
                 .setValidateCodeRepoTags(validateCodeRepoTags)
-                .build().generate();
+                .build().log();
     }
 
     private List<Dependency> getConstraintsForExtension(Extension ext) {

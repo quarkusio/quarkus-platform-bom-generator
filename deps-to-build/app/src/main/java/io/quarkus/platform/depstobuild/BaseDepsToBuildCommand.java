@@ -1,6 +1,6 @@
 package io.quarkus.platform.depstobuild;
 
-import io.quarkus.bom.decomposer.maven.DependenciesToBuildReportGenerator;
+import io.quarkus.bom.decomposer.maven.ProjectDependencyResolver;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.io.File;
 import java.util.Collection;
@@ -89,10 +89,10 @@ public class BaseDepsToBuildCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
-        DependenciesToBuildReportGenerator.Builder builder = DependenciesToBuildReportGenerator.builder();
+        ProjectDependencyResolver.Builder builder = ProjectDependencyResolver.builder();
 
         if (bom != null) {
-            builder.setBom(ArtifactCoords.fromString(bom));
+            builder.setProjectBom(ArtifactCoords.fromString(bom));
         }
 
         if (warnOnResolutionErrors != null) {
@@ -127,10 +127,10 @@ public class BaseDepsToBuildCommand implements Callable<Integer> {
                 .setLogSummary(logSummary)
                 .setLogTrees(logTrees)
                 .setOutputFile(outputFile)
-                .setTopLevelArtifactsToBuild(
+                .setProjectArtifacts(
                         rootArtifacts.stream().map(ArtifactCoords::fromString).collect(Collectors.toList()))
                 .setValidateCodeRepoTags(validateCodeRepoTags)
-                .build().generate();
+                .build().log();
 
         return CommandLine.ExitCode.OK;
     }
