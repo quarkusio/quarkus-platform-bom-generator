@@ -45,7 +45,7 @@ import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.util.artifact.JavaScopes;
 
-public class DependenciesToBuildReportGenerator {
+public class ProjectDependencyResolver {
 
     private static final String NOT_MANAGED = " [not managed]";
 
@@ -54,88 +54,88 @@ public class DependenciesToBuildReportGenerator {
         private Builder() {
         }
 
-        public Builder setResolver(MavenArtifactResolver artifactResolver) {
+        public Builder setArtifactResolver(MavenArtifactResolver artifactResolver) {
             resolver = artifactResolver;
             return this;
         }
 
-        public Builder setBom(ArtifactCoords bom) {
+        public Builder setProjectBom(ArtifactCoords bom) {
             targetBomCoords = bom;
             return this;
         }
 
-        public Builder setTopLevelArtifactsToBuild(Collection<ArtifactCoords> topArtifactsToBuild) {
-            topLevelArtifactsToBuild = topArtifactsToBuild;
+        public Builder setProjectArtifacts(Collection<ArtifactCoords> topArtifactsToBuild) {
+            projectArtifacts = topArtifactsToBuild;
             return this;
         }
 
         public Builder setLevel(int level) {
-            DependenciesToBuildReportGenerator.this.level = level;
+            ProjectDependencyResolver.this.level = level;
             return this;
         }
 
         public Builder setIncludeNonManaged(boolean includeNonManaged) {
-            DependenciesToBuildReportGenerator.this.includeNonManaged = includeNonManaged;
+            ProjectDependencyResolver.this.includeNonManaged = includeNonManaged;
             return this;
         }
 
         public Builder setLogArtifactsToBuild(boolean logArtifactsToBuild) {
-            DependenciesToBuildReportGenerator.this.logArtifactsToBuild = logArtifactsToBuild;
+            ProjectDependencyResolver.this.logArtifactsToBuild = logArtifactsToBuild;
             return this;
         }
 
         public Builder setLogModulesToBuild(boolean logModulesToBuild) {
-            DependenciesToBuildReportGenerator.this.logModulesToBuild = logModulesToBuild;
+            ProjectDependencyResolver.this.logModulesToBuild = logModulesToBuild;
             return this;
         }
 
         public Builder setLogTrees(boolean logTrees) {
-            DependenciesToBuildReportGenerator.this.logTrees = logTrees;
+            ProjectDependencyResolver.this.logTrees = logTrees;
             return this;
         }
 
         public Builder setLogRemaining(boolean logRemaining) {
-            DependenciesToBuildReportGenerator.this.logRemaining = logRemaining;
+            ProjectDependencyResolver.this.logRemaining = logRemaining;
             return this;
         }
 
         public Builder setLogSummary(boolean logSummary) {
-            DependenciesToBuildReportGenerator.this.logSummary = logSummary;
+            ProjectDependencyResolver.this.logSummary = logSummary;
             return this;
         }
 
         public Builder setLogNonManagedVisited(boolean logNonManagedVisited) {
-            DependenciesToBuildReportGenerator.this.logNonManagedVisited = logNonManagedVisited;
+            ProjectDependencyResolver.this.logNonManagedVisited = logNonManagedVisited;
             return this;
         }
 
         public Builder setOutputFile(File outputFile) {
-            DependenciesToBuildReportGenerator.this.outputFile = outputFile;
+            ProjectDependencyResolver.this.outputFile = outputFile;
             return this;
         }
 
         public Builder setAppendOutput(boolean appendOutput) {
-            DependenciesToBuildReportGenerator.this.appendOutput = appendOutput;
+            ProjectDependencyResolver.this.appendOutput = appendOutput;
             return this;
         }
 
         public Builder setLogCodeRepos(boolean logCodeRepos) {
-            DependenciesToBuildReportGenerator.this.logCodeRepos = logCodeRepos;
+            ProjectDependencyResolver.this.logCodeRepos = logCodeRepos;
             return this;
         }
 
         public Builder setLogCodeRepoGraph(boolean logCodeRepoGraph) {
-            DependenciesToBuildReportGenerator.this.logCodeRepoGraph = logCodeRepoGraph;
+            ProjectDependencyResolver.this.logCodeRepoGraph = logCodeRepoGraph;
             return this;
         }
 
         public Builder setExcludeParentPoms(boolean excludeParentPoms) {
-            DependenciesToBuildReportGenerator.this.excludeParentPoms = excludeParentPoms;
+            ProjectDependencyResolver.this.excludeParentPoms = excludeParentPoms;
             return this;
         }
 
         public Builder setExcludeBomImports(boolean excludeBomImports) {
-            DependenciesToBuildReportGenerator.this.excludeBomImports = excludeBomImports;
+            ProjectDependencyResolver.this.excludeBomImports = excludeBomImports;
             return this;
         }
 
@@ -206,7 +206,7 @@ public class DependenciesToBuildReportGenerator {
             return this;
         }
 
-        public DependenciesToBuildReportGenerator build() {
+        public ProjectDependencyResolver build() {
             if (resolver == null) {
                 try {
                     resolver = MavenArtifactResolver.builder().setWorkspaceDiscovery(false).build();
@@ -217,11 +217,11 @@ public class DependenciesToBuildReportGenerator {
             if (log == null) {
                 log = MessageWriter.info();
             }
-            return DependenciesToBuildReportGenerator.this;
+            return ProjectDependencyResolver.this;
         }
 
-        protected DependenciesToBuildReportGenerator doBuild() {
-            return DependenciesToBuildReportGenerator.this;
+        protected ProjectDependencyResolver doBuild() {
+            return ProjectDependencyResolver.this;
         }
 
     }
@@ -254,10 +254,10 @@ public class DependenciesToBuildReportGenerator {
     }
 
     public static Builder builder() {
-        return new DependenciesToBuildReportGenerator().new Builder();
+        return new ProjectDependencyResolver().new Builder();
     }
 
-    private DependenciesToBuildReportGenerator() {
+    private ProjectDependencyResolver() {
     }
 
     private MavenArtifactResolver resolver;
@@ -266,7 +266,7 @@ public class DependenciesToBuildReportGenerator {
     private List<ArtifactCoordsPattern> excludeSet = new ArrayList<>();
     private List<ArtifactCoordsPattern> includeSet = new ArrayList<>();
 
-    private Collection<ArtifactCoords> topLevelArtifactsToBuild = List.of();
+    private Collection<ArtifactCoords> projectArtifacts = List.of();
 
     /**
      * The depth level of a dependency tree of each supported Quarkus extension to capture.
@@ -390,7 +390,7 @@ public class DependenciesToBuildReportGenerator {
         return sortReleaseRepos(getReleaseRepos());
     }
 
-    public void generate() {
+    public void log() {
 
         if (logCodeRepoGraph) {
             logCodeRepos = true;
@@ -513,9 +513,9 @@ public class DependenciesToBuildReportGenerator {
             artifactConstraintsProvider = t -> targetBomManagedDeps;
         }
 
-        for (ArtifactCoords coords : getTopLevelArtifactsToBuild()) {
+        for (ArtifactCoords coords : getProjectArtifacts()) {
             if (isIncluded(coords) || !isExcluded(coords)) {
-                processTopLevelArtifact(artifactConstraintsProvider.apply(coords), coords);
+                processRootArtifact(artifactConstraintsProvider.apply(coords), coords);
             }
         }
 
@@ -565,8 +565,8 @@ public class DependenciesToBuildReportGenerator {
         }
     }
 
-    protected Iterable<ArtifactCoords> getTopLevelArtifactsToBuild() {
-        if (topLevelArtifactsToBuild == null || topLevelArtifactsToBuild.isEmpty()) {
+    protected Iterable<ArtifactCoords> getProjectArtifacts() {
+        if (projectArtifacts == null || projectArtifacts.isEmpty()) {
             final List<ArtifactCoords> result = new ArrayList<>();
             for (ArtifactCoords d : targetBomConstraints) {
                 if (targetBomCoords.getGroupId().equals(d.getGroupId()) && d.isJar() && !isExcluded(d)) {
@@ -576,14 +576,14 @@ public class DependenciesToBuildReportGenerator {
             }
             return result;
         }
-        return topLevelArtifactsToBuild;
+        return projectArtifacts;
     }
 
-    private void processTopLevelArtifact(List<Dependency> managedDeps, ArtifactCoords topLevelArtifact) {
+    private void processRootArtifact(List<Dependency> managedDeps, ArtifactCoords rootArtifact) {
 
         final DependencyNode root;
         try {
-            final Artifact a = toAetherArtifact(topLevelArtifact);
+            final Artifact a = toAetherArtifact(rootArtifact);
             root = resolver.getSystem().collectDependencies(resolver.getSession(), new CollectRequest()
                     .setManagedDependencies(managedDeps)
                     .setRepositories(resolver.getRepositories())
@@ -596,28 +596,28 @@ public class DependenciesToBuildReportGenerator {
         } catch (Exception e) {
             if (warnOnResolutionErrors) {
                 log.warn(e.getCause() == null ? e.getLocalizedMessage() : e.getCause().getLocalizedMessage());
-                allDepsToBuild.remove(topLevelArtifact);
+                allDepsToBuild.remove(rootArtifact);
                 return;
             }
-            throw new RuntimeException("Failed to collect dependencies of " + topLevelArtifact.toCompactCoords(), e);
+            throw new RuntimeException("Failed to collect dependencies of " + rootArtifact.toCompactCoords(), e);
         }
 
         if (logTrees) {
-            if (targetBomConstraints.contains(topLevelArtifact)) {
-                logComment(topLevelArtifact.toCompactCoords());
+            if (targetBomConstraints.contains(rootArtifact)) {
+                logComment(rootArtifact.toCompactCoords());
             } else {
-                logComment(topLevelArtifact.toCompactCoords() + NOT_MANAGED);
+                logComment(rootArtifact.toCompactCoords() + NOT_MANAGED);
             }
         }
 
         final boolean addDependency;
         try {
-            addDependency = addDependencyToBuild(topLevelArtifact);
+            addDependency = addDependencyToBuild(rootArtifact);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to process " + topLevelArtifact, e);
+            throw new RuntimeException("Failed to process " + rootArtifact, e);
         }
         if (addDependency) {
-            final ArtifactDependency extDep = getOrCreateArtifactDep(topLevelArtifact);
+            final ArtifactDependency extDep = getOrCreateArtifactDep(rootArtifact);
             if (!excludeParentPoms && logTrees) {
                 extDep.logBomImportsAndParents();
             }

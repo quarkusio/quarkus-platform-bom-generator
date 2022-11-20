@@ -2,7 +2,7 @@ package io.quarkus.dependency;
 
 import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.decomposer.ReleaseOrigin;
-import io.quarkus.bom.decomposer.maven.DependenciesToBuildReportGenerator;
+import io.quarkus.bom.decomposer.maven.ProjectDependencyResolver;
 import io.quarkus.bom.decomposer.maven.ReleaseRepo;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
@@ -65,12 +65,12 @@ public class ParallelExecution {
 
         resolver = MavenArtifactResolver.builder().build();
 
-        final Collection<ReleaseRepo> allRepos = DependenciesToBuildReportGenerator.builder()
-                .setBom(ArtifactCoords.pom("io.vertx", "vertx-dependencies", "4.3.4"))
-                //.setBom(ArtifactCoords.pom("io.quarkus", "quarkus-bom", "2.13.4.Final"))
+        final Collection<ReleaseRepo> allRepos = ProjectDependencyResolver.builder()
+                .setProjectBom(ArtifactCoords.pom("io.vertx", "vertx-dependencies", "4.3.4"))
+                //.setProjectBom(ArtifactCoords.pom("io.quarkus", "quarkus-bom", "2.13.4.Final"))
                 .setWarnOnResolutionErrors(true)
                 .setLogCodeRepos(true)
-                .setResolver(resolver)
+                .setArtifactResolver(resolver)
                 .build()
                 .getSortedReleaseRepos();
 
