@@ -11,6 +11,7 @@ import io.quarkus.bom.platform.ProjectDependencyConfig;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.registry.catalog.CatalogMapperHelper;
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -202,8 +203,22 @@ public class PncBuildConfigMojo extends AbstractMojo {
         if (!generatedConfig.exists()) {
             generatedConfig.getParentFile().mkdirs();
         }
-        try {
-            mapper.writer().writeValue(generatedConfig, mareteConfig);
+
+        try (BufferedWriter writer = Files.newBufferedWriter(generatedConfig.toPath())) {
+            try (BufferedReader reader = Files.newBufferedReader(configTemplate.toPath())) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.startsWith("#!")) {
+                        writer.write(line);
+                        writer.newLine();
+                    }
+                }
+            } catch (IOException e) {
+                throw new MojoExecutionException("Failed to read " + configTemplate, e);
+            }
+
+            writer.newLine();
+            mapper.writer().writeValue(writer, mareteConfig);
         } catch (IOException e) {
             throw new MojoExecutionException("Failed to write to " + generatedConfig, e);
         }
