@@ -12,12 +12,12 @@ import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.nio.file.Files;
+import java.nio.file.OpenOption;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -49,93 +49,24 @@ public class ProjectDependencyResolver {
 
     private static final String NOT_MANAGED = " [not managed]";
 
-    public class Builder {
+    public static class Builder {
+
+        private MavenArtifactResolver resolver;
+        private Function<ArtifactCoords, List<Dependency>> artifactConstraintsProvider;
+        private MessageWriter log;
+        private ProjectDependencyConfig depConfig;
+        private Path logOutputFile;
+        private boolean appendOutput;
 
         private Builder() {
         }
 
+        private Builder(ProjectDependencyConfig config) {
+            this.depConfig = config;
+        }
+
         public Builder setArtifactResolver(MavenArtifactResolver artifactResolver) {
             resolver = artifactResolver;
-            return this;
-        }
-
-        public Builder setProjectBom(ArtifactCoords bom) {
-            targetBomCoords = bom;
-            return this;
-        }
-
-        public Builder setProjectArtifacts(Collection<ArtifactCoords> topArtifactsToBuild) {
-            projectArtifacts = topArtifactsToBuild;
-            return this;
-        }
-
-        public Builder setLevel(int level) {
-            ProjectDependencyResolver.this.level = level;
-            return this;
-        }
-
-        public Builder setIncludeNonManaged(boolean includeNonManaged) {
-            ProjectDependencyResolver.this.includeNonManaged = includeNonManaged;
-            return this;
-        }
-
-        public Builder setLogArtifactsToBuild(boolean logArtifactsToBuild) {
-            ProjectDependencyResolver.this.logArtifactsToBuild = logArtifactsToBuild;
-            return this;
-        }
-
-        public Builder setLogModulesToBuild(boolean logModulesToBuild) {
-            ProjectDependencyResolver.this.logModulesToBuild = logModulesToBuild;
-            return this;
-        }
-
-        public Builder setLogTrees(boolean logTrees) {
-            ProjectDependencyResolver.this.logTrees = logTrees;
-            return this;
-        }
-
-        public Builder setLogRemaining(boolean logRemaining) {
-            ProjectDependencyResolver.this.logRemaining = logRemaining;
-            return this;
-        }
-
-        public Builder setLogSummary(boolean logSummary) {
-            ProjectDependencyResolver.this.logSummary = logSummary;
-            return this;
-        }
-
-        public Builder setLogNonManagedVisited(boolean logNonManagedVisited) {
-            ProjectDependencyResolver.this.logNonManagedVisited = logNonManagedVisited;
-            return this;
-        }
-
-        public Builder setOutputFile(File outputFile) {
-            ProjectDependencyResolver.this.outputFile = outputFile;
-            return this;
-        }
-
-        public Builder setAppendOutput(boolean appendOutput) {
-            ProjectDependencyResolver.this.appendOutput = appendOutput;
-            return this;
-        }
-
-        public Builder setLogCodeRepos(boolean logCodeRepos) {
-            ProjectDependencyResolver.this.logCodeRepos = logCodeRepos;
-            return this;
-        }
-
-        public Builder setLogCodeRepoGraph(boolean logCodeRepoGraph) {
-            ProjectDependencyResolver.this.logCodeRepoGraph = logCodeRepoGraph;
-            return this;
-        }
-
-        public Builder setExcludeParentPoms(boolean excludeParentPoms) {
-            ProjectDependencyResolver.this.excludeParentPoms = excludeParentPoms;
-            return this;
-        }
-
-        public Builder setExcludeBomImports(boolean excludeBomImports) {
-            ProjectDependencyResolver.this.excludeBomImports = excludeBomImports;
             return this;
         }
 
@@ -149,94 +80,39 @@ public class ProjectDependencyResolver {
             return this;
         }
 
-        public Builder setExcludeGroupIds(Set<String> groupIds) {
-            for (String s : groupIds) {
-                excludeSet.add(ArtifactCoordsPattern.builder().groupIdPattern(s).build());
-            }
+        public Builder setLogOutputFile(Path file) {
+            this.logOutputFile = file;
             return this;
         }
 
-        public Builder setExcludeKeys(Set<ArtifactKey> artifactKeys) {
-            for (ArtifactKey key : artifactKeys) {
-                excludeSet.add(toPattern(key));
-            }
+        public Builder setAppendOutput(boolean appendOutput) {
+            this.appendOutput = appendOutput;
             return this;
         }
 
-        public Builder setExcludeArtifacts(Set<ArtifactCoords> artifacts) {
-            for (ArtifactCoords c : artifacts) {
-                excludeSet.add(toPattern(c));
-            }
-            return this;
-        }
-
-        public Builder setIncludeGroupIds(Set<String> groupIds) {
-            for (String s : groupIds) {
-                includeSet.add(ArtifactCoordsPattern.builder().groupIdPattern(s).build());
-            }
-            return this;
-        }
-
-        public Builder setIncludeKeys(Set<ArtifactKey> artifactKeys) {
-            for (ArtifactKey key : artifactKeys) {
-                includeSet.add(toPattern(key));
-            }
-            return this;
-        }
-
-        public Builder setIncludeArtifacts(Set<ArtifactCoords> artifacts) {
-            for (ArtifactCoords c : artifacts) {
-                includeSet.add(toPattern(c));
-            }
-            return this;
-        }
-
-        public Builder setValidateCodeRepoTags(boolean validateTags) {
-            validateCodeRepoTags = validateTags;
-            return this;
-        }
-
-        public Builder setWarnOnResolutionErrors(boolean warn) {
-            warnOnResolutionErrors = warn;
-            return this;
-        }
-
-        public Builder setIncludeAlreadyBuilt(boolean include) {
-            includeAlreadyBuilt = include;
+        public Builder setDependencyConfig(ProjectDependencyConfig depConfig) {
+            this.depConfig = depConfig;
             return this;
         }
 
         public ProjectDependencyResolver build() {
+            return new ProjectDependencyResolver(this);
+        }
+
+        private MavenArtifactResolver getInitializedResolver() {
             if (resolver == null) {
                 try {
-                    resolver = MavenArtifactResolver.builder().setWorkspaceDiscovery(false).build();
+                    return MavenArtifactResolver.builder().setWorkspaceDiscovery(false).build();
                 } catch (BootstrapMavenException e) {
                     throw new IllegalStateException("Failed to initialize the Maven artifact resolver", e);
                 }
             }
-            if (log == null) {
-                log = MessageWriter.info();
-            }
-            return ProjectDependencyResolver.this;
+            return resolver;
         }
 
-        protected ProjectDependencyResolver doBuild() {
-            return ProjectDependencyResolver.this;
+        private MessageWriter getInitializedLog() {
+            return log == null ? MessageWriter.info() : log;
         }
-
-    }
-
-    private static ArtifactCoordsPattern toPattern(ArtifactKey key) {
-        final ArtifactCoordsPattern.Builder pattern = ArtifactCoordsPattern.builder();
-        pattern.groupIdPattern(key.getGroupId());
-        pattern.artifactIdPattern(key.getArtifactId());
-        if (key.getClassifier() != null && !key.getClassifier().isEmpty()) {
-            pattern.classifierPattern(key.getClassifier());
-        }
-        if (key.getType() != null && !key.getType().isEmpty()) {
-            pattern.typePattern(key.getType());
-        }
-        return pattern.build();
     }
 
     private static ArtifactCoordsPattern toPattern(ArtifactCoords c) {
@@ -254,111 +130,34 @@ public class ProjectDependencyResolver {
     }
 
     public static Builder builder() {
-        return new ProjectDependencyResolver().new Builder();
+        return new ProjectDependencyResolver.Builder();
     }
 
-    private ProjectDependencyResolver() {
+    private ProjectDependencyResolver(Builder builder) {
+        this.resolver = builder.getInitializedResolver();
+        this.log = builder.getInitializedLog();
+        this.artifactConstraintsProvider = builder.artifactConstraintsProvider;
+        this.logOutputFile = builder.logOutputFile;
+        this.appendOutput = builder.appendOutput;
+        this.config = Objects.requireNonNull(builder.depConfig);
+        config.getExcludePatterns().forEach(p -> excludeSet.add(toPattern(p)));
+        config.getIncludePatterns().forEach(p -> includeSet.add(toPattern(p)));
     }
 
-    private MavenArtifactResolver resolver;
-    private ArtifactCoords targetBomCoords;
+    private final MavenArtifactResolver resolver;
+    private final ProjectDependencyConfig config;
     private MessageWriter log;
     private List<ArtifactCoordsPattern> excludeSet = new ArrayList<>();
     private List<ArtifactCoordsPattern> includeSet = new ArrayList<>();
 
-    private Collection<ArtifactCoords> projectArtifacts = List.of();
-
-    /**
-     * The depth level of a dependency tree of each supported Quarkus extension to capture.
-     * Setting the level to 0 will target the supported extension artifacts themselves.
-     * Setting the level to 1, will target the supported extension artifacts plus their direct dependencies.
-     * If the level is not specified, the default will be -1, which means all the levels.
-     */
-    private int level = -1;
-
-    /**
-     * Whether to exclude dependencies (and their transitive dependencies) that aren't managed in the BOM. The default is true.
-     */
-    private boolean includeNonManaged;
-
-    /**
-     * Whether to log the coordinates of the artifacts captured down to the depth specified. The default is true.
-     */
-    private boolean logArtifactsToBuild = true;
-
-    /**
-     * Whether to log the module GAVs the artifacts to be built belongs to instead of all
-     * the complete artifact coordinates to be built.
-     * If this option is enabled, it overrides {@link #logArtifactsToBuild}
-     */
-    private boolean logModulesToBuild;
-
-    /**
-     * Whether to log the dependency trees walked down to the depth specified. The default is false.
-     */
-    private boolean logTrees;
-
-    /**
-     * Whether to log the coordinates of the artifacts below the depth specified. The default is false.
-     */
-    private boolean logRemaining;
-
-    /**
-     * Whether to log the summary at the end. The default is true.
-     */
-    private boolean logSummary = true;
-
-    /**
-     * Whether to log the summary at the end. The default is true.
-     */
-    private boolean logNonManagedVisited;
-
-    /**
-     * If specified, this parameter will cause the output to be written to the path specified, instead of writing to
-     * the console.
-     */
-    private File outputFile;
     private PrintStream fileOutput;
-
-    /**
-     * Whether to append outputs into the output file or overwrite it.
-     */
-    private boolean appendOutput;
-
-    /*
-     * Whether to log code repository info for the artifacts to be built from source
-     */
-    private boolean logCodeRepos;
-
-    /*
-     * Whether to log code repository dependency graph.
-     */
-    private boolean logCodeRepoGraph;
-
-    /*
-     * Whether to exclude parent POMs from the list of artifacts to be built from source
-     */
-    private boolean excludeParentPoms;
-
-    /*
-     * Whether to exclude BOMs imported in the POMs of artifacts to be built from the list of artifacts to be built from source
-     */
-    private boolean excludeBomImports;
-
-    /*
-     * Whether to validate the discovered code repo and tags that are included in the report
-     */
-    private boolean validateCodeRepoTags;
+    private final Path logOutputFile;
+    private final boolean appendOutput;
 
     /*
      * Whether to include test JARs
      */
     private boolean includeTestJars;
-
-    /*
-     * Whether to warn about errors not being able to resolve top level artifacts or fail the process
-     */
-    private boolean warnOnResolutionErrors;
 
     /*
      * Whether to include dependencies that have already been built
@@ -392,17 +191,15 @@ public class ProjectDependencyResolver {
 
     public void log() {
 
-        if (logCodeRepoGraph) {
-            logCodeRepos = true;
-        }
+        final boolean logCodeRepos = config.isLogCodeRepos() || config.isLogCodeRepoTree();
 
         buildModel();
 
         try {
             int codeReposTotal = 0;
-            if (logArtifactsToBuild && !allDepsToBuild.isEmpty()) {
+            if (config.isLogArtifactsToBuild() && !allDepsToBuild.isEmpty()) {
                 logComment("Artifacts to be built from source from "
-                        + (targetBomCoords == null ? "" : targetBomCoords.toCompactCoords()) + ":");
+                        + (config.getProjectBom() == null ? "" : config.getProjectBom().toCompactCoords()) + ":");
                 if (logCodeRepos) {
                     initReleaseRepos();
                     detectCircularRepoDeps();
@@ -412,7 +209,7 @@ public class ProjectDependencyResolver {
                     for (ReleaseRepo e : sorted) {
                         logComment("repo-url " + e.id().origin());
                         logComment("tag " + e.id().version().asString());
-                        for (String s : toSortedStrings(e.artifacts, logModulesToBuild)) {
+                        for (String s : toSortedStrings(e.artifacts, config.isLogModulesToBuild())) {
                             log(s);
                         }
                     }
@@ -427,7 +224,7 @@ public class ProjectDependencyResolver {
                             logComment("");
                         }
                     }
-                    if (logCodeRepoGraph) {
+                    if (config.isLogCodeRepoTree()) {
                         logComment("");
                         logComment("Code repository dependency graph");
                         for (ReleaseRepo r : releaseRepos.values()) {
@@ -439,43 +236,43 @@ public class ProjectDependencyResolver {
                     }
 
                 } else {
-                    for (String s : toSortedStrings(allDepsToBuild, logModulesToBuild)) {
+                    for (String s : toSortedStrings(allDepsToBuild, config.isLogModulesToBuild())) {
                         log(s);
                     }
                 }
             }
 
-            if (logNonManagedVisited && !nonManagedVisited.isEmpty()) {
+            if (config.isLogNonManagedVisitied() && !nonManagedVisited.isEmpty()) {
                 logComment("Non-managed dependencies visited walking dependency trees:");
-                final List<String> sorted = toSortedStrings(nonManagedVisited, logModulesToBuild);
+                final List<String> sorted = toSortedStrings(nonManagedVisited, config.isLogModulesToBuild());
                 for (int i = 0; i < sorted.size(); ++i) {
                     logComment((i + 1) + ") " + sorted.get(i));
                 }
             }
 
-            if (logRemaining) {
+            if (config.isLogRemaining()) {
                 logComment("Remaining artifacts include:");
-                final List<String> sorted = toSortedStrings(remainingDeps, logModulesToBuild);
+                final List<String> sorted = toSortedStrings(remainingDeps, config.isLogModulesToBuild());
                 for (int i = 0; i < sorted.size(); ++i) {
                     logComment((i + 1) + ") " + sorted.get(i));
                 }
             }
 
-            if (logSummary) {
+            if (config.isLogSummary()) {
                 final StringBuilder sb = new StringBuilder().append("Selecting ");
-                if (this.level < 0) {
+                if (config.getLevel() < 0) {
                     sb.append("all the");
                 } else {
-                    sb.append(this.level).append(" level(s) of");
+                    sb.append(config.getLevel()).append(" level(s) of");
                 }
-                if (this.includeNonManaged) {
+                if (config.isIncludeNonManaged()) {
                     sb.append(" managed and non-managed");
                 } else {
                     sb.append(" managed (stopping at the first non-managed one)");
                 }
                 sb.append(" dependencies of supported extensions");
-                if (targetBomCoords != null) {
-                    sb.append(" from ").append(targetBomCoords.toCompactCoords());
+                if (config.getProjectBom() != null) {
+                    sb.append(" from ").append(config.getProjectBom().toCompactCoords());
                 }
                 sb.append(" will result in:");
                 logComment(sb.toString());
@@ -487,7 +284,7 @@ public class ProjectDependencyResolver {
                 }
                 sb.append(" to build from source");
                 logComment(sb.toString());
-                if (includeNonManaged && !nonManagedVisited.isEmpty()) {
+                if (config.isIncludeNonManaged() && !nonManagedVisited.isEmpty()) {
                     logComment("  * " + nonManagedVisited.size() + " of which is/are not managed by the BOM");
                 }
                 if (!skippedDeps.isEmpty()) {
@@ -497,14 +294,14 @@ public class ProjectDependencyResolver {
             }
         } finally {
             if (fileOutput != null) {
-                log.info("Saving the report in " + outputFile.getAbsolutePath());
+                log.info("Saving the report in " + logOutputFile.toAbsolutePath());
                 fileOutput.close();
             }
         }
     }
 
     private void buildModel() {
-        targetBomManagedDeps = getBomConstraints(targetBomCoords);
+        targetBomManagedDeps = getBomConstraints(config.getProjectBom());
         targetBomConstraints = new HashSet<>(targetBomManagedDeps.size());
         for (Dependency d : targetBomManagedDeps) {
             targetBomConstraints.add(toCoords(d.getArtifact()));
@@ -566,17 +363,17 @@ public class ProjectDependencyResolver {
     }
 
     protected Iterable<ArtifactCoords> getProjectArtifacts() {
-        if (projectArtifacts == null || projectArtifacts.isEmpty()) {
+        if (config.getProjectArtifacts().isEmpty()) {
             final List<ArtifactCoords> result = new ArrayList<>();
             for (ArtifactCoords d : targetBomConstraints) {
-                if (targetBomCoords.getGroupId().equals(d.getGroupId()) && d.isJar() && !isExcluded(d)) {
+                if (config.getProjectBom().getGroupId().equals(d.getGroupId()) && d.isJar() && !isExcluded(d)) {
                     result.add(d);
                     log.debug(d.toCompactCoords() + " selected as a top level artifact to build");
                 }
             }
             return result;
         }
-        return projectArtifacts;
+        return config.getProjectArtifacts();
     }
 
     private void processRootArtifact(List<Dependency> managedDeps, ArtifactCoords rootArtifact) {
@@ -594,7 +391,7 @@ public class ProjectDependencyResolver {
                 resolver.resolve(a);
             }
         } catch (Exception e) {
-            if (warnOnResolutionErrors) {
+            if (config.isWarnOnResolutionErrors()) {
                 log.warn(e.getCause() == null ? e.getLocalizedMessage() : e.getCause().getLocalizedMessage());
                 allDepsToBuild.remove(rootArtifact);
                 return;
@@ -602,7 +399,7 @@ public class ProjectDependencyResolver {
             throw new RuntimeException("Failed to collect dependencies of " + rootArtifact.toCompactCoords(), e);
         }
 
-        if (logTrees) {
+        if (config.isLogTrees()) {
             if (targetBomConstraints.contains(rootArtifact)) {
                 logComment(rootArtifact.toCompactCoords());
             } else {
@@ -618,7 +415,7 @@ public class ProjectDependencyResolver {
         }
         if (addDependency) {
             final ArtifactDependency extDep = getOrCreateArtifactDep(rootArtifact);
-            if (!excludeParentPoms && logTrees) {
+            if (!config.isExcludeParentPoms() && config.isLogTrees()) {
                 extDep.logBomImportsAndParents();
             }
             for (DependencyNode d : root.getChildren()) {
@@ -627,13 +424,13 @@ public class ProjectDependencyResolver {
                 }
                 processNodes(extDep, d, 1, false);
             }
-        } else if (logRemaining) {
+        } else if (config.isLogRemaining()) {
             for (DependencyNode d : root.getChildren()) {
                 processNodes(null, d, 1, true);
             }
         }
 
-        if (logTrees) {
+        if (config.isLogTrees()) {
             logComment("");
         }
     }
@@ -646,7 +443,7 @@ public class ProjectDependencyResolver {
 
     private void initReleaseRepos() {
 
-        final ReleaseIdResolver idResolver = newReleaseIdResolver(resolver, log, validateCodeRepoTags,
+        final ReleaseIdResolver idResolver = newReleaseIdResolver(resolver, log, config.isValidateCodeRepoTags(),
                 getRhCoordsUpstreamVersions());
 
         final Map<ArtifactCoords, ReleaseId> artifactReleases = new HashMap<>();
@@ -858,15 +655,18 @@ public class ProjectDependencyResolver {
     }
 
     private PrintStream getOutput() {
-        if (outputFile == null) {
+        if (logOutputFile == null) {
             return System.out;
         }
         if (fileOutput == null) {
-            outputFile.getAbsoluteFile().getParentFile().mkdirs();
             try {
-                fileOutput = new PrintStream(new FileOutputStream(outputFile, appendOutput), false);
-            } catch (FileNotFoundException e) {
-                throw new RuntimeException("Failed to open " + outputFile + " for writing", e);
+                Files.createDirectories(logOutputFile.getParent());
+                final OpenOption[] oo = appendOutput
+                        ? new OpenOption[] { StandardOpenOption.CREATE, StandardOpenOption.APPEND }
+                        : new OpenOption[] { StandardOpenOption.CREATE };
+                fileOutput = new PrintStream(Files.newOutputStream(logOutputFile, oo), false);
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to open " + logOutputFile + " for writing", e);
             }
         }
         return fileOutput;
@@ -888,9 +688,9 @@ public class ProjectDependencyResolver {
         ArtifactDependency artDep = null;
         if (remaining) {
             addToRemaining(coords);
-        } else if (this.level < 0 || level <= this.level) {
+        } else if (config.getLevel() < 0 || level <= config.getLevel()) {
             if (addDependencyToBuild(coords)) {
-                if (logTrees) {
+                if (config.isLogTrees()) {
                     final StringBuilder buf = new StringBuilder();
                     for (int i = 0; i < level; ++i) {
                         buf.append("  ");
@@ -904,18 +704,18 @@ public class ProjectDependencyResolver {
                 if (parent != null) {
                     artDep = getOrCreateArtifactDep(coords);
                     parent.addDependency(artDep);
-                    if (logTrees) {
+                    if (config.isLogTrees()) {
                         artDep.logBomImportsAndParents(level + 1);
                     }
                 }
-            } else if (logRemaining) {
+            } else if (config.isLogRemaining()) {
                 remaining = true;
             } else {
                 return;
             }
         } else {
             addToSkipped(coords);
-            if (logRemaining) {
+            if (config.isLogRemaining()) {
                 remaining = true;
                 addToRemaining(coords);
             } else {
@@ -931,7 +731,7 @@ public class ProjectDependencyResolver {
         if (!addArtifactToBuild(coords)) {
             return false;
         }
-        if (!excludeParentPoms) {
+        if (!config.isExcludeParentPoms()) {
             addImportedBomsAndParentPomToBuild(coords);
         }
         return true;
@@ -943,8 +743,8 @@ public class ProjectDependencyResolver {
             nonManagedVisited.add(coords);
         }
 
-        if (managed || includeNonManaged || isIncluded(coords)
-                || !excludeParentPoms && coords.getType().equals(ArtifactCoords.TYPE_POM)) {
+        if (managed || config.isIncludeNonManaged() || isIncluded(coords)
+                || !config.isExcludeParentPoms() && coords.getType().equals(ArtifactCoords.TYPE_POM)) {
             allDepsToBuild.add(coords);
             skippedDeps.remove(coords);
             remainingDeps.remove(coords);
@@ -952,7 +752,7 @@ public class ProjectDependencyResolver {
         }
 
         addToSkipped(coords);
-        if (logRemaining) {
+        if (config.isLogRemaining()) {
             addToRemaining(coords);
         }
         return false;
@@ -1001,7 +801,7 @@ public class ProjectDependencyResolver {
             }
         }
 
-        if (excludeBomImports) {
+        if (config.isExcludeBomImports()) {
             return Map.of();
         }
         Map<String, String> pomProps = toMap(model.getProperties());

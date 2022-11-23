@@ -5,7 +5,7 @@ import io.quarkus.maven.dependency.ArtifactKey;
 import java.util.HashSet;
 import java.util.Set;
 
-public class ProjectDependencyConfig {
+public class ProjectDependencyFilterConfig {
 
     private Set<String> excludeGroupIds = Set.of();
     private Set<ArtifactKey> excludeKeys = Set.of();
@@ -27,7 +27,7 @@ public class ProjectDependencyConfig {
         return s1;
     }
 
-    public void merge(ProjectDependencyConfig other) {
+    public void merge(ProjectDependencyFilterConfig other) {
         excludeGroupIds = mergeIn(excludeGroupIds, other.excludeGroupIds);
         excludeKeys = mergeIn(excludeKeys, other.excludeKeys);
         excludeArtifacts = mergeIn(excludeArtifacts, other.excludeArtifacts);

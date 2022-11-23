@@ -62,7 +62,7 @@ public class FromGradle extends BaseDepsToBuildCommand {
         //final PublishedProject project = getPublishedProject("grpc-java", "1.50.2");
         //final PublishedProject project = getPublishedProject("graphql-java", "19.2.0");
         final PublishedProject project = getPublishedProject(projectDir, tag);
-
+        /* @formatter:off
         System.out.println("Published artifacts:");
         if (project.getBoms().isEmpty()) {
             log("  BOMs: none");
@@ -80,6 +80,7 @@ public class FromGradle extends BaseDepsToBuildCommand {
                 log("    " + c.toCompactCoords());
             }
         }
+@formatter:on */
 
         if (this.rootArtifacts.isEmpty()) {
             this.rootArtifacts = project.getLibraries().stream().map(ArtifactCoords::toString).collect(Collectors.toList());

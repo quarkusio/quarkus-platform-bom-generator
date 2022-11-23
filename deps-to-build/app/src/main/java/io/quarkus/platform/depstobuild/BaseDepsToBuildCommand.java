@@ -1,5 +1,6 @@
 package io.quarkus.platform.depstobuild;
 
+import io.quarkus.bom.decomposer.maven.ProjectDependencyConfig;
 import io.quarkus.bom.decomposer.maven.ProjectDependencyResolver;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.io.File;
@@ -87,51 +88,61 @@ public class BaseDepsToBuildCommand implements Callable<Integer> {
             "--include-already-built" }, description = "Whether to include dependencies that have already been built")
     public boolean includeAlreadyBuilt;
 
+    @CommandLine.Option(names = {
+            "--export-config-to" }, description = "Export config to a file")
+    public File exportTo;
+
     @Override
     public Integer call() throws Exception {
-        ProjectDependencyResolver.Builder builder = ProjectDependencyResolver.builder();
 
+        final ProjectDependencyConfig.Mutable config = ProjectDependencyConfig.builder();
         if (bom != null) {
-            builder.setProjectBom(ArtifactCoords.fromString(bom));
+            config.setProjectBom(ArtifactCoords.fromString(bom));
         }
 
         if (warnOnResolutionErrors != null) {
-            builder.setWarnOnResolutionErrors(warnOnResolutionErrors);
+            config.setWarnOnResolutionErrors(warnOnResolutionErrors);
         } else if (bom != null) {
-            builder.setWarnOnResolutionErrors(true);
+            config.setWarnOnResolutionErrors(true);
         }
 
         if (includeNonManaged != null) {
-            builder.setIncludeNonManaged(includeNonManaged);
+            config.setIncludeNonManaged(includeNonManaged);
         } else if (bom == null) {
-            builder.setIncludeNonManaged(true);
+            config.setIncludeNonManaged(true);
         }
 
-        builder.setAppendOutput(appendOutput)
-                .setExcludeArtifacts(Set.of()) // TODO
+        config.setExcludePatterns(Set.of()) // TODO
                 .setExcludeBomImports(excludeBomImports)
                 .setExcludeGroupIds(Set.of()) // TODO
                 .setExcludeKeys(Set.of()) // TODO
                 .setExcludeParentPoms(excludeParentPoms)
-                .setIncludeAlreadyBuilt(includeAlreadyBuilt)
                 .setIncludeArtifacts(Set.of()) // TODO
                 .setIncludeGroupIds(Set.of()) // TODO
                 .setIncludeKeys(Set.of()) // TODO
                 .setLevel(level)
                 .setLogArtifactsToBuild(logArtifactsToBuild)
-                .setLogCodeRepoGraph(logCodeRepoGraph)
+                .setLogCodeRepoTree(logCodeRepoGraph)
                 .setLogCodeRepos(logCodeRepos)
                 .setLogModulesToBuild(logModulesToBuild)
                 .setLogNonManagedVisited(logNonManagedVisited)
                 .setLogRemaining(logRemaining)
                 .setLogSummary(logSummary)
                 .setLogTrees(logTrees)
-                .setOutputFile(outputFile)
                 .setProjectArtifacts(
                         rootArtifacts.stream().map(ArtifactCoords::fromString).collect(Collectors.toList()))
                 .setValidateCodeRepoTags(validateCodeRepoTags)
-                .build().log();
+                .setIncludeAlreadyBuilt(includeAlreadyBuilt);
 
+        if (exportTo != null) {
+            config.persist(exportTo.toPath());
+        } else {
+            ProjectDependencyResolver.builder()
+                    .setLogOutputFile(outputFile == null ? null : outputFile.toPath())
+                    .setAppendOutput(appendOutput)
+                    .setDependencyConfig(config)
+                    .build().log();
+        }
         return CommandLine.ExitCode.OK;
     }
 }

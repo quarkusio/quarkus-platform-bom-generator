@@ -2,6 +2,7 @@ package io.quarkus.dependency;
 
 import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.decomposer.ReleaseOrigin;
+import io.quarkus.bom.decomposer.maven.ProjectDependencyConfig;
 import io.quarkus.bom.decomposer.maven.ProjectDependencyResolver;
 import io.quarkus.bom.decomposer.maven.ReleaseRepo;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
@@ -40,11 +41,26 @@ public class ParallelExecution {
 
         final Path workDir = Path.of("target").resolve("parallel-build").normalize().toAbsolutePath();
         IoUtils.recursiveDelete(workDir);
+        final Path configFile = generateConfig(workDir.resolve("dependency-config.yaml"));
         ParallelExecution pe = new ParallelExecution(workDir);
-        pe.run();
+        pe.run(configFile);
     }
 
-    private final Path workDir;
+    private static Path generateConfig(Path configFile) throws Exception {
+        ProjectDependencyConfig.builder()
+                .setProjectBom(ArtifactCoords.pom("io.vertx", "vertx-dependencies", "4.3.4"))
+                .setExcludeGroupIds(Set.of(
+                        "org.junit.platform",
+                        "org.junit.jupiter"))
+                .setWarnOnResolutionErrors(true)
+                .setLogCodeRepos(true)
+                .setLogArtifactsToBuild(true)
+                .setLogModulesToBuild(true)
+                .setLogSummary(true)
+                .persist(configFile);
+        return configFile;
+    }
+
     private final Path localMavenRepo;
     private final Path projects;
     private MavenArtifactResolver resolver;
@@ -56,20 +72,20 @@ public class ParallelExecution {
     private final AtomicInteger projectsRemaining = new AtomicInteger();
 
     ParallelExecution(Path workDir) throws Exception {
-        this.workDir = IoUtils.mkdirs(workDir);
         this.localMavenRepo = IoUtils.mkdirs(workDir.resolve("maven-repo"));
         this.projects = IoUtils.mkdirs(workDir.resolve("projects"));
     }
 
-    void run() throws Exception {
+    void run(Path configFile) throws Exception {
+        run(ProjectDependencyConfig.fromFile(configFile));
+    }
+
+    void run(ProjectDependencyConfig config) throws Exception {
 
         resolver = MavenArtifactResolver.builder().build();
 
         final Collection<ReleaseRepo> allRepos = ProjectDependencyResolver.builder()
-                .setProjectBom(ArtifactCoords.pom("io.vertx", "vertx-dependencies", "4.3.4"))
-                //.setProjectBom(ArtifactCoords.pom("io.quarkus", "quarkus-bom", "2.13.4.Final"))
-                .setWarnOnResolutionErrors(true)
-                .setLogCodeRepos(true)
+                .setDependencyConfig(config)
                 .setArtifactResolver(resolver)
                 .build()
                 .getSortedReleaseRepos();

@@ -24,7 +24,7 @@ import io.quarkus.bom.platform.PlatformMember;
 import io.quarkus.bom.platform.PlatformMemberConfig;
 import io.quarkus.bom.platform.PlatformMemberTestConfig;
 import io.quarkus.bom.platform.PlatformMemberTestConfig.Copy;
-import io.quarkus.bom.platform.ProjectDependencyConfig;
+import io.quarkus.bom.platform.ProjectDependencyFilterConfig;
 import io.quarkus.bom.platform.RedHatExtensionDependencyCheck;
 import io.quarkus.bom.platform.ReportIndexPageGenerator;
 import io.quarkus.bom.resolver.ArtifactResolver;
@@ -153,7 +153,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     private PlatformReleaseConfig platformReleaseConfig;
 
     @Parameter(required = false)
-    ProjectDependencyConfig dependenciesToBuild;
+    ProjectDependencyFilterConfig dependenciesToBuild;
 
     @Parameter(required = true, defaultValue = "${project.build.directory}/updated-pom.xml")
     File updatedPom;
@@ -392,7 +392,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             config.addChild(
                     textDomElement("outputFile", prefix + "/" + m.generatedBomCoords().getArtifactId() + "-deps-to-build.txt"));
 
-            final ProjectDependencyConfig depsToBuildConfig = m.config().getDependenciesToBuild();
+            final ProjectDependencyFilterConfig depsToBuildConfig = m.config().getDependenciesToBuild();
             if (depsToBuildConfig != null) {
                 final Xpp3Dom depsToBuildDom = newDomSelfAppend("dependenciesToBuild");
                 config.addChild(depsToBuildDom);

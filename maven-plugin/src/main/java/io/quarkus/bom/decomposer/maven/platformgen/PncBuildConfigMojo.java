@@ -7,7 +7,7 @@ import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.quarkus.bom.platform.PlatformMemberConfig;
-import io.quarkus.bom.platform.ProjectDependencyConfig;
+import io.quarkus.bom.platform.ProjectDependencyFilterConfig;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.registry.catalog.CatalogMapperHelper;
 import java.io.BufferedReader;
@@ -65,7 +65,7 @@ public class PncBuildConfigMojo extends AbstractMojo {
         });
         setIfNotConfigured(defaultParameters, "resolveIncludes", "*:*:*redhat-*");
 
-        final ProjectDependencyConfig coreDepsToBuild = platformConfig.getCore().getDependenciesToBuild();
+        final ProjectDependencyFilterConfig coreDepsToBuild = platformConfig.getCore().getDependenciesToBuild();
         if (coreDepsToBuild != null && !coreDepsToBuild.getIncludeArtifacts().isEmpty()) {
             final ArrayNode steps = getOrCreateArray(repositoryGeneration, STEPS);
             JsonNode coreStep = null;
@@ -89,7 +89,7 @@ public class PncBuildConfigMojo extends AbstractMojo {
         }
     }
 
-    private void addResolveArtifacts(final JsonNode parameters, final ProjectDependencyConfig depsToBuild) {
+    private void addResolveArtifacts(final JsonNode parameters, final ProjectDependencyFilterConfig depsToBuild) {
         setIfNotConfigured(parameters, "resolveArtifacts", () -> {
             final Iterator<ArtifactCoords> i = depsToBuild.getIncludeArtifacts().iterator();
             final StringBuilder sb = new StringBuilder().append(toGATCV(i.next()));

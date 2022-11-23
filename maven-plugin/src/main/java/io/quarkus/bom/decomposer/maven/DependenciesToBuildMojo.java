@@ -1,7 +1,7 @@
 package io.quarkus.bom.decomposer.maven;
 
 import io.quarkus.bom.decomposer.maven.platformgen.PlatformConfig;
-import io.quarkus.bom.platform.ProjectDependencyConfig;
+import io.quarkus.bom.platform.ProjectDependencyFilterConfig;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
@@ -156,7 +156,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     PlatformConfig platformConfig;
 
     @Parameter(required = false)
-    ProjectDependencyConfig dependenciesToBuild;
+    ProjectDependencyFilterConfig dependenciesToBuild;
 
     @Parameter(required = false, property = "validateCodeRepoTags")
     boolean validateCodeRepoTags;
@@ -311,32 +311,33 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                     final Extension ext = supported.get(coords);
                     return ext == null ? targetBomManagedDeps : getConstraintsForExtension(ext);
                 })
-                .setProjectArtifacts(topArtifacts)
-                .setProjectBom(targetBomCoords)
-                .setIncludeAlreadyBuilt(includeAlreadyBuilt)
-                .setIncludeGroupIds(dependenciesToBuild.getIncludeGroupIds())
-                .setIncludeKeys(dependenciesToBuild.getIncludeKeys())
-                .setIncludeArtifacts(dependenciesToBuild.getIncludeArtifacts())
-                .setExcludeArtifacts(dependenciesToBuild.getExcludeArtifacts())
-                .setExcludeGroupIds(dependenciesToBuild.getExcludeGroupIds())
-                .setExcludeKeys(dependenciesToBuild.getExcludeKeys())
-                .setExcludeBomImports(excludeBomImports)
-                .setExcludeParentPoms(excludeParentPoms)
-                .setIncludeNonManaged(includeNonManaged)
-                .setLevel(level)
-                .setLogArtifactsToBuild(logArtifactsToBuild)
-                .setLogCodeRepoGraph(logCodeRepoGraph)
-                .setLogCodeRepos(logCodeRepos)
-                .setLogModulesToBuild(logModulesToBuild)
-                .setLogNonManagedVisited(logNonManagedVisited)
-                .setLogRemaining(logRemaining)
-                .setLogSummary(logSummary)
-                .setLogTrees(logTrees)
-                .setMessageWriter(new MojoMessageWriter(getLog()))
-                .setOutputFile(outputFile)
-                .setAppendOutput(appendOutput)
                 .setArtifactResolver(resolver)
-                .setValidateCodeRepoTags(validateCodeRepoTags)
+                .setMessageWriter(new MojoMessageWriter(getLog()))
+                .setLogOutputFile(outputFile == null ? null : outputFile.toPath())
+                .setAppendOutput(appendOutput)
+                .setDependencyConfig(ProjectDependencyConfig.builder()
+                        .setProjectArtifacts(topArtifacts)
+                        .setProjectBom(targetBomCoords)
+                        .setIncludeGroupIds(dependenciesToBuild.getIncludeGroupIds())
+                        .setIncludeKeys(dependenciesToBuild.getIncludeKeys())
+                        .setIncludeArtifacts(dependenciesToBuild.getIncludeArtifacts())
+                        .setExcludePatterns(dependenciesToBuild.getExcludeArtifacts())
+                        .setExcludeGroupIds(dependenciesToBuild.getExcludeGroupIds())
+                        .setExcludeKeys(dependenciesToBuild.getExcludeKeys())
+                        .setExcludeBomImports(excludeBomImports)
+                        .setExcludeParentPoms(excludeParentPoms)
+                        .setIncludeNonManaged(includeNonManaged)
+                        .setLevel(level)
+                        .setLogArtifactsToBuild(logArtifactsToBuild)
+                        .setLogCodeRepoTree(logCodeRepoGraph)
+                        .setLogCodeRepos(logCodeRepos)
+                        .setLogModulesToBuild(logModulesToBuild)
+                        .setLogNonManagedVisited(logNonManagedVisited)
+                        .setLogRemaining(logRemaining)
+                        .setLogSummary(logSummary)
+                        .setLogTrees(logTrees)
+                        .setIncludeAlreadyBuilt(includeAlreadyBuilt)
+                        .setValidateCodeRepoTags(validateCodeRepoTags))
                 .build().log();
     }
 
