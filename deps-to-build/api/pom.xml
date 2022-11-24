@@ -3,7 +3,7 @@
   <parent>
     <groupId>io.quarkus</groupId>
     <artifactId>deps-to-build-parent</artifactId>
-    <version>0.0.69</version>
+    <version>0.0.70-SNAPSHOT</version>
   </parent>
 
   <artifactId>deps-to-build-api</artifactId>
