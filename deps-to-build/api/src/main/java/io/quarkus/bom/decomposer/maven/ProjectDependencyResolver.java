@@ -142,6 +142,7 @@ public class ProjectDependencyResolver {
         this.config = Objects.requireNonNull(builder.depConfig);
         config.getExcludePatterns().forEach(p -> excludeSet.add(toPattern(p)));
         config.getIncludePatterns().forEach(p -> includeSet.add(toPattern(p)));
+        config.getIncludeArtifacts().forEach(c -> includeSet.add(toPattern(c)));
     }
 
     private final MavenArtifactResolver resolver;
@@ -158,11 +159,6 @@ public class ProjectDependencyResolver {
      * Whether to include test JARs
      */
     private boolean includeTestJars;
-
-    /*
-     * Whether to include dependencies that have already been built
-     */
-    private boolean includeAlreadyBuilt;
 
     private Function<ArtifactCoords, List<Dependency>> artifactConstraintsProvider;
     private Set<ArtifactCoords> targetBomConstraints;
@@ -314,9 +310,16 @@ public class ProjectDependencyResolver {
             if (isIncluded(coords) || !isExcluded(coords)) {
                 processRootArtifact(artifactConstraintsProvider.apply(coords), coords);
             }
+
         }
 
-        if (!includeAlreadyBuilt) {
+        for (ArtifactCoords coords : config.getIncludeArtifacts()) {
+            if (isIncluded(coords) || !isExcluded(coords)) {
+                processRootArtifact(artifactConstraintsProvider.apply(coords), coords);
+            }
+        }
+
+        if (!config.isIncludeAlreadyBuilt()) {
             removeProductizedDeps();
         }
     }
@@ -495,7 +498,7 @@ public class ProjectDependencyResolver {
     }
 
     private Map<ArtifactCoords, String> getRhCoordsUpstreamVersions() {
-        if (!includeAlreadyBuilt) {
+        if (!config.isIncludeAlreadyBuilt()) {
             // already excluded
             return Map.of();
         }

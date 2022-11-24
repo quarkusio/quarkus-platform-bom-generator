@@ -298,14 +298,6 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             supported.put(deploymentCoords, ext);
         }
 
-        final Set<ArtifactCoords> topArtifacts;
-        if (dependenciesToBuild.getIncludeArtifacts().isEmpty()) {
-            topArtifacts = supported.keySet();
-        } else {
-            topArtifacts = new HashSet<>(supported.keySet());
-            topArtifacts.addAll(dependenciesToBuild.getIncludeArtifacts());
-        }
-
         ProjectDependencyResolver.builder()
                 .setArtifactConstraintsProvider(coords -> {
                     final Extension ext = supported.get(coords);
@@ -316,8 +308,8 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 .setLogOutputFile(outputFile == null ? null : outputFile.toPath())
                 .setAppendOutput(appendOutput)
                 .setDependencyConfig(ProjectDependencyConfig.builder()
-                        .setProjectArtifacts(topArtifacts)
                         .setProjectBom(targetBomCoords)
+                        .setProjectArtifacts(supported.keySet())
                         .setIncludeGroupIds(dependenciesToBuild.getIncludeGroupIds())
                         .setIncludeKeys(dependenciesToBuild.getIncludeKeys())
                         .setIncludeArtifacts(dependenciesToBuild.getIncludeArtifacts())
