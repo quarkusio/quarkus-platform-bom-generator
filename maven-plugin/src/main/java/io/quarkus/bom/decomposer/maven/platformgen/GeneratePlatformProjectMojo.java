@@ -759,13 +759,13 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         if (pluginConfig.isFlattenPom()) {
-            configureFlattenPlugin(pom, Map.of("dependencyManagement", "keep"));
+            configureFlattenPlugin(pom, false, Map.of("dependencyManagement", "keep"));
         }
 
         persistPom(pom);
     }
 
-    private void configureFlattenPlugin(Model pom, Map<String, String> elementConfig) {
+    private void configureFlattenPlugin(Model pom, boolean updatePomFile, Map<String, String> elementConfig) {
         Build build = pom.getBuild();
         if (build == null) {
             build = new Build();
@@ -784,6 +784,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         e.setConfiguration(config);
 
         config.addChild(textDomElement("flattenMode", "oss"));
+
+        if (updatePomFile) {
+            config.addChild(textDomElement("updatePomFile", "true"));
+        }
 
         Xpp3Dom pomElements = new Xpp3Dom("pomElements");
         config.addChild(pomElements);
@@ -2081,7 +2085,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private void configureFlattenPluginForMetadataArtifacts(final Model pom) {
-        configureFlattenPlugin(pom, Map.of(
+        configureFlattenPlugin(pom, true, Map.of(
                 "dependencyManagement", "remove",
                 "dependencies", "remove",
                 "mailingLists", "remove"));
