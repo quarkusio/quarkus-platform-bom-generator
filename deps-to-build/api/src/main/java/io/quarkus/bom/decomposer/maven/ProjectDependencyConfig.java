@@ -66,7 +66,7 @@ public interface ProjectDependencyConfig {
     /**
      * Whether to log the module GAVs the artifacts to be built belongs to instead of all
      * the complete artifact coordinates to be built.
-     * If this option is enabled, it overrides {@link #logArtifactsToBuild}
+     * If this option is enabled, it overrides {@link #isLogArtifactsToBuild()}
      * 
      * @return whether to log module coords as GAVs instead of complete artifact coordinates
      */
@@ -235,6 +235,7 @@ public interface ProjectDependencyConfig {
      *
      * @param path File to read from (yaml or json)
      * @return read-only ExtensionCatalog object
+     * @throws IOException in case of a failure
      */
     static ProjectDependencyConfig fromFile(Path path) throws IOException {
         return mutableFromFile(path).build();
@@ -245,6 +246,7 @@ public interface ProjectDependencyConfig {
      *
      * @param path File to read from (yaml or json)
      * @return read-only ExtensionCatalog object (empty/default for an empty file)
+     * @throws IOException in case of a failure
      */
     static ProjectDependencyConfig.Mutable mutableFromFile(Path path) throws IOException {
         final ProjectDependencyConfig.Mutable mutable = ProjectDependencyConfigMapper.deserialize(path,
@@ -257,6 +259,7 @@ public interface ProjectDependencyConfig {
      *
      * @param inputStream input stream to read from
      * @return read-only ExtensionCatalog object (empty/default for an empty file)
+     * @throws IOException in case of a failure
      */
     static ProjectDependencyConfig fromStream(InputStream inputStream) throws IOException {
         final ProjectDependencyConfig.Mutable mutable = ProjectDependencyConfigMapper.deserialize(inputStream,
