@@ -12,6 +12,7 @@ import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.decomposer.ReleaseIdFactory;
 import io.quarkus.bom.decomposer.ReleaseOrigin;
 import io.quarkus.bom.decomposer.ReleaseVersion;
+import io.quarkus.bom.decomposer.maven.RhVersionPattern;
 import io.quarkus.bom.resolver.ArtifactNotFoundException;
 import io.quarkus.bom.resolver.ArtifactResolver;
 import io.quarkus.bom.resolver.ArtifactResolverProvider;
@@ -699,7 +700,9 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             }
 
             if (ForeignPreferredConstraint.isAcceptIfCompatible(config.foreignPreferredConstraint())
-                    && memberDep.artifact().getVersion().startsWith(currentPreference.artifact().getVersion())) {
+                    && (memberDep.artifact().getVersion().startsWith(currentPreference.artifact().getVersion())
+                            || versionsAppearToMatch(memberDep.artifact().getVersion(),
+                                    currentPreference.artifact().getVersion()))) {
                 sb.append(" was accepted in favor of ").append(currentPreference.artifact()).append(" owned by ");
                 preferredDeps.put(memberDep.key(), memberDep);
                 ProjectRelease.Builder rb = quarkusBomReleaseBuilders.get(currentPreference.releaseId());
@@ -723,6 +726,27 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                 logger.warn(sb.toString());
             }
         }
+    }
+
+    private boolean versionsAppearToMatch(String preferredVersion, String currentVersion) {
+        // the reason behind this method is to compare versions "normalized" by pnc
+        // that ensures major.minor.micro parts are explicitly present in the version string
+        // while in the upstream equivalent, for example, a the micro part could be missing
+        if (RhVersionPattern.isRhVersion(preferredVersion)) {
+            final ArtifactVersion preferredAv = new DefaultArtifactVersion(
+                    RhVersionPattern.ensureNoRhSuffix(preferredVersion));
+            final ArtifactVersion currentAv = new DefaultArtifactVersion(currentVersion);
+            // qualifiers aren't parsed correctly when the micro version isn't present,
+            // so we can't use equals reliably to compare them
+            final String preferredQualifier = preferredAv.getQualifier() == null ? "null" : preferredAv.getQualifier();
+            final String currentQualifier = currentAv.getQualifier() == null ? "null" : currentAv.getQualifier();
+            return preferredAv.getMajorVersion() == currentAv.getMajorVersion()
+                    && preferredAv.getMinorVersion() == currentAv.getMinorVersion()
+                    && preferredAv.getIncrementalVersion() == currentAv.getIncrementalVersion()
+                    && preferredAv.getBuildNumber() == currentAv.getBuildNumber()
+                    && currentQualifier.startsWith(preferredQualifier);
+        }
+        return false;
     }
 
     @Override

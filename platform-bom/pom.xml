@@ -18,5 +18,9 @@
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-devtools-registry-client</artifactId>
     </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>deps-to-build-api</artifactId>
+    </dependency>
   </dependencies>
 </project>
