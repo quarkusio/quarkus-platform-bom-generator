@@ -20,7 +20,7 @@
     </dependency>
     <dependency>
       <groupId>io.quarkus</groupId>
-      <artifactId>deps-to-build-api</artifactId>
+      <artifactId>quarkus-domino-api</artifactId>
     </dependency>
   </dependencies>
 </project>

@@ -1,0 +1,203 @@
+package io.quarkus.domino.cli;
+
+import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
+import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
+import io.quarkus.domino.ProjectDependencyConfig;
+import io.quarkus.domino.ProjectDependencyResolver;
+import io.quarkus.maven.dependency.ArtifactCoords;
+import io.quarkus.maven.dependency.ArtifactKey;
+import java.io.File;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.stream.Collectors;
+import picocli.CommandLine;
+
+public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
+
+    @CommandLine.Option(names = {
+            "--bom" }, description = "BOM whose constraints should be used as top level artifacts to be built")
+    public String bom;
+
+    @CommandLine.Option(names = { "--include-non-managed" }, description = "Include non-managed dependencies")
+    public Boolean includeNonManaged;
+
+    @CommandLine.Option(names = {
+            "--root-artifacts" }, description = "Root artifacts whose dependencies should be built from source")
+    public Collection<String> rootArtifacts = List.of();
+
+    @CommandLine.Option(names = {
+            "--level" }, description = "Dependency tree depth level to which the dependencies should be analyzed. If a level is not specified, there is no limit on the level.", defaultValue = "-1")
+    public int level = -1;
+
+    @CommandLine.Option(names = {
+            "--log-artifacts-to-build" }, description = "Whether to log the coordinates of the artifacts captured down to the depth specified. The default is true.")
+    public boolean logArtifactsToBuild = true;
+
+    @CommandLine.Option(names = {
+            "--log-modules-to-build" }, description = "Whether to log the module GAVs the artifacts to be built belongs to instead of all the complete artifact coordinates to be built. If this option is enabled, it overrides {@link #logArtifactsToBuild}")
+    public boolean logModulesToBuild;
+
+    @CommandLine.Option(names = {
+            "--log-trees" }, description = "Whether to log the dependency trees walked down to the depth specified. The default is false.")
+    public boolean logTrees;
+
+    @CommandLine.Option(names = {
+            "--log-remaining" }, description = "Whether to log the coordinates of the artifacts below the depth specified. The default is false.")
+    public boolean logRemaining;
+
+    @CommandLine.Option(names = {
+            "--log-summary" }, description = "Whether to log the summary at the end. The default is true.")
+    public boolean logSummary = true;
+
+    @CommandLine.Option(names = {
+            "--log-non-managed-visited" }, description = "Whether to log the summary at the end. The default is true.")
+    public boolean logNonManagedVisited;
+
+    @CommandLine.Option(names = {
+            "--output-file" }, description = "If specified, this parameter will cause the output to be written to the path specified, instead of writing to the console.")
+    public File outputFile;
+
+    @CommandLine.Option(names = {
+            "--append-output" }, description = "Whether to append outputs into the output file or overwrite it.")
+    public boolean appendOutput;
+
+    @CommandLine.Option(names = {
+            "--log-code-repos" }, description = "Whether to log code repository info for the artifacts to be built from source", defaultValue = "true")
+    public boolean logCodeRepos = true;
+
+    @CommandLine.Option(names = {
+            "--log-code-repo-graph" }, description = "Whether to log code repository dependency graph.")
+    public boolean logCodeRepoGraph;
+
+    @CommandLine.Option(names = {
+            "--exclude-parent-poms" }, description = "Whether to exclude parent POMs from the list of artifacts to be built from source")
+    public boolean excludeParentPoms;
+
+    @CommandLine.Option(names = {
+            "--exclude-bom-imports" }, description = "Whether to exclude BOMs imported in the POMs of artifacts to be built from the list of artifacts to be built from source")
+    public boolean excludeBomImports;
+
+    @CommandLine.Option(names = {
+            "--exclude-group-ids" }, description = "Command-separated list of groupIds of dependencies that should be excluded")
+    public String excludeGroupIds;
+
+    @CommandLine.Option(names = {
+            "--exclude-keys" }, description = "Command-separated list of artifact coordinates excluding the version of dependencies that should be excluded")
+    public String excludeKeys;
+
+    @CommandLine.Option(names = {
+            "--include-group-ids" }, description = "Command-separated list of groupIds of dependencies that should be included")
+    public String includeGroupIds;
+
+    @CommandLine.Option(names = {
+            "--validate-code-repo-tags" }, description = "Whether to validate the discovered code repo and tags that are included in the report")
+    public boolean validateCodeRepoTags;
+
+    @CommandLine.Option(names = {
+            "--warn-on-resolution-errors" }, description = "Whether to warn about artifact resolution errors instead of failing the process")
+    public Boolean warnOnResolutionErrors;
+
+    @CommandLine.Option(names = {
+            "--include-already-built" }, description = "Whether to include dependencies that have already been built")
+    public boolean includeAlreadyBuilt;
+
+    @CommandLine.Option(names = {
+            "--export-config-to" }, description = "Export config to a file")
+    public File exportTo;
+
+    private MavenArtifactResolver artifactResolver;
+
+    @Override
+    public Integer call() throws Exception {
+
+        final ProjectDependencyConfig.Mutable config = ProjectDependencyConfig.builder();
+        if (bom != null) {
+            config.setProjectBom(ArtifactCoords.fromString(bom));
+        }
+
+        if (warnOnResolutionErrors != null) {
+            config.setWarnOnResolutionErrors(warnOnResolutionErrors);
+        } else if (bom != null) {
+            config.setWarnOnResolutionErrors(true);
+        }
+
+        if (includeNonManaged != null) {
+            config.setIncludeNonManaged(includeNonManaged);
+        } else if (bom == null) {
+            config.setIncludeNonManaged(true);
+        }
+
+        final Set<String> excludeGroupIds;
+        if (this.excludeGroupIds != null) {
+            excludeGroupIds = Set.of(this.excludeGroupIds.split(","));
+        } else {
+            excludeGroupIds = Set.of();
+        }
+
+        final Set<ArtifactKey> excludeKeys;
+        if (this.excludeKeys != null) {
+            final String[] keyStrs = this.excludeKeys.split(",");
+            excludeKeys = new HashSet<>(keyStrs.length);
+            for (String keyStr : keyStrs) {
+                final String[] parts = keyStr.split(":");
+                excludeKeys.add(ArtifactKey.of(parts[0],
+                        parts.length > 1 ? parts[1] : "*",
+                        parts.length > 2 ? parts[3] : "*",
+                        parts.length > 3 ? parts[4] : "*"));
+            }
+        } else {
+            excludeKeys = Set.of();
+        }
+
+        config.setExcludeBomImports(excludeBomImports)
+                .setExcludeGroupIds(excludeGroupIds) // TODO
+                .setExcludeKeys(excludeKeys)
+                .setExcludeParentPoms(excludeParentPoms)
+                .setIncludeArtifacts(Set.of()) // TODO
+                .setIncludeGroupIds(Set.of()) // TODO
+                .setIncludeKeys(Set.of()) // TODO
+                .setLevel(level)
+                .setLogArtifactsToBuild(logArtifactsToBuild)
+                .setLogCodeRepoTree(logCodeRepoGraph)
+                .setLogCodeRepos(logCodeRepos)
+                .setLogModulesToBuild(logModulesToBuild)
+                .setLogNonManagedVisited(logNonManagedVisited)
+                .setLogRemaining(logRemaining)
+                .setLogSummary(logSummary)
+                .setLogTrees(logTrees)
+                .setProjectArtifacts(
+                        rootArtifacts.stream().map(ArtifactCoords::fromString).collect(Collectors.toList()))
+                .setValidateCodeRepoTags(validateCodeRepoTags)
+                .setIncludeAlreadyBuilt(includeAlreadyBuilt);
+
+        if (exportTo != null) {
+            config.persist(exportTo.toPath());
+        } else {
+            MavenArtifactResolver.builder().setWorkspaceDiscovery(false).build();
+            final ProjectDependencyResolver dependencyResolver = ProjectDependencyResolver.builder()
+                    .setLogOutputFile(outputFile == null ? null : outputFile.toPath())
+                    .setAppendOutput(appendOutput)
+                    .setDependencyConfig(config)
+                    .setArtifactResolver(getArtifactResolver())
+                    .build();
+            return process(dependencyResolver);
+        }
+        return CommandLine.ExitCode.OK;
+    }
+
+    protected MavenArtifactResolver getArtifactResolver() {
+        if (artifactResolver != null) {
+            return artifactResolver;
+        }
+        try {
+            return artifactResolver = MavenArtifactResolver.builder().setWorkspaceDiscovery(false).build();
+        } catch (BootstrapMavenException e) {
+            throw new RuntimeException("Failed to initialize Maven artifact resolver", e);
+        }
+    }
+
+    protected abstract Integer process(ProjectDependencyResolver depResolver);
+}

@@ -20,6 +20,7 @@ public class ApacheCommonsReleaseIdDetector implements ReleaseIdDetector {
         if (artifact.getGroupId().equals("org.apache.commons")
                 && (artifact.getArtifactId().equals("commons-parent")
                         || artifact.getArtifactId().equals("commons-lang3")
+                        || artifact.getArtifactId().equals("commons-text")
                         || artifactId.equals("commons-compress"))
                 || artifact.getGroupId().equals("commons-io")) {
             ReleaseId releaseId = releaseResolver.defaultReleaseId(artifact);

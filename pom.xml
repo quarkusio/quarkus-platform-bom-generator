@@ -52,7 +52,7 @@
   </properties>
   <modules>
     <module>bom-decomposer</module>
-    <module>deps-to-build</module>
+    <module>domino</module>
     <module>maven-plugin</module>
     <module>platform-bom</module>
   </modules>
@@ -87,12 +87,12 @@
       </dependency>
       <dependency>
         <groupId>io.quarkus</groupId>
-        <artifactId>deps-to-build-api</artifactId>
+        <artifactId>quarkus-domino-api</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
         <groupId>io.quarkus</groupId>
-        <artifactId>deps-to-build-gradle-project-reader</artifactId>
+        <artifactId>quarkus-domino-gradle-project-reader</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>

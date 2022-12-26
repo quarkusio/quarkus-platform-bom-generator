@@ -5,6 +5,7 @@ io.quarkus.bom.decomposer.detector.ApacheHttpComponentsReleaseIdDetector
 io.quarkus.bom.decomposer.detector.ApacheMavenReleaseIdDetector
 io.quarkus.bom.decomposer.detector.ApacheQPidReleaseIdDetector
 io.quarkus.bom.decomposer.detector.AsmReleaseIdDetector
+io.quarkus.bom.decomposer.detector.BouncyCastleReleaseIdDetector
 io.quarkus.bom.decomposer.detector.ComSunActivationReleaseIdDetector
 io.quarkus.bom.decomposer.detector.FasterXmlReleaseIdDetector
 io.quarkus.bom.decomposer.detector.GlassfishHk2ReleaseIdDetector
@@ -39,7 +40,10 @@ io.quarkus.bom.decomposer.detector.JsonPathReleaseIdDetector
 io.quarkus.bom.decomposer.detector.JUnitPlatformReleaseDetector
 io.quarkus.bom.decomposer.detector.KafkaReleaseDetector
 io.quarkus.bom.decomposer.detector.KnownVPrefixReleaseIdDetector
+io.quarkus.bom.decomposer.detector.LogbackReleaseIdDetector
 io.quarkus.bom.decomposer.detector.MongoDbReleaseIdDetector
+io.quarkus.bom.decomposer.detector.NettyDevToolsReleaseIdDetector
+io.quarkus.bom.decomposer.detector.NettyTcnativeReleaseIdDetector
 io.quarkus.bom.decomposer.detector.OpentelemetryReleaseIdDetector
 io.quarkus.bom.decomposer.detector.PgJdbcReleaseIdDetector
 io.quarkus.bom.decomposer.detector.QosReload4jReleaseIdDetector
