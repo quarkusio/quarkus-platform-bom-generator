@@ -5,6 +5,8 @@ import io.quarkus.bom.platform.ProjectDependencyFilterConfig;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
+import io.quarkus.domino.ProjectDependencyConfig;
+import io.quarkus.domino.ProjectDependencyResolver;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.paths.PathTree;
 import io.quarkus.registry.CatalogMergeUtility;

@@ -1,0 +1,3 @@
+Example build:
+
+java -jar target/domino.jar from-maven build --root-artifacts=org.apache.avro:avro:1.11.0 --include-non-managed --local-maven-repo=/home/aloubyansky/playground/domino-build-repo --manifest
