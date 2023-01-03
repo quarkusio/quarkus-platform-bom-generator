@@ -45,6 +45,7 @@ import picocli.CommandLine;
 @CommandLine.Command(name = "build")
 public class Build extends BaseDepsToBuildCommand {
 
+    private static final String JAVA8_HOME = "JAVA8_HOME";
     private static final String DOMINO = "-domino-";
     private static final int MIN_BUILD_NUMBER = 1;
     private static final int MAX_BUILD_NUMBER = 99999;
@@ -137,7 +138,12 @@ public class Build extends BaseDepsToBuildCommand {
                                         final StringBuilder sb = new StringBuilder();
                                         sb.append("Building ").append(projectDir);
                                         if (buildResult.java8) {
-                                            processBuilder.environment().put("JAVA_HOME", "/home/aloubyansky/jdk/jdk1.8.0_333");
+                                            final String java8Home = System.getenv().get(JAVA8_HOME);
+                                            if (java8Home == null) {
+                                                throw new RuntimeException(
+                                                        projectDir + " requires Java 8 but " + JAVA8_HOME + " isn't set");
+                                            }
+                                            processBuilder.environment().put("JAVA_HOME", java8Home);
                                             sb.append(" with Java 8");
                                         }
                                         log(sb);
