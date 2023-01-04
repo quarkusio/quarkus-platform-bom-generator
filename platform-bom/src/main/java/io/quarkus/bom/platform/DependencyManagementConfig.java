@@ -63,8 +63,12 @@ public class DependencyManagementConfig {
                 final ArtifactKey key = ArtifactKey.fromString(e);
                 exclusions.add(new Exclusion(key.getGroupId(), key.getArtifactId(), key.getClassifier(), key.getType()));
             }
+            String scope = dep.getScope();
+            if (scope == null || scope.isEmpty()) {
+                scope = "compile";
+            }
             result.add(new Dependency(new DefaultArtifact(coords.getGroupId(),
-                    coords.getArtifactId(), coords.getClassifier(), coords.getType(), coords.getVersion()), "compile", null,
+                    coords.getArtifactId(), coords.getClassifier(), coords.getType(), coords.getVersion()), scope, null,
                     exclusions));
         }
         return result;

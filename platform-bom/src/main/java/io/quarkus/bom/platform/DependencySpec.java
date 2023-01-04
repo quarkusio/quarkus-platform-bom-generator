@@ -6,6 +6,7 @@ import java.util.List;
 public class DependencySpec {
 
     private String artifact;
+    private String scope;
     private List<String> exclusions = Collections.emptyList();
 
     public String getArtifact() {
@@ -14,6 +15,14 @@ public class DependencySpec {
 
     public void setArtifact(String artifact) {
         this.artifact = artifact;
+    }
+
+    public String getScope() {
+        return scope;
+    }
+
+    public void setScope(String scope) {
+        this.scope = scope;
     }
 
     public List<String> getExclusions() {
@@ -26,13 +35,19 @@ public class DependencySpec {
 
     @Override
     public String toString() {
-        if (exclusions.isEmpty()) {
+        if (exclusions.isEmpty() && (scope == null || scope.isEmpty())) {
             return artifact;
         }
         final StringBuilder s = new StringBuilder();
-        s.append(artifact).append(" exclusions: ").append(exclusions.get(0));
-        for (int i = 1; i < exclusions.size(); ++i) {
-            s.append(',').append(exclusions.get(i));
+        s.append(artifact);
+        if (scope != null && !scope.isEmpty()) {
+            s.append('(').append(scope).append(')');
+        }
+        if (!exclusions.isEmpty()) {
+            s.append(" exclusions: ").append(exclusions.get(0));
+            for (int i = 1; i < exclusions.size(); ++i) {
+                s.append(',').append(exclusions.get(i));
+            }
         }
         return s.toString();
     }
