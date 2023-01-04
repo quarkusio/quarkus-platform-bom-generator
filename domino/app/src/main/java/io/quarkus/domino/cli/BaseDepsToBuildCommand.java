@@ -17,6 +17,9 @@ import picocli.CommandLine;
 
 public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
 
+    @CommandLine.Option(names = { "--project-dir" }, description = "Project directory")
+    public File projectDir;
+
     @CommandLine.Option(names = {
             "--bom" }, description = "BOM whose constraints should be used as top level artifacts to be built")
     public String bom;
@@ -152,6 +155,13 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
             excludeKeys = Set.of();
         }
 
+        if (projectDir != null) {
+            if (!projectDir.isDirectory()) {
+                throw new RuntimeException(projectDir + " is not a directory");
+            }
+            config.setProjectDir(projectDir.toPath());
+        }
+
         config.setExcludeBomImports(excludeBomImports)
                 .setExcludeGroupIds(excludeGroupIds) // TODO
                 .setExcludeKeys(excludeKeys)
@@ -176,7 +186,6 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
         if (exportTo != null) {
             config.persist(exportTo.toPath());
         } else {
-            MavenArtifactResolver.builder().setWorkspaceDiscovery(false).build();
             final ProjectDependencyResolver dependencyResolver = ProjectDependencyResolver.builder()
                     .setLogOutputFile(outputFile == null ? null : outputFile.toPath())
                     .setAppendOutput(appendOutput)
@@ -193,7 +202,14 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
             return artifactResolver;
         }
         try {
-            return artifactResolver = MavenArtifactResolver.builder().setWorkspaceDiscovery(false).build();
+            if (projectDir == null) {
+                return artifactResolver = MavenArtifactResolver.builder().setWorkspaceDiscovery(false).build();
+            }
+            return MavenArtifactResolver.builder()
+                    .setCurrentProject(projectDir.getAbsolutePath())
+                    .setEffectiveModelBuilder(true)
+                    .setPreferPomsFromWorkspace(true)
+                    .build();
         } catch (BootstrapMavenException e) {
             throw new RuntimeException("Failed to initialize Maven artifact resolver", e);
         }

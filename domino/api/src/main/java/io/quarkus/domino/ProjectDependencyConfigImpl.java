@@ -2,6 +2,7 @@ package io.quarkus.domino;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import io.quarkus.maven.dependency.ArtifactCoords;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -12,6 +13,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
 
     static final String WILDCARD = "*";
 
+    private final Path projectDir;
     private final ArtifactCoords projectBom;
     private final Collection<ArtifactCoords> projectArtifacts;
     private final Collection<ArtifactCoords> includeArtifacts;
@@ -34,6 +36,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     private boolean includeAlreadyBuilt;
 
     private ProjectDependencyConfigImpl(ProjectDependencyConfig other) {
+        this.projectDir = other.getProjectDir();
         projectBom = other.getProjectBom();
         projectArtifacts = toUnmodifiableList(other.getProjectArtifacts());
         includeArtifacts = toUnmodifiableList(other.getIncludeArtifacts());
@@ -54,6 +57,11 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         includeAlreadyBuilt = other.isIncludeAlreadyBuilt();
         validateCodeRepoTags = other.isValidateCodeRepoTags();
         warnOnResolutionErrors = other.isWarnOnResolutionErrors();
+    }
+
+    @Override
+    public Path getProjectDir() {
+        return projectDir;
     }
 
     @Override
@@ -158,6 +166,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
 
     static class Builder implements ProjectDependencyConfig.Mutable {
 
+        private Path projectDir;
         private ArtifactCoords projectBom;
         private Collection<ArtifactCoords> projectArtifacts = new ArrayList<>();
         private Collection<ArtifactCoords> includeArtifacts = new ArrayList<>();
@@ -183,6 +192,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         }
 
         Builder(ProjectDependencyConfig other) {
+            projectDir = other.getProjectDir();
             projectBom = other.getProjectBom();
             projectArtifacts.addAll(other.getProjectArtifacts());
             includeArtifacts.addAll(other.getIncludeArtifacts());
@@ -203,6 +213,17 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
             validateCodeRepoTags = other.isValidateCodeRepoTags();
             warnOnResolutionErrors = other.isWarnOnResolutionErrors();
             includeAlreadyBuilt = other.isIncludeAlreadyBuilt();
+        }
+
+        @Override
+        public Path getProjectDir() {
+            return projectDir;
+        }
+
+        @Override
+        public Mutable setProjectDir(Path projectDir) {
+            this.projectDir = projectDir;
+            return this;
         }
 
         @Override

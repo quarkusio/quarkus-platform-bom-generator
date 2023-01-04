@@ -8,7 +8,10 @@ import io.quarkus.bom.decomposer.ReleaseIdResolver;
 import io.quarkus.bom.decomposer.detector.PrefixedTagReleaseIdDetector;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
+import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
+import io.quarkus.bootstrap.resolver.maven.workspace.LocalWorkspace;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
+import io.quarkus.bootstrap.util.IoUtils;
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
@@ -39,6 +42,8 @@ import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
 import org.apache.maven.model.DependencyManagement;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Parent;
+import org.apache.maven.model.Plugin;
+import org.apache.maven.model.PluginExecution;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.collection.CollectRequest;
@@ -103,7 +108,14 @@ public class ProjectDependencyResolver {
         private MavenArtifactResolver getInitializedResolver() {
             if (resolver == null) {
                 try {
-                    return MavenArtifactResolver.builder().setWorkspaceDiscovery(false).build();
+                    if (depConfig == null || depConfig.getProjectDir() == null) {
+                        return MavenArtifactResolver.builder().setWorkspaceDiscovery(false).build();
+                    }
+                    return MavenArtifactResolver.builder()
+                            .setCurrentProject(depConfig.getProjectDir().toString())
+                            .setEffectiveModelBuilder(true)
+                            .setPreferPomsFromWorkspace(true)
+                            .build();
                 } catch (BootstrapMavenException e) {
                     throw new IllegalStateException("Failed to initialize the Maven artifact resolver", e);
                 }
@@ -379,6 +391,28 @@ public class ProjectDependencyResolver {
     }
 
     protected Iterable<ArtifactCoords> getProjectArtifacts() {
+        if (config.getProjectDir() != null) {
+            final LocalWorkspace ws = resolver.getMavenContext().getWorkspace();
+            final List<Path> createdDirs = new ArrayList<>();
+            Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    for (Path p : createdDirs) {
+                        IoUtils.recursiveDelete(p);
+                    }
+                }
+            }));
+            ws.getProjects().values().forEach(p -> ensureResolvable(p, createdDirs));
+            final List<ArtifactCoords> result = new ArrayList<>();
+            for (LocalProject project : ws.getProjects().values()) {
+                if (isPublished(project)) {
+                    result.add(ArtifactCoords.of(project.getGroupId(), project.getArtifactId(),
+                            ArtifactCoords.DEFAULT_CLASSIFIER, project.getRawModel().getPackaging(), project.getVersion()));
+                }
+            }
+            return result;
+        }
+
         if (config.getProjectArtifacts().isEmpty()) {
             final List<ArtifactCoords> result = new ArrayList<>();
             for (ArtifactCoords d : targetBomConstraints) {
@@ -390,6 +424,50 @@ public class ProjectDependencyResolver {
             return result;
         }
         return config.getProjectArtifacts();
+    }
+
+    private static boolean isPublished(LocalProject project) {
+        final Model model = project.getModelBuildingResult() == null ? project.getRawModel()
+                : project.getModelBuildingResult().getEffectiveModel();
+        String skipStr = model.getProperties().getProperty("maven.install.skip");
+        if (skipStr != null && Boolean.parseBoolean(skipStr)) {
+            return false;
+        }
+        skipStr = model.getProperties().getProperty("maven.deploy.skip");
+        if (skipStr != null && Boolean.parseBoolean(skipStr)) {
+            return false;
+        }
+        if (model.getBuild() != null) {
+            for (Plugin plugin : model.getBuild().getPlugins()) {
+                if (plugin.getArtifactId().equals("maven-install-plugin")
+                        || plugin.getArtifactId().equals("maven-deploy-plugin")) {
+                    for (PluginExecution e : plugin.getExecutions()) {
+                        if (e.getId().startsWith("default-") && e.getPhase().equals("none")) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    private static void ensureResolvable(LocalProject project, List<Path> createdDirs) {
+        if (!project.getRawModel().getPackaging().equals(ArtifactCoords.TYPE_POM)) {
+            final Path classesDir = project.getClassesDir();
+            if (!Files.exists(classesDir)) {
+                Path topDirToCreate = classesDir;
+                while (!Files.exists(topDirToCreate.getParent())) {
+                    topDirToCreate = topDirToCreate.getParent();
+                }
+                try {
+                    Files.createDirectories(classesDir);
+                    createdDirs.add(topDirToCreate);
+                } catch (IOException e) {
+                    throw new RuntimeException("Failed to create " + classesDir, e);
+                }
+            }
+        }
     }
 
     private void processRootArtifact(List<Dependency> managedDeps, ArtifactCoords rootArtifact) {

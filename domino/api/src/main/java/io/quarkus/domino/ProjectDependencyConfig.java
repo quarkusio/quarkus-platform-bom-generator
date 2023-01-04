@@ -11,6 +11,13 @@ import java.util.Set;
 public interface ProjectDependencyConfig {
 
     /**
+     * Project directory
+     * 
+     * @return project directory
+     */
+    Path getProjectDir();
+
+    /**
      * Project BOM
      * 
      * @return project BOM
@@ -145,6 +152,8 @@ public interface ProjectDependencyConfig {
     }
 
     interface Mutable extends ProjectDependencyConfig {
+
+        Mutable setProjectDir(Path projectDir);
 
         Mutable setProjectBom(ArtifactCoords bom);
 
