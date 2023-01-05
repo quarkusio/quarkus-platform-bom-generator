@@ -5,7 +5,6 @@ import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.decomposer.ReleaseIdDetector;
 import io.quarkus.bom.decomposer.ReleaseIdFactory;
 import io.quarkus.bom.decomposer.ReleaseIdResolver;
-import io.quarkus.bom.decomposer.detector.PrefixedTagReleaseIdDetector;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
@@ -627,7 +626,6 @@ public class ProjectDependencyResolver {
     private static ReleaseIdResolver newReleaseIdResolver(MavenArtifactResolver artifactResolver, MessageWriter log,
             boolean validateCodeRepoTags, Map<ArtifactCoords, String> versionMapping) {
         final List<ReleaseIdDetector> releaseDetectors = new ArrayList<>();
-        releaseDetectors.add(new PrefixedTagReleaseIdDetector("jetty-", List.of("org.eclipse.jetty")));
         releaseDetectors.add(
                 // Vert.X
                 new ReleaseIdDetector() {
