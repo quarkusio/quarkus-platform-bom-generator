@@ -35,6 +35,7 @@ io.quarkus.bom.decomposer.detector.JBossLogManagerEmbeddedReleaseIdDetector
 io.quarkus.bom.decomposer.detector.JBossParentReleaseIdDetector
 io.quarkus.bom.decomposer.detector.JBossJaxRsApiReleaseIdDetector
 io.quarkus.bom.decomposer.detector.JBossTransactionSpiReleaseIdDetector
+io.quarkus.bom.decomposer.detector.JettyReleaseIdDetector
 io.quarkus.bom.decomposer.detector.JoptSimpleReleaseIdDetector
 io.quarkus.bom.decomposer.detector.JsonPathReleaseIdDetector
 io.quarkus.bom.decomposer.detector.JUnitPlatformReleaseDetector
