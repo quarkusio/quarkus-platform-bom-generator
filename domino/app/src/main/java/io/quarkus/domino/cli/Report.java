@@ -13,7 +13,9 @@ public class Report extends BaseDepsToBuildCommand {
     @Override
     protected Integer process(ProjectDependencyResolver depResolver) {
         if (manifest) {
-            depResolver.consumeSorted(ManifestGenerator.newInstance(getArtifactResolver()).toConsumer());
+            depResolver.consumeSorted(ManifestGenerator.builder()
+                    .setArtifactResolver(getArtifactResolver())
+                    .build().toConsumer());
         } else {
             depResolver.log();
         }

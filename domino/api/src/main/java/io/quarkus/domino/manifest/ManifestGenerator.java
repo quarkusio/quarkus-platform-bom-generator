@@ -11,9 +11,13 @@ import io.quarkus.domino.ProjectDependencyConfig;
 import io.quarkus.domino.ProjectDependencyResolver;
 import io.quarkus.domino.ReleaseRepo;
 import io.quarkus.maven.dependency.ArtifactCoords;
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -46,8 +50,42 @@ import org.eclipse.aether.artifact.DefaultArtifact;
 
 public class ManifestGenerator {
 
-    public static ManifestGenerator newInstance(MavenArtifactResolver resolver) {
-        return new ManifestGenerator(resolver);
+    public static class Builder {
+
+        private MavenArtifactResolver resolver;
+        private Path outputFile;
+
+        private Builder() {
+        }
+
+        public Builder setArtifactResolver(MavenArtifactResolver resolver) {
+            this.resolver = resolver;
+            return this;
+        }
+
+        public Builder setOutputFile(Path outputFile) {
+            this.outputFile = outputFile;
+            return this;
+        }
+
+        public ManifestGenerator build() {
+            return new ManifestGenerator(this);
+        }
+
+        private MavenArtifactResolver getInitializedResolver() {
+            if (resolver == null) {
+                try {
+                    return MavenArtifactResolver.builder().build();
+                } catch (BootstrapMavenException e) {
+                    throw new RuntimeException("Failed to initialize Maven artifact resolver", e);
+                }
+            }
+            return resolver;
+        }
+    }
+
+    public static Builder builder() {
+        return new Builder();
     }
 
     private final BootstrapMavenContext mavenCtx;
@@ -57,16 +95,19 @@ public class ManifestGenerator {
     private final ModelCache modelCache;
 
     private final Map<ArtifactCoords, Model> effectiveModels = new HashMap<>();
+    private final Path outputFile;
 
-    private ManifestGenerator(MavenArtifactResolver resolver) {
-        mavenCtx = resolver.getMavenContext();
+    private ManifestGenerator(Builder builder) {
+
+        this.artifactResolver = builder.getInitializedResolver();
+        mavenCtx = artifactResolver.getMavenContext();
         try {
             modelResolver = BootstrapModelResolver.newInstance(mavenCtx, null);
             modelCache = new BootstrapModelCache(mavenCtx.getRepositorySystemSession());
         } catch (BootstrapMavenException e) {
             throw new RuntimeException("Failed to initialize Maven model resolver", e);
         }
-        this.artifactResolver = resolver;
+        outputFile = builder.outputFile;
     }
 
     public static void main(String[] args) throws Exception {
@@ -80,10 +121,15 @@ public class ManifestGenerator {
                         .setIncludeNonManaged(true)
                         .build())
                 .build()
-                .consumeSorted(new ManifestGenerator(artifactResolver).toConsumer());
+                .consumeSorted(
+                        builder()
+                                .setArtifactResolver(artifactResolver)
+                                .build()
+                                .toConsumer());
     }
 
     public Consumer<Collection<ReleaseRepo>> toConsumer() {
+
         return releases -> {
             final Bom bom = new Bom();
             for (ReleaseRepo r : releases) {
@@ -129,7 +175,20 @@ public class ManifestGenerator {
             }
             final BomJsonGenerator bomGenerator = BomGeneratorFactory.createJson(schemaVersion(), bom);
             final String bomString = bomGenerator.toJsonString();
-            System.out.println(bomString);
+            if (outputFile == null) {
+                System.out.println(bomString);
+            } else {
+                try {
+                    Files.createDirectories(outputFile.getParent());
+                } catch (Exception e) {
+                    throw new RuntimeException("Failed to create " + outputFile.getParent(), e);
+                }
+                try (BufferedWriter writer = Files.newBufferedWriter(outputFile)) {
+                    writer.write(bomString);
+                } catch (IOException e) {
+                    throw new RuntimeException("Failed to write to " + outputFile, e);
+                }
+            }
         };
     }
 

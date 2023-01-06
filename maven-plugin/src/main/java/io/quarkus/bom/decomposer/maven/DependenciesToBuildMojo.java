@@ -7,6 +7,7 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.domino.ProjectDependencyConfig;
 import io.quarkus.domino.ProjectDependencyResolver;
+import io.quarkus.domino.manifest.ManifestGenerator;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.paths.PathTree;
 import io.quarkus.registry.CatalogMergeUtility;
@@ -169,6 +170,9 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     @Parameter(property = "includeAlreadyBuilt", required = false)
     boolean includeAlreadyBuilt;
 
+    @Parameter(required = false, property = "manifest")
+    boolean manifest;
+
     private Set<ArtifactCoords> targetBomConstraints;
     private Map<ArtifactCoords, List<Dependency>> enforcedConstraintsForBom = new HashMap<>();
 
@@ -300,7 +304,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             supported.put(deploymentCoords, ext);
         }
 
-        ProjectDependencyResolver.builder()
+        final ProjectDependencyResolver depsResolver = ProjectDependencyResolver.builder()
                 .setArtifactConstraintsProvider(coords -> {
                     final Extension ext = supported.get(coords);
                     return ext == null ? targetBomManagedDeps : getConstraintsForExtension(ext);
@@ -332,7 +336,16 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                         .setLogTrees(logTrees)
                         .setIncludeAlreadyBuilt(includeAlreadyBuilt)
                         .setValidateCodeRepoTags(validateCodeRepoTags))
-                .build().log();
+                .build();
+
+        if (manifest) {
+            depsResolver.consumeSorted(ManifestGenerator.builder()
+                    .setArtifactResolver(resolver)
+                    .setOutputFile(outputFile == null ? null : outputFile.toPath())
+                    .build().toConsumer());
+        } else {
+            depsResolver.log();
+        }
     }
 
     private List<Dependency> getConstraintsForExtension(Extension ext) {
