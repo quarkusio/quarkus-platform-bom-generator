@@ -241,7 +241,9 @@ public class Build extends BaseDepsToBuildCommand {
                         .setDependencyConfig(newConfig)
                         .setArtifactResolver(artifactResolver)
                         .build()
-                        .consumeSorted(ManifestGenerator.newInstance(artifactResolver).toConsumer());
+                        .consumeSorted(ManifestGenerator.builder()
+                                .setArtifactResolver(artifactResolver)
+                                .build().toConsumer());
             } catch (BootstrapMavenException e) {
                 throw new RuntimeException("Failed to generate the report", e);
             }
