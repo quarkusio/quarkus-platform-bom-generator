@@ -10,6 +10,7 @@
   <name>Quarkus - Platform BOM Tools - Domino build tool - App</name>
   <properties>
     <quarkus.package.add-runner-suffix>false</quarkus.package.add-runner-suffix>
+    <skipOriginalJarRename>true</skipOriginalJarRename>
     <quarkus.package.type>uber-jar</quarkus.package.type>
     <skipITs>true</skipITs>
   </properties>
@@ -46,6 +47,7 @@
     </dependency>
   </dependencies>
   <build>
+    <finalName>domino</finalName>
     <plugins>
       <plugin>
         <groupId>io.quarkus</groupId>
