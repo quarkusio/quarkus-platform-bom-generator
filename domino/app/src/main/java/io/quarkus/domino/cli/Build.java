@@ -39,6 +39,7 @@ import org.apache.maven.model.Parent;
 import org.apache.maven.model.Plugin;
 import org.codehaus.plexus.util.xml.Xpp3Dom;
 import org.eclipse.aether.artifact.DefaultArtifact;
+import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.jgit.api.Git;
 import picocli.CommandLine;
 
@@ -298,15 +299,17 @@ public class Build extends BaseDepsToBuildCommand {
                 .setBranch(release.id().version().asString())
                 .call()) {
         } catch (Exception e) {
+            Map.Entry<ArtifactCoords, List<RemoteRepository>> artifact;
             if (release.getArtifacts().size() == 1
-                    && release.getArtifacts().get(0).getType().equals(ArtifactCoords.TYPE_POM)) {
+                    && (artifact = release.getArtifacts().entrySet().iterator().next()).getKey().getType()
+                            .equals(ArtifactCoords.TYPE_POM)) {
                 // possibly a parent POM for which the repo couldn't be resolved
-                final ArtifactCoords pomCoords = release.getArtifacts().get(0);
+                final ArtifactCoords pomCoords = artifact.getKey();
                 final Path pom;
                 try {
                     pom = getArtifactResolver().resolve(new DefaultArtifact(pomCoords.getGroupId(), pomCoords.getArtifactId(),
-                            pomCoords.getClassifier(), pomCoords.getType(), pomCoords.getVersion())).getArtifact().getFile()
-                            .toPath();
+                            pomCoords.getClassifier(), pomCoords.getType(), pomCoords.getVersion()), artifact.getValue())
+                            .getArtifact().getFile().toPath();
                 } catch (BootstrapMavenException e1) {
                     ctx.failure(e1);
                     throw new RuntimeException("Failed to resolve " + pomCoords, e1);

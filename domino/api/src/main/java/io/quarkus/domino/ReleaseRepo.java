@@ -2,17 +2,17 @@ package io.quarkus.domino;
 
 import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.maven.dependency.ArtifactCoords;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.eclipse.aether.repository.RemoteRepository;
 
 public class ReleaseRepo {
 
     final ReleaseId id;
-    final List<ArtifactCoords> artifacts = new ArrayList<>();
+    final Map<ArtifactCoords, List<RemoteRepository>> artifacts = new HashMap<>();
     final Map<ReleaseId, ReleaseRepo> dependants = new HashMap<>();
     final Map<ReleaseId, ReleaseRepo> dependencies = new LinkedHashMap<>();
 
@@ -24,7 +24,7 @@ public class ReleaseRepo {
         return id;
     }
 
-    public List<ArtifactCoords> getArtifacts() {
+    public Map<ArtifactCoords, List<RemoteRepository>> getArtifacts() {
         return artifacts;
     }
 

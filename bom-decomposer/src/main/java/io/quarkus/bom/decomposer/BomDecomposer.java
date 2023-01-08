@@ -188,7 +188,7 @@ public class BomDecomposer {
                         }
                     }
                 }
-                bomBuilder.bomDependency(releaseIdResolver.releaseId(artifact), dep);
+                bomBuilder.bomDependency(releaseIdResolver.releaseId(artifact, List.of()), dep);
             } catch (BomDecomposerException e) {
                 throw e;
             } catch (ArtifactNotFoundException | UnresolvableModelException e) {

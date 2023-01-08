@@ -247,12 +247,12 @@ public class ParallelExecution {
 
     private void initProjectInfo(ReleaseRepo repo, Map<ReleaseOrigin, String> projectNames) {
         final String projectName = deriveProjectName(repo.id().origin(), projectNames);
-        final String projectVersion = repo.getArtifacts().get(0).getVersion();
+        final String projectVersion = repo.getArtifacts().keySet().iterator().next().getVersion();
         final Path projectDir = IoUtils.mkdirs(projects.resolve(projectName + "-" + projectVersion));
         final ProjectInfo info = new ProjectInfo(repo, projectVersion, projectDir, projectName);
         projectInfos.put(info.release.id(), info);
 
-        for (ArtifactCoords c : repo.getArtifacts()) {
+        for (ArtifactCoords c : repo.getArtifacts().keySet()) {
             if (!c.getVersion().equals(info.originalVersion)) {
                 log("WARN: inconsistent versioning detected in " + repo.id());
             }
@@ -273,9 +273,9 @@ public class ParallelExecution {
         pom.setModelVersion("4.0.0");
         pom.setVersion("${revision}");
 
-        final List<ArtifactCoords> artifacts = project.release.getArtifacts();
+        final Collection<ArtifactCoords> artifacts = project.release.getArtifacts().keySet();
         if (artifacts.size() == 1) {
-            final ArtifactCoords a = artifacts.get(0);
+            final ArtifactCoords a = artifacts.iterator().next();
             pom.setGroupId(a.getGroupId());
             pom.setArtifactId(a.getArtifactId());
             pom.setPackaging(a.getType());
