@@ -46,7 +46,7 @@
     <surefire-plugin.version>3.0.0-M7</surefire-plugin.version>
 
     <gradle-tooling.version>7.5.1</gradle-tooling.version>
-    <quarkus.version>2.13.4.Final</quarkus.version>
+    <quarkus.version>2.15.2.Final</quarkus.version>
     <junit.jupiter.version>5.7.1</junit.jupiter.version>
     <xom.version>1.3.7</xom.version>
   </properties>
