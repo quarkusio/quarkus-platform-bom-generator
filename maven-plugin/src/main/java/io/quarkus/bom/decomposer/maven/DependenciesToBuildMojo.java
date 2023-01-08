@@ -173,6 +173,9 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     @Parameter(required = false, property = "manifest")
     boolean manifest;
 
+    @Parameter(required = false, property = "rh-support")
+    boolean rhSupport;
+
     private Set<ArtifactCoords> targetBomConstraints;
     private Map<ArtifactCoords, List<Dependency>> enforcedConstraintsForBom = new HashMap<>();
 
@@ -268,8 +271,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             if (isExcluded(rtArtifact)) {
                 continue;
             }
-            Object o = ext.getMetadata().get("redhat-support");
-            if (o == null) {
+            if (rhSupport && !ext.getMetadata().containsKey(("redhat-support"))) {
                 continue;
             }
             supported.put(ext.getArtifact(), ext);

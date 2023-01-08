@@ -12,9 +12,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import org.eclipse.aether.artifact.Artifact;
+import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.resolution.ArtifactDescriptorResult;
 import org.eclipse.aether.resolution.ArtifactResolutionException;
 import org.eclipse.aether.resolution.ArtifactResult;
@@ -71,12 +73,17 @@ public class DefaultArtifactResolver implements ArtifactResolver {
 
     @Override
     public ArtifactResult resolve(Artifact a) {
+        return resolve(a, List.of());
+    }
+
+    @Override
+    public ArtifactResult resolve(Artifact a, List<RemoteRepository> repos) {
         final ArtifactCoords coords = toCoords(a);
         if (isRecordedAsNonExisting(coords)) {
             throw recordedAsNonExistingError(coords);
         }
         try {
-            return resolver.resolve(a);
+            return resolver.resolve(a, repos);
         } catch (BootstrapMavenException e) {
             if (isArtifactNotFoundError(e)) {
                 persistNotFoundArtifacts(coords);

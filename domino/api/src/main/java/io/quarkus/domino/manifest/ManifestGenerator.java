@@ -47,6 +47,7 @@ import org.eclipse.aether.DefaultRepositoryCache;
 import org.eclipse.aether.RepositoryCache;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.DefaultArtifact;
+import org.eclipse.aether.repository.RemoteRepository;
 
 public class ManifestGenerator {
 
@@ -133,12 +134,13 @@ public class ManifestGenerator {
         return releases -> {
             final Bom bom = new Bom();
             for (ReleaseRepo r : releases) {
-                for (ArtifactCoords coords : r.getArtifacts()) {
+                for (Map.Entry<ArtifactCoords, List<RemoteRepository>> entry : r.getArtifacts().entrySet()) {
+                    ArtifactCoords coords = entry.getKey();
                     if (ArtifactCoords.TYPE_POM.equals(coords.getType())) {
                         continue;
                     }
 
-                    final Model model = resolveModel(modelResolver, coords);
+                    final Model model = resolveModel(modelResolver, coords, entry.getValue());
                     final Component c = new Component();
                     extractMetadata(r, model, c);
                     if (c.getPublisher() == null) {
@@ -306,14 +308,14 @@ public class ManifestGenerator {
         return Version.VERSION_14;
     }
 
-    private Model resolveModel(ModelResolver modelResolver, ArtifactCoords artifact) {
+    private Model resolveModel(ModelResolver modelResolver, ArtifactCoords artifact, List<RemoteRepository> repos) {
         final ArtifactCoords pom = artifact.getType().equals(ArtifactCoords.TYPE_POM) ? artifact
                 : ArtifactCoords.pom(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion());
         return effectiveModels.computeIfAbsent(pom, k -> {
             File pomFile;
             try {
                 pomFile = artifactResolver.resolve(new DefaultArtifact(pom.getGroupId(), pom.getArtifactId(),
-                        pom.getClassifier(), pom.getType(), pom.getVersion())).getArtifact().getFile();
+                        pom.getClassifier(), pom.getType(), pom.getVersion()), repos).getArtifact().getFile();
             } catch (BootstrapMavenException e) {
                 throw new RuntimeException("Failed to resolve " + pom.toCompactCoords(), e);
             }

@@ -21,6 +21,7 @@ import java.util.Set;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.resolution.UnresolvableModelException;
 import org.eclipse.aether.artifact.Artifact;
+import org.eclipse.aether.repository.RemoteRepository;
 
 public class ReleaseIdResolver {
 
@@ -78,7 +79,8 @@ public class ReleaseIdResolver {
         return artifact.setVersion(v);
     }
 
-    public ReleaseId releaseId(Artifact artifact) throws BomDecomposerException, UnresolvableModelException {
+    public ReleaseId releaseId(Artifact artifact, List<RemoteRepository> repos)
+            throws BomDecomposerException, UnresolvableModelException {
         artifact = getTargetArtifact(artifact);
         for (ReleaseIdDetector releaseDetector : releaseDetectors) {
             final ReleaseId releaseId = releaseDetector.detectReleaseId(this, artifact);
@@ -87,10 +89,14 @@ public class ReleaseIdResolver {
             }
         }
 
-        return validateRepoTag ? validateTag(defaultReleaseId(artifact)) : defaultReleaseId(artifact);
+        return validateRepoTag ? validateTag(defaultReleaseId(artifact, repos)) : defaultReleaseId(artifact, repos);
     }
 
     public ReleaseId defaultReleaseId(Artifact artifact) throws BomDecomposerException {
+        return defaultReleaseId(artifact, List.of());
+    }
+
+    public ReleaseId defaultReleaseId(Artifact artifact, List<RemoteRepository> repos) throws BomDecomposerException {
         /* @formatter:off
         final ModelSource ms = modelResolver.resolveModel(artifact.getGroupId(), artifact.getArtifactId(),
                 artifact.getVersion());
@@ -107,9 +113,9 @@ public class ReleaseIdResolver {
         }
         @formatter:on */
 
-        Model model = model(artifact);
+        Model model = model(artifact, repos);
         Model tmp;
-        while (!hasScmInfo(model) && (tmp = workspaceParent(model)) != null) {
+        while (!hasScmInfo(model) && (tmp = workspaceParent(model, repos)) != null) {
             model = tmp;
         }
         return ReleaseIdFactory.forModel(model);
@@ -165,12 +171,12 @@ public class ReleaseIdResolver {
         return Util.getScmOrigin(model) != null;
     }
 
-    private Model workspaceParent(Model model) throws BomDecomposerException {
+    private Model workspaceParent(Model model, List<RemoteRepository> repos) throws BomDecomposerException {
         if (model.getParent() == null) {
             return null;
         }
 
-        final Model parentModel = model(Util.parentArtifact(model));
+        final Model parentModel = model(Util.parentArtifact(model), repos);
 
         if (Util.getScmOrigin(model) != null) {
             return Util.getScmOrigin(model).equals(Util.getScmOrigin(parentModel))
@@ -201,10 +207,10 @@ public class ReleaseIdResolver {
     }
 
     public Model model(Artifact artifact) throws BomDecomposerException {
-        return Util.model(resolve(Util.pom(artifact)).getFile());
+        return Util.model(resolver.resolve(Util.pom(artifact)).getArtifact().getFile());
     }
 
-    private Artifact resolve(Artifact artifact) throws BomDecomposerException {
-        return resolver.resolve(artifact).getArtifact();
+    public Model model(Artifact artifact, List<RemoteRepository> repos) throws BomDecomposerException {
+        return Util.model(resolver.resolve(Util.pom(artifact), repos).getArtifact().getFile());
     }
 }
