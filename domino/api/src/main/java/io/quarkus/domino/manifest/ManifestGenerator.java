@@ -7,6 +7,7 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.BootstrapModelBuilderFactory;
 import io.quarkus.bootstrap.resolver.maven.BootstrapModelResolver;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
+import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.domino.ProjectDependencyConfig;
 import io.quarkus.domino.ProjectDependencyResolver;
 import io.quarkus.domino.ReleaseRepo;
@@ -26,6 +27,7 @@ import java.util.TreeMap;
 import java.util.function.Consumer;
 import org.apache.maven.model.MailingList;
 import org.apache.maven.model.Model;
+import org.apache.maven.model.Parent;
 import org.apache.maven.model.building.DefaultModelBuildingRequest;
 import org.apache.maven.model.building.ModelBuilder;
 import org.apache.maven.model.building.ModelBuildingException;
@@ -46,6 +48,7 @@ import org.cyclonedx.util.LicenseResolver;
 import org.eclipse.aether.DefaultRepositoryCache;
 import org.eclipse.aether.RepositoryCache;
 import org.eclipse.aether.RepositorySystemSession;
+import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.repository.RemoteRepository;
 
@@ -180,10 +183,12 @@ public class ManifestGenerator {
             if (outputFile == null) {
                 System.out.println(bomString);
             } else {
-                try {
-                    Files.createDirectories(outputFile.getParent());
-                } catch (Exception e) {
-                    throw new RuntimeException("Failed to create " + outputFile.getParent(), e);
+                if (outputFile.getParent() != null) {
+                    try {
+                        Files.createDirectories(outputFile.getParent());
+                    } catch (Exception e) {
+                        throw new RuntimeException("Failed to create " + outputFile.getParent(), e);
+                    }
                 }
                 try (BufferedWriter writer = Files.newBufferedWriter(outputFile)) {
                     writer.write(bomString);
@@ -319,12 +324,36 @@ public class ManifestGenerator {
             } catch (BootstrapMavenException e) {
                 throw new RuntimeException("Failed to resolve " + pom.toCompactCoords(), e);
             }
+
+            final Model rawModel;
+            try {
+                rawModel = ModelUtils.readModel(pomFile.toPath());
+            } catch (IOException e1) {
+                throw new RuntimeException("Failed to read " + pomFile, e1);
+            }
+
+            // override the relative path to the parent in case it's in the local Maven repo
+            Parent parent = rawModel.getParent();
+            if (parent != null) {
+                final Artifact parentPom = new DefaultArtifact(parent.getGroupId(), parent.getArtifactId(),
+                        ArtifactCoords.TYPE_POM, parent.getVersion());
+                final Path parentPomPath;
+                try {
+                    parentPomPath = artifactResolver.resolve(parentPom, repos).getArtifact().getFile().toPath();
+                } catch (BootstrapMavenException e) {
+                    throw new RuntimeException("Failed to resolve " + parentPom, e);
+                }
+                rawModel.getParent().setRelativePath(pomFile.toPath().getParent().relativize(parentPomPath).toString());
+            }
+
             ModelBuildingRequest req = new DefaultModelBuildingRequest();
             req.setPomFile(pomFile);
+            req.setRawModel(rawModel);
             req.setModelResolver(modelResolver);
             req.setSystemProperties(System.getProperties());
             req.setUserProperties(System.getProperties());
             req.setModelCache(modelCache);
+
             try {
                 return modelBuilder.build(req).getEffectiveModel();
             } catch (ModelBuildingException e) {

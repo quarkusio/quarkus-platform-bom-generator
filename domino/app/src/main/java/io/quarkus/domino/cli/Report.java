@@ -15,6 +15,7 @@ public class Report extends BaseDepsToBuildCommand {
         if (manifest) {
             depResolver.consumeSorted(ManifestGenerator.builder()
                     .setArtifactResolver(getArtifactResolver())
+                    .setOutputFile(outputFile == null ? null : this.outputFile.toPath())
                     .build().toConsumer());
         } else {
             depResolver.log();
