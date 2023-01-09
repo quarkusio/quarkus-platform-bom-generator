@@ -176,6 +176,9 @@ public class NonQuarkusDepsToBuildMojo extends AbstractMojo {
     @Parameter(required = false, property = "validateCodeRepoTags")
     boolean validateCodeRepoTags;
 
+    @Parameter(required = false, property = "warnOnResolutionErrors")
+    boolean warnOnResolutionErrors;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
 
@@ -224,7 +227,8 @@ public class NonQuarkusDepsToBuildMojo extends AbstractMojo {
                         .setLogRemaining(logRemaining)
                         .setLogSummary(logSummary)
                         .setLogTrees(logTrees)
-                        .setValidateCodeRepoTags(validateCodeRepoTags))
+                        .setValidateCodeRepoTags(validateCodeRepoTags)
+                        .setWarnOnResolutionErrors(warnOnResolutionErrors))
                 .build().log();
     }
 
