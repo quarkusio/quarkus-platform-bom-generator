@@ -127,9 +127,16 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
             config.setWarnOnResolutionErrors(true);
         }
 
+        if (projectDir != null) {
+            if (!projectDir.isDirectory()) {
+                throw new RuntimeException(projectDir + " is not a directory");
+            }
+            config.setProjectDir(projectDir.toPath());
+        }
+
         if (includeNonManaged != null) {
             config.setIncludeNonManaged(includeNonManaged);
-        } else if (bom == null) {
+        } else if (bom == null || projectDir != null) {
             config.setIncludeNonManaged(true);
         }
 
@@ -153,13 +160,6 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
             }
         } else {
             excludeKeys = Set.of();
-        }
-
-        if (projectDir != null) {
-            if (!projectDir.isDirectory()) {
-                throw new RuntimeException(projectDir + " is not a directory");
-            }
-            config.setProjectDir(projectDir.toPath());
         }
 
         config.setExcludeBomImports(excludeBomImports)
