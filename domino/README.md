@@ -14,7 +14,7 @@ The latest release of the CLI tool, currently named domino.jar, can be downloade
 #### Generating a report for a local Maven project
 
 ```
-java -jar domino.jar from-maven report --project-dir=<project-dir>
+java -jar domino.jar from-maven report --project-dir=<project-dir> --log-modules-to-build
 ```
 
 This command will identify modules that are configured to be published (installed/deployed) to a Maven repository, analyzes their dependencies and generates
@@ -22,10 +22,12 @@ the report for the project grouping artifacts by their origins (source code loca
 The first group of artifacts (representing a project release) in the report will not have dependencies on any other group of artifacts while the last group of artifacts
 in the report will transitively depend on all of the artifact groups above it.
 
+`--log-modules-to-build` will output artifacts coordinates as GAVs instead of GACTV format, which is what the build automation scripts expect.
+
 #### Generating a report for a released project using its BOM
 
 ```
-java -jar domino.jar from-maven report --bom=io.vertx:vertx-dependencies:4.3.7 --include-non-managed
+java -jar domino.jar from-maven report --bom=io.vertx:vertx-dependencies:4.3.7 --include-non-managed --log-modules-to-build
 ```
 
 The command above will resolve the provided BOM artifact, collect dependencies of every constraint (managed dependency) present in the BOM and generate a complete
@@ -36,7 +38,7 @@ the report will contain only the constraints present in the BOM.
 #### Generating a report for specific Maven artifacts
 
 ```
-java -jar domino.jar from-maven report --root-artifacts=<g:a:v(,g:a:v)*>
+java -jar domino.jar from-maven report --root-artifacts=<g:a:v(,g:a:v)*> --log-modules-to-build
 ```
 
 The command above will collect dependencies and generate a report for the provided artifacts.
@@ -54,7 +56,7 @@ java -jar domino.jar project create --name=kafka --repo-url=https://github.com/a
 The command above will create the `~/.domino` directory and clone Kafka code repository in there. Once that's been done, a dependency report could be generated using the following command:
 
 ```
-java -jar domino.jar from-gradle --project=kafka --tag=3.3.1
+java -jar domino.jar from-gradle --project=kafka --tag=3.3.1 --log-modules-to-build
 ```
 The command will checkout the `3.3.1` tag in the cloned repository and print the report for it.
 
