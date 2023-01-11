@@ -513,7 +513,7 @@ public class ProjectDependencyResolver {
                 extDep.logBomImportsAndParents();
             }
             for (DependencyNode d : root.getChildren()) {
-                if (d.getDependency().isOptional()) {
+                if (!config.isIncludeOptionalDeps() && d.getDependency().isOptional()) {
                     continue;
                 }
                 processNodes(extDep, d, 1, false);
@@ -753,7 +753,9 @@ public class ProjectDependencyResolver {
         }
         if (fileOutput == null) {
             try {
-                Files.createDirectories(logOutputFile.getParent());
+                if (logOutputFile.getParent() != null) {
+                    Files.createDirectories(logOutputFile.getParent());
+                }
                 final OpenOption[] oo = appendOutput
                         ? new OpenOption[] { StandardOpenOption.CREATE, StandardOpenOption.APPEND }
                         : new OpenOption[] { StandardOpenOption.CREATE };
@@ -861,6 +863,12 @@ public class ProjectDependencyResolver {
         try {
             pomXml = resolver.resolve(toAetherArtifact(pomCoords), node.getRepositories()).getArtifact().getFile().toPath();
         } catch (BootstrapMavenException e) {
+
+            if (config.isWarnOnResolutionErrors()) {
+                log.warn(e.getCause() == null ? e.getLocalizedMessage() : e.getCause().getLocalizedMessage());
+                allDepsToBuild.remove(pomCoords);
+                return Map.of();
+            }
             throw new IllegalStateException("Failed to resolve " + pomCoords, e);
         }
         final Model model;
