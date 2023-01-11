@@ -33,7 +33,8 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     private final boolean logCodeRepoTree;
     private final boolean validateCodeRepoTags;
     private final boolean warnOnResolutionErrors;
-    private boolean includeAlreadyBuilt;
+    private final boolean includeAlreadyBuilt;
+    private final boolean includeOptionalDeps;
 
     private ProjectDependencyConfigImpl(ProjectDependencyConfig other) {
         this.projectDir = other.getProjectDir();
@@ -57,6 +58,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         includeAlreadyBuilt = other.isIncludeAlreadyBuilt();
         validateCodeRepoTags = other.isValidateCodeRepoTags();
         warnOnResolutionErrors = other.isWarnOnResolutionErrors();
+        includeOptionalDeps = other.isIncludeOptionalDeps();
     }
 
     @Override
@@ -164,6 +166,11 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         return includeAlreadyBuilt;
     }
 
+    @Override
+    public boolean isIncludeOptionalDeps() {
+        return includeOptionalDeps;
+    }
+
     static class Builder implements ProjectDependencyConfig.Mutable {
 
         private Path projectDir;
@@ -187,6 +194,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         private boolean validateCodeRepoTags;
         private boolean warnOnResolutionErrors;
         private boolean includeAlreadyBuilt;
+        private boolean includeOptionalDeps;
 
         Builder() {
         }
@@ -213,6 +221,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
             validateCodeRepoTags = other.isValidateCodeRepoTags();
             warnOnResolutionErrors = other.isWarnOnResolutionErrors();
             includeAlreadyBuilt = other.isIncludeAlreadyBuilt();
+            includeOptionalDeps = other.isIncludeOptionalDeps();
         }
 
         @Override
@@ -324,6 +333,11 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         @Override
         public boolean isIncludeAlreadyBuilt() {
             return includeAlreadyBuilt;
+        }
+
+        @Override
+        public boolean isIncludeOptionalDeps() {
+            return includeOptionalDeps;
         }
 
         @Override
@@ -455,6 +469,12 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         @Override
         public Mutable setIncludeAlreadyBuilt(boolean includeAlreadyBuilt) {
             this.includeAlreadyBuilt = includeAlreadyBuilt;
+            return this;
+        }
+
+        @Override
+        public Mutable setIncludeOptionalDeps(boolean includeOptionalDeps) {
+            this.includeOptionalDeps = includeOptionalDeps;
             return this;
         }
 

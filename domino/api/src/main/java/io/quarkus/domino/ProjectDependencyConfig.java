@@ -137,6 +137,13 @@ public interface ProjectDependencyConfig {
 
     boolean isIncludeAlreadyBuilt();
 
+    /**
+     * Whether to include optional dependencies of the root project artifacts
+     * 
+     * @return whether to include optional dependencies of the root project artifacts
+     */
+    boolean isIncludeOptionalDeps();
+
     default Mutable mutable() {
         return new ProjectDependencyConfigImpl.Builder(this);
     }
@@ -224,6 +231,8 @@ public interface ProjectDependencyConfig {
         Mutable setWarnOnResolutionErrors(boolean warn);
 
         Mutable setIncludeAlreadyBuilt(boolean includeAlreadyBuilt);
+
+        Mutable setIncludeOptionalDeps(boolean includeOptionalDeps);
 
         ProjectDependencyConfig build();
 

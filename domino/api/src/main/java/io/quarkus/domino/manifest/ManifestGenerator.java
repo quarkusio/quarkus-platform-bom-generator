@@ -162,7 +162,7 @@ public class ManifestGenerator {
                                 coords.getGroupId(),
                                 coords.getArtifactId(),
                                 coords.getVersion(),
-                                null, null));
+                                qualifiers, null));
                     } catch (MalformedPackageURLException e) {
                         throw new RuntimeException("Failed to generate Purl for " + coords.toCompactCoords(), e);
                     }

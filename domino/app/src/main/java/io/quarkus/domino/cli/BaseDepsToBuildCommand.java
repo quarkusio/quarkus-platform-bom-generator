@@ -111,6 +111,10 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
             "--export-config-to" }, description = "Export config to a file")
     public File exportTo;
 
+    @CommandLine.Option(names = {
+            "--include-optional-deps" }, description = "Includes optional dependencies of the root project artifacts")
+    public boolean includeOptionalDeps;
+
     private MavenArtifactResolver artifactResolver;
 
     @Override
@@ -155,8 +159,8 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
                 final String[] parts = keyStr.split(":");
                 excludeKeys.add(ArtifactKey.of(parts[0],
                         parts.length > 1 ? parts[1] : "*",
-                        parts.length > 2 ? parts[3] : "*",
-                        parts.length > 3 ? parts[4] : "*"));
+                        parts.length > 2 ? parts[2] : "*",
+                        parts.length > 3 ? parts[3] : "*"));
             }
         } else {
             excludeKeys = Set.of();
@@ -181,7 +185,8 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
                 .setProjectArtifacts(
                         rootArtifacts.stream().map(ArtifactCoords::fromString).collect(Collectors.toList()))
                 .setValidateCodeRepoTags(validateCodeRepoTags)
-                .setIncludeAlreadyBuilt(includeAlreadyBuilt);
+                .setIncludeAlreadyBuilt(includeAlreadyBuilt)
+                .setIncludeOptionalDeps(includeOptionalDeps);
 
         if (exportTo != null) {
             config.persist(exportTo.toPath());
