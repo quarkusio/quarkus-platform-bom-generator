@@ -758,7 +758,7 @@ public class ProjectDependencyResolver {
                 }
                 final OpenOption[] oo = appendOutput
                         ? new OpenOption[] { StandardOpenOption.CREATE, StandardOpenOption.APPEND }
-                        : new OpenOption[] { StandardOpenOption.CREATE };
+                        : new OpenOption[] {};
                 fileOutput = new PrintStream(Files.newOutputStream(logOutputFile, oo), false);
             } catch (Exception e) {
                 throw new RuntimeException("Failed to open " + logOutputFile + " for writing", e);

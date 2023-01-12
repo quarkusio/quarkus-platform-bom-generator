@@ -60,6 +60,25 @@ java -jar domino.jar from-gradle --project=kafka --tag=3.3.1 --log-modules-to-bu
 ```
 The command will checkout the `3.3.1` tag in the cloned repository and print the report for it.
 
+#### Generating SBOMs
+
+The only argument that needs to be added to generate an SBOM instead of a text file is `--manifest`.
+
+For example, the following command will generate a text file containing Vert.X artifacts managed by the Vert.X BOM (the SCM info and summary could be disabled by adding `--log-code-repos=false --log-summary=false`):
+```
+java -jar domino.jar from-maven report --bom=io.vertx:vertx-dependencies:4.3.4.redhat-00007 --output-file=report.txt
+```
+
+Adding the `--manifest` will turn the `report.txt` into an SBOM:
+```
+java -jar domino.jar from-maven report --bom=io.vertx:vertx-dependencies:4.3.4.redhat-00007 --output-file=report.txt --manifest
+```
+
+The above report will include only the Vert.X artifacts. Adding `--include-non-managed` will include all the non-optional dependencies of Vert.X artifacts in the report:
+```
+java -jar domino.jar from-maven report --bom=io.vertx:vertx-dependencies:4.3.4.redhat-00007 --include-non-managed --output-file=report.txt --manifest
+```
+
 ### Maven plugin
 
 There is also a Maven plugin goal that can be used to generate a dependency report. For example, here is one for Vert.X:
