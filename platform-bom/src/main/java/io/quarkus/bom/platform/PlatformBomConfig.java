@@ -33,6 +33,11 @@ public class PlatformBomConfig {
             return this;
         }
 
+        public Builder disableGroupAlignmentToPreferredVersions(boolean disableGroupAlignmentToPreferredVersions) {
+            config.disableGroupAlignmentToPreferredVersions = disableGroupAlignmentToPreferredVersions;
+            return this;
+        }
+
         public Builder addMember(PlatformMember member) {
             if (member.originalBomCoords() != null
                     && member.originalBomCoords().getArtifactId().equals("quarkus-bom")
@@ -122,6 +127,7 @@ public class PlatformBomConfig {
     private List<String> versionConstraintPreferences = Collections.emptyList();
     private int foreignPreferredConstraint = (ForeignPreferredConstraint.WARN.flag()
             | ForeignPreferredConstraint.ACCEPT_IF_COMPATIBLE.flag());
+    private boolean disableGroupAlignmentToPreferredVersions;
 
     private PlatformBomConfig() {
     }
@@ -164,6 +170,10 @@ public class PlatformBomConfig {
 
     public boolean isEnableNonMemberQuarkiverseExtensions() {
         return enableNonMemberQuarkiverseExtensions;
+    }
+
+    public boolean isDisableGroupAlignmentToPreferredVersions() {
+        return disableGroupAlignmentToPreferredVersions;
     }
 
     public ArtifactResolver artifactResolver() {

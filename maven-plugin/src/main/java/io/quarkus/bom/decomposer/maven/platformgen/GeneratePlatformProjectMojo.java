@@ -2322,6 +2322,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 .platformBom(bomArtifact)
                 .enableNonMemberQuarkiverseExtensions(bomGen.enableNonMemberQuarkiverseExtensions);
 
+        if (platformConfig.getBomGenerator() != null) {
+            configBuilder.disableGroupAlignmentToPreferredVersions(
+                    platformConfig.getBomGenerator().disableGroupAlignmentToPreferredVersions);
+        }
         for (PlatformMember member : members.values()) {
             configBuilder.addMember(member);
         }
