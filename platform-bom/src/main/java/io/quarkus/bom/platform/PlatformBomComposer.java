@@ -364,6 +364,11 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                         final String depVersion = dep.artifact().getVersion();
                         if (!preferred.getKey().equals(depVersion)) {
                             for (Map.Entry<String, ReleaseId> preferredVersion : preferredVersions.entrySet()) {
+                                if (config.isDisableGroupAlignmentToPreferredVersions()
+                                        && versionConstraintComparator().isPreferredVersion(preferredVersion.getKey())) {
+                                    // we still want to re-align to a more recent upstream
+                                    continue;
+                                }
                                 final Artifact artifact = dep.artifact().setVersion(preferredVersion.getKey());
                                 if (resolver().resolveOrNull(artifact) != null) {
                                     dep = ProjectDependency.create(preferredVersion.getValue(),
@@ -627,7 +632,6 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
 
     @Override
     public void visitProjectRelease(ProjectRelease release) throws BomDecomposerException {
-
         if (preferredVersions.isEmpty()) {
             final ProjectRelease.Builder releaseBuilder = extReleaseCollector.getOrCreateReleaseBuilder(release.id(),
                     memberBeingProcessed);
@@ -659,6 +663,11 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             ProjectDependency currentPreference = memberDep;
             if (!preferredVersions.containsKey(memberDep.artifact().getVersion())) {
                 for (Map.Entry<String, ReleaseId> preferredVersion : preferredVersions.entrySet()) {
+                    if (config.isDisableGroupAlignmentToPreferredVersions()
+                            && versionConstraintComparator().isPreferredVersion(preferredVersion.getKey())) {
+                        // we still want to re-align to a more recent upstream
+                        continue;
+                    }
                     final Artifact artifact = memberDep.artifact().setVersion(preferredVersion.getKey());
                     if (resolver().resolveOrNull(artifact) != null) {
                         currentPreference = ProjectDependency.create(preferredVersion.getValue(),
@@ -667,8 +676,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                     }
                 }
             }
-            final ProjectDependency previousPreference = preferredDeps.putIfAbsent(currentPreference.key(),
-                    currentPreference);
+            final ProjectDependency previousPreference = preferredDeps.putIfAbsent(currentPreference.key(), currentPreference);
             if (previousPreference != null) {
                 ensurePreferredVersionUsed(memberBeingProcessed, memberDep, currentPreference);
             }

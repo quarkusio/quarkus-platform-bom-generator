@@ -24,6 +24,14 @@ public class PlatformBomGeneratorConfig {
     List<String> versionConstraintPreferences = new ArrayList<>(0);
 
     /**
+     * This option disables automatic alignment to preferred versions (according to the {@link #versionConstraintPreferences})
+     * artifacts that appear to have the same origin as some other artifacts that match preferred versions (according to the
+     * {@link #versionConstraintPreferences})
+     */
+    @Parameter
+    boolean disableGroupAlignmentToPreferredVersions;
+
+    /**
      * @deprecated in favor of {@link #foreignPreferredConstraint}
      */
     @Parameter

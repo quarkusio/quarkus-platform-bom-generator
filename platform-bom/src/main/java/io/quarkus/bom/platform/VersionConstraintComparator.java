@@ -40,7 +40,11 @@ public class VersionConstraintComparator implements Comparator<ArtifactVersion> 
     }
 
     public boolean isPreferredVersion(ProjectDependency d) {
-        return isPreferredVersion(new DefaultArtifactVersion(d.artifact().getVersion()));
+        return isPreferredVersion(d.artifact().getVersion());
+    }
+
+    public boolean isPreferredVersion(String version) {
+        return isPreferredVersion(new DefaultArtifactVersion(version));
     }
 
     public boolean isPreferredVersion(ArtifactVersion v) {
