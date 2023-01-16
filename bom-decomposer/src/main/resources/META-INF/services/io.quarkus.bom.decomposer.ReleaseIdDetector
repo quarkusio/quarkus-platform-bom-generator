@@ -12,6 +12,7 @@ io.quarkus.bom.decomposer.detector.GlassfishHk2ReleaseIdDetector
 io.quarkus.bom.decomposer.detector.GlassfishJerseyReleaseIdDetector
 io.quarkus.bom.decomposer.detector.GlassfishJsonpReleaseIdDetector
 io.quarkus.bom.decomposer.detector.GuavaReleaseIdDetector
+io.quarkus.bom.decomposer.detector.HapiFhirReleaseIdDetector
 io.quarkus.bom.decomposer.detector.HibernateReleaseIdDetector
 io.quarkus.bom.decomposer.detector.H2ReleaseIdDetector
 io.quarkus.bom.decomposer.detector.JandexReleaseIdDetector
