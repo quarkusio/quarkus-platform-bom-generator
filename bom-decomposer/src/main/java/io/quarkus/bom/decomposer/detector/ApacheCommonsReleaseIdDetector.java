@@ -18,11 +18,9 @@ public class ApacheCommonsReleaseIdDetector implements ReleaseIdDetector {
             throws BomDecomposerException {
         final String artifactId = artifact.getArtifactId();
         if (artifact.getGroupId().equals("org.apache.commons")
-                && (artifact.getArtifactId().equals("commons-parent")
-                        || artifact.getArtifactId().equals("commons-lang3")
+                && (artifact.getArtifactId().equals("commons-lang3")
                         || artifact.getArtifactId().equals("commons-text")
-                        || artifactId.equals("commons-compress"))
-                || artifact.getGroupId().equals("commons-io")) {
+                        || artifactId.equals("commons-compress"))) {
             ReleaseId releaseId = releaseResolver.defaultReleaseId(artifact);
             String repoUrl = releaseId.origin().toString();
             if (!repoUrl.startsWith(GITBOX_APACHE_ORG_REPOS_ASF)) {
