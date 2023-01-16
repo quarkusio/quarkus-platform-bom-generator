@@ -24,6 +24,7 @@ public class KnownVPrefixReleaseIdDetector implements ReleaseIdDetector {
             "io.micrometer",
             "joda-time",
             "org.elasticsearch.client",
+            "org.jetbrains.kotlin",
             "org.mockito",
             "org.quartz-scheduler",
             "org.rocksdb",
