@@ -5,9 +5,9 @@ import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.domino.ProjectDependencyResolver;
 import io.quarkus.domino.cli.BaseDepsToBuildCommand;
 import io.quarkus.domino.cli.ToolConfig;
+import io.quarkus.domino.gradle.GradleActionOutcome;
+import io.quarkus.domino.gradle.PublicationReader;
 import io.quarkus.maven.dependency.ArtifactCoords;
-import io.quarkus.platform.depstobuild.gradle.PublicationReader;
-import io.quarkus.platform.depstobuild.gradle.PublicationReaderOutcome;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -23,6 +23,7 @@ import org.gradle.tooling.BuildActionExecuter;
 import org.gradle.tooling.GradleConnector;
 import org.gradle.tooling.ProjectConnection;
 import org.gradle.tooling.model.GradleModuleVersion;
+import org.gradle.tooling.model.gradle.GradlePublication;
 import picocli.CommandLine;
 
 @CommandLine.Command(name = "from-gradle")
@@ -167,8 +168,8 @@ public class FromGradle extends BaseDepsToBuildCommand {
                 .connect();
         log("Resolving module publications");
         try {
-            final PublicationReaderOutcome outcome = new PublicationReaderOutcome();
-            final BuildActionExecuter<List<GradleModuleVersion>> actionExecuter = connection
+            final GradleActionOutcome<List<GradlePublication>> outcome = new GradleActionOutcome<>();
+            final BuildActionExecuter<List<GradlePublication>> actionExecuter = connection
                     .action(new PublicationReader()).withArguments("-PskipAndroid=true").setStandardOutput(System.out);
             if (javaHome != null && !javaHome.isBlank()) {
                 actionExecuter.setJavaHome(new File(javaHome));
@@ -176,7 +177,7 @@ public class FromGradle extends BaseDepsToBuildCommand {
                 actionExecuter.setJavaHome(new File("/home/aloubyansky/jdk/jdk1.8.0_261"));
             }
             actionExecuter.run(outcome);
-            return outcome.getPublications();
+            return outcome.getResult().stream().map(GradlePublication::getId).collect(Collectors.toList());
         } finally {
             connection.close();
         }

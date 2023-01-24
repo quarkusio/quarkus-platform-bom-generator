@@ -1,0 +1,57 @@
+plugins {
+    id 'java-gradle-plugin'
+}
+
+compileJava {
+    options.encoding = 'UTF-8'
+    sourceCompatibility = '8'
+    targetCompatibility = '8'
+}
+
+compileTestJava {
+    options.encoding = 'UTF-8'
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+dependencies {
+    implementation enforcedPlatform("io.quarkus:quarkus-bom:${quarkusVersion}")
+    implementation "io.quarkus:quarkus-domino-gradle-dependency-model:${version}"
+    api gradleApi()
+}
+
+test {
+    // propagate the custom local maven repo, in case it's configured
+    if (System.properties.containsKey('maven.repo.local')) {
+        systemProperty 'maven.repo.local', System.properties.get('maven.repo.local')
+    }
+    testLogging {
+        events "passed", "skipped", "failed"
+    }
+    useJUnitPlatform()
+}
+
+group = "io.quarkus.domino"
+
+gradlePlugin {
+    plugins {
+        dependencyPlugin {
+            id = 'io.quarkus.domino'
+            implementationClass = 'io.quarkus.domino.gradle.DependencyPlugin'
+            displayName = 'Quarkus Domino Dependency Plugin'
+            description = 'Provides a project dependency model'
+        }
+    }
+}
+
+javadoc {
+    options.addStringOption('encoding', 'UTF-8')
+}
+
+wrapper {
+    distributionType = Wrapper.DistributionType.ALL
+}
+

@@ -1,0 +1,16 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>io.quarkus</groupId>
+    <artifactId>quarkus-domino-parent</artifactId>
+    <version>0.0.75-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>quarkus-domino-gradle-dependency-model</artifactId>
+  <name>Quarkus - Platform BOM Tools - Domino - Gradle dependency model</name>
+
+  <properties>
+    <maven.compiler.release>8</maven.compiler.release>
+  </properties>
+
+</project>
