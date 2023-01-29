@@ -7,7 +7,7 @@
   </parent>
 
   <artifactId>quarkus-domino-gradle-project-reader</artifactId>
-  <name>Quarkus - Platform BOM Tools - Domino build tool - Gradle project reader</name>
+  <name>Quarkus - Platform BOM Tools - Domino - Gradle project reader</name>
 
   <properties>
     <maven.compiler.release>8</maven.compiler.release>
@@ -17,6 +17,11 @@
     <dependency>
       <groupId>org.gradle</groupId>
       <artifactId>gradle-tooling-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-domino-gradle-dependency-model</artifactId>
+      <version>${project.version}</version>
     </dependency>
   </dependencies>
 

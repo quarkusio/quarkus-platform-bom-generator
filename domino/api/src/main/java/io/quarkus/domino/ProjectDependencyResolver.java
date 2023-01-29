@@ -7,10 +7,7 @@ import io.quarkus.bom.decomposer.ReleaseIdFactory;
 import io.quarkus.bom.decomposer.ReleaseIdResolver;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
-import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
-import io.quarkus.bootstrap.resolver.maven.workspace.LocalWorkspace;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
-import io.quarkus.bootstrap.util.IoUtils;
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
@@ -41,8 +38,6 @@ import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
 import org.apache.maven.model.DependencyManagement;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Parent;
-import org.apache.maven.model.Plugin;
-import org.apache.maven.model.PluginExecution;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.collection.CollectRequest;
@@ -50,6 +45,8 @@ import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.util.artifact.JavaScopes;
+import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.lib.Repository;
 
 public class ProjectDependencyResolver {
 
@@ -186,6 +183,9 @@ public class ProjectDependencyResolver {
     private final Map<ArtifactCoords, Map<String, String>> effectivePomProps = new HashMap<>();
 
     private final Map<Set<ReleaseId>, List<ReleaseId>> circularRepoDeps = new HashMap<>();
+
+    private Map<ArtifactCoords, DependencyNode> preResolvedRootArtifacts = Map.of();
+    private ReleaseId projectReleaseId;
 
     public ProjectDependencyConfig getConfig() {
         return config;
@@ -335,7 +335,6 @@ public class ProjectDependencyResolver {
             if (isIncluded(coords) || !isExcluded(coords)) {
                 processRootArtifact(artifactConstraintsProvider.apply(coords), coords);
             }
-
         }
 
         for (ArtifactCoords coords : config.getIncludeArtifacts()) {
@@ -392,23 +391,24 @@ public class ProjectDependencyResolver {
 
     protected Iterable<ArtifactCoords> getProjectArtifacts() {
         if (config.getProjectDir() != null) {
-            final LocalWorkspace ws = resolver.getMavenContext().getWorkspace();
-            final List<Path> createdDirs = new ArrayList<>();
-            Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    for (Path p : createdDirs) {
-                        IoUtils.recursiveDelete(p);
-                    }
+            final BuildTool buildTool = BuildTool.forProjectDir(config.getProjectDir());
+            Collection<ArtifactCoords> result;
+            if (BuildTool.MAVEN.equals(buildTool)) {
+                result = MavenProjectReader.resolveModuleDependencies(resolver);
+            } else if (BuildTool.GRADLE.equals(buildTool)) {
+                preResolvedRootArtifacts = GradleProjectReader.resolveModuleDependencies(config.getProjectDir(), resolver);
+                result = preResolvedRootArtifacts.keySet();
+                try {
+                    final Repository gitRepo = Git.open(config.getProjectDir().toFile()).getRepository();
+                    final String repoUrl = gitRepo.getConfig().getString("remote", "origin", "url");
+                    projectReleaseId = ReleaseIdFactory.forScmAndTag(repoUrl, gitRepo.getBranch());
+                } catch (IOException e) {
+                    log.warn("Failed to determine the Git repository URL: ", e.getLocalizedMessage());
+                    final ArtifactCoords a = result.iterator().next();
+                    projectReleaseId = ReleaseIdFactory.forGav(a.getGroupId(), a.getArtifactId(), a.getVersion());
                 }
-            }));
-            ws.getProjects().values().forEach(p -> ensureResolvable(p, createdDirs));
-            final List<ArtifactCoords> result = new ArrayList<>();
-            for (LocalProject project : ws.getProjects().values()) {
-                if (isPublished(project)) {
-                    result.add(ArtifactCoords.of(project.getGroupId(), project.getArtifactId(),
-                            ArtifactCoords.DEFAULT_CLASSIFIER, project.getRawModel().getPackaging(), project.getVersion()));
-                }
+            } else {
+                throw new IllegalStateException("Unrecognized build tool " + buildTool);
             }
             return result;
         }
@@ -426,72 +426,9 @@ public class ProjectDependencyResolver {
         return config.getProjectArtifacts();
     }
 
-    private static boolean isPublished(LocalProject project) {
-        final Model model = project.getModelBuildingResult() == null ? project.getRawModel()
-                : project.getModelBuildingResult().getEffectiveModel();
-        String skipStr = model.getProperties().getProperty("maven.install.skip");
-        if (skipStr != null && Boolean.parseBoolean(skipStr)) {
-            return false;
-        }
-        skipStr = model.getProperties().getProperty("maven.deploy.skip");
-        if (skipStr != null && Boolean.parseBoolean(skipStr)) {
-            return false;
-        }
-        if (model.getBuild() != null) {
-            for (Plugin plugin : model.getBuild().getPlugins()) {
-                if (plugin.getArtifactId().equals("maven-install-plugin")
-                        || plugin.getArtifactId().equals("maven-deploy-plugin")) {
-                    for (PluginExecution e : plugin.getExecutions()) {
-                        if (e.getId().startsWith("default-") && e.getPhase().equals("none")) {
-                            return false;
-                        }
-                    }
-                }
-            }
-        }
-        return true;
-    }
-
-    private static void ensureResolvable(LocalProject project, List<Path> createdDirs) {
-        if (!project.getRawModel().getPackaging().equals(ArtifactCoords.TYPE_POM)) {
-            final Path classesDir = project.getClassesDir();
-            if (!Files.exists(classesDir)) {
-                Path topDirToCreate = classesDir;
-                while (!Files.exists(topDirToCreate.getParent())) {
-                    topDirToCreate = topDirToCreate.getParent();
-                }
-                try {
-                    Files.createDirectories(classesDir);
-                    createdDirs.add(topDirToCreate);
-                } catch (IOException e) {
-                    throw new RuntimeException("Failed to create " + classesDir, e);
-                }
-            }
-        }
-    }
-
     private void processRootArtifact(List<Dependency> managedDeps, ArtifactCoords rootArtifact) {
 
-        final DependencyNode root;
-        try {
-            final Artifact a = toAetherArtifact(rootArtifact);
-            root = resolver.getSystem().collectDependencies(resolver.getSession(), new CollectRequest()
-                    .setManagedDependencies(managedDeps)
-                    .setRepositories(resolver.getRepositories())
-                    .setRoot(new Dependency(a, JavaScopes.RUNTIME)))
-                    .getRoot();
-            // if the dependencies are not found, make sure the artifact actually exists
-            if (root.getChildren().isEmpty()) {
-                resolver.resolve(a);
-            }
-        } catch (Exception e) {
-            if (config.isWarnOnResolutionErrors()) {
-                log.warn(e.getCause() == null ? e.getLocalizedMessage() : e.getCause().getLocalizedMessage());
-                allDepsToBuild.remove(rootArtifact);
-                return;
-            }
-            throw new RuntimeException("Failed to collect dependencies of " + rootArtifact.toCompactCoords(), e);
-        }
+        final DependencyNode root = collectDependencies(rootArtifact, managedDeps);
 
         if (config.isLogTrees()) {
             if (targetBomConstraints.contains(rootArtifact)) {
@@ -529,6 +466,33 @@ public class ProjectDependencyResolver {
         }
     }
 
+    private DependencyNode collectDependencies(ArtifactCoords coords, List<Dependency> managedDeps) {
+        DependencyNode root = preResolvedRootArtifacts.get(coords);
+        if (root != null) {
+            return root;
+        }
+        try {
+            final Artifact a = toAetherArtifact(coords);
+            root = resolver.getSystem().collectDependencies(resolver.getSession(), new CollectRequest()
+                    .setManagedDependencies(managedDeps)
+                    .setRepositories(resolver.getRepositories())
+                    .setRoot(new Dependency(a, JavaScopes.RUNTIME)))
+                    .getRoot();
+            // if the dependencies are not found, make sure the artifact actually exists
+            if (root.getChildren().isEmpty()) {
+                resolver.resolve(a);
+            }
+        } catch (Exception e) {
+            if (config.isWarnOnResolutionErrors()) {
+                log.warn(e.getCause() == null ? e.getLocalizedMessage() : e.getCause().getLocalizedMessage());
+                allDepsToBuild.remove(coords);
+                return null;
+            }
+            throw new RuntimeException("Failed to collect dependencies of " + coords.toCompactCoords(), e);
+        }
+        return root;
+    }
+
     private static DefaultArtifact toAetherArtifact(ArtifactCoords a) {
         return new DefaultArtifact(a.getGroupId(),
                 a.getArtifactId(), a.getClassifier(),
@@ -543,10 +507,14 @@ public class ProjectDependencyResolver {
         final Map<ArtifactCoords, ReleaseId> artifactReleases = new HashMap<>();
         for (Map.Entry<ArtifactCoords, List<RemoteRepository>> c : allDepsToBuild.entrySet()) {
             final ReleaseId releaseId;
-            try {
-                releaseId = idResolver.releaseId(toAetherArtifact(c.getKey()), c.getValue());
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to resolve release id for " + c, e);
+            if (this.preResolvedRootArtifacts.containsKey(c.getKey())) {
+                releaseId = projectReleaseId;
+            } else {
+                try {
+                    releaseId = idResolver.releaseId(toAetherArtifact(c.getKey()), c.getValue());
+                } catch (Exception e) {
+                    throw new RuntimeException("Failed to resolve release id for " + c, e);
+                }
             }
             getOrCreateRepo(releaseId).artifacts.put(c.getKey(), c.getValue());
             artifactReleases.put(c.getKey(), releaseId);
@@ -826,10 +794,14 @@ public class ProjectDependencyResolver {
         if (!addArtifactToBuild(coords, node.getRepositories())) {
             return false;
         }
-        if (!config.isExcludeParentPoms()) {
+        if (!config.isExcludeParentPoms() && !isExcludeParentPoms(coords)) {
             addImportedBomsAndParentPomToBuild(coords, node);
         }
         return true;
+    }
+
+    private boolean isExcludeParentPoms(ArtifactCoords coords) {
+        return preResolvedRootArtifacts.containsKey(coords);
     }
 
     private boolean addArtifactToBuild(ArtifactCoords coords, List<RemoteRepository> repos) {
@@ -863,7 +835,6 @@ public class ProjectDependencyResolver {
         try {
             pomXml = resolver.resolve(toAetherArtifact(pomCoords), node.getRepositories()).getArtifact().getFile().toPath();
         } catch (BootstrapMavenException e) {
-
             if (config.isWarnOnResolutionErrors()) {
                 log.warn(e.getCause() == null ? e.getLocalizedMessage() : e.getCause().getLocalizedMessage());
                 allDepsToBuild.remove(pomCoords);

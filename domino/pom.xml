@@ -8,10 +8,12 @@
 
   <artifactId>quarkus-domino-parent</artifactId>
   <packaging>pom</packaging>
-  <name>Quarkus - Platform BOM Tools - Domino build tool - Parent</name>
+  <name>Quarkus - Platform BOM Tools - Domino - Parent</name>
 
   <modules>
     <module>api</module>
+    <module>gradle-dependency-model</module>
+    <module>gradle-dependency-plugin</module>
     <module>gradle-project-reader</module>
     <module>app</module>
   </modules>

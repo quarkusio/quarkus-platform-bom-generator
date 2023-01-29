@@ -7,12 +7,21 @@
   </parent>
 
   <artifactId>quarkus-domino-api</artifactId>
-  <name>Quarkus - Platform BOM Tools - Domino build tool - API</name>
+  <name>Quarkus - Platform BOM Tools - Domino - API</name>
 
   <dependencies>
     <dependency>
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-platform-bom-decomposer</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-domino-gradle-dependency-model</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-domino-gradle-project-reader</artifactId>
     </dependency>
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
@@ -25,8 +34,15 @@
     <dependency>
       <groupId>org.cyclonedx</groupId>
       <artifactId>cyclonedx-core-java</artifactId>
-      <version>7.3.1</version>
     </dependency>
+      <dependency>
+        <groupId>org.eclipse.jgit</groupId>
+        <artifactId>org.eclipse.jgit</artifactId>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jgit</groupId>
+        <artifactId>org.eclipse.jgit.ssh.jsch</artifactId>
+      </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>

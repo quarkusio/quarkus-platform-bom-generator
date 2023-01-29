@@ -1,0 +1,13 @@
+plugins {
+    id "com.gradle.enterprise" version "3.12.2"
+}
+
+gradleEnterprise {
+    buildScan {
+        // plugin configuration
+        //See also: https://docs.gradle.com/enterprise/gradle-plugin/
+        termsOfServiceUrl = 'https://gradle.com/terms-of-service';
+        termsOfServiceAgree = 'yes'
+        publishOnFailure()
+    }
+}
