@@ -96,6 +96,7 @@ public class GradleProjectReader {
             out.println("initscript {");
             out.println("    repositories {");
             out.println("        mavenLocal()");
+            out.println("        mavenCentral()");
             out.println("    }");
             out.println("    dependencies {");
             out.println(
