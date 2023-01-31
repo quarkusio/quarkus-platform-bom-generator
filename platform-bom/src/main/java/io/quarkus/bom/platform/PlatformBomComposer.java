@@ -346,41 +346,28 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                 continue;
             }
 
-            final LinkedHashMap<String, ReleaseId> preferredVersions = preferredVersions(releases);
-            final Set<ArtifactKey> merged = new HashSet<>();
+            // pick the preferred version for each dependency
+            final Map<ArtifactKey, ProjectDependency> preferredReleaseDeps = new HashMap<>();
             for (ProjectRelease release : releases) {
-                for (Map.Entry<String, ReleaseId> preferred : preferredVersions.entrySet()) {
-                    if (release.id().equals(preferred.getValue())) {
-                        mergeExtensionDeps(release, merged);
-                        break;
-                    }
-                    for (ProjectDependency dep : release.dependencies()) {
-                        if (merged.contains(dep.key())) {
-                            continue;
+                for (ProjectDependency dep : release.dependencies()) {
+                    preferredReleaseDeps.merge(dep.key(), dep, (current, other) -> {
+                        if (versionConstraintComparator().compare(new DefaultArtifactVersion(current.artifact().getVersion()),
+                                new DefaultArtifactVersion(other.artifact().getVersion())) > 0) {
+                            return current;
                         }
-                        if (preferredDeps.containsKey(dep.key())) {
-                            continue;
-                        }
-                        final String depVersion = dep.artifact().getVersion();
-                        if (!preferred.getKey().equals(depVersion)) {
-                            for (Map.Entry<String, ReleaseId> preferredVersion : preferredVersions.entrySet()) {
-                                if (config.isDisableGroupAlignmentToPreferredVersions()
-                                        && versionConstraintComparator().isPreferredVersion(preferredVersion.getKey())) {
-                                    // we still want to re-align to a more recent upstream
-                                    continue;
-                                }
-                                final Artifact artifact = dep.artifact().setVersion(preferredVersion.getKey());
-                                if (resolver().resolveOrNull(artifact) != null) {
-                                    dep = ProjectDependency.create(preferredVersion.getValue(),
-                                            dep.dependency().setArtifact(artifact));
-                                    break;
-                                }
-                            }
-                        }
-                        addNonQuarkusDep(dep);
-                        merged.add(dep.key());
-                    }
+                        return other;
+                    });
                 }
+            }
+
+            // align each dependency from the origin to the preferred version
+            final LinkedHashMap<String, ReleaseId> preferredVersions = preferredVersions(releases);
+            for (ProjectDependency dep : preferredReleaseDeps.values()) {
+                final ProjectDependency preferredDep = preferredDeps.get(dep.key());
+                if (preferredDep != null && preferredDep.artifact().getVersion().equals(dep.artifact().getVersion())) {
+                    continue;
+                }
+                addNonQuarkusDep(getPreferredDependencyVersion(dep, preferredVersions));
             }
         }
 
@@ -397,6 +384,27 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             platformBuilder.addRelease(builder.build());
         }
         return platformBuilder.build();
+    }
+
+    private ProjectDependency getPreferredDependencyVersion(ProjectDependency dep,
+            LinkedHashMap<String, ReleaseId> preferredVersions) {
+        for (Map.Entry<String, ReleaseId> preferredVersion : preferredVersions.entrySet()) {
+            if (dep.artifact().getVersion().equals(preferredVersion.getKey())) {
+                return dep;
+            }
+            if (config.isDisableGroupAlignmentToPreferredVersions()
+                    && versionConstraintComparator().isPreferredVersion(preferredVersion.getKey())) {
+                // we still want to re-align to a more recent upstream
+                continue;
+            }
+            final Artifact artifact = dep.artifact().setVersion(preferredVersion.getKey());
+            if (resolver().resolveOrNull(artifact) != null) {
+                dep = ProjectDependency.create(preferredVersion.getValue(),
+                        dep.dependency().setArtifact(artifact));
+                break;
+            }
+        }
+        return dep;
     }
 
     private void logCommonNotManagedDeps(Map<ReleaseId, ProjectRelease.Builder> releaseBuilders)
