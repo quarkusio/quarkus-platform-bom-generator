@@ -5,7 +5,7 @@ import io.quarkus.picocli.runtime.annotations.TopCommand;
 import picocli.CommandLine;
 
 @TopCommand
-@CommandLine.Command(mixinStandardHelpOptions = true, subcommands = { FromMaven.class, FromGradle.class,
+@CommandLine.Command(mixinStandardHelpOptions = true, subcommands = { Report.class, FromMaven.class, FromGradle.class,
         FromConfig.class, Project.class, Version.class })
 public class EntryCommand {
 
