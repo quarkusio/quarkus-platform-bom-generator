@@ -9,6 +9,7 @@ import io.quarkus.domino.gradle.GradleModuleDependencies;
 import io.quarkus.domino.gradle.GradleProjectDependencies;
 import io.quarkus.domino.gradle.GradleProjectDependencyResolver;
 import io.quarkus.maven.dependency.ArtifactCoords;
+import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.UncheckedIOException;
@@ -35,8 +36,8 @@ import org.gradle.tooling.ProjectConnection;
 public class GradleProjectReader {
 
     public static Map<ArtifactCoords, DependencyNode> resolveModuleDependencies(Path projectDir,
-            MavenArtifactResolver mavenResolver) {
-        final Collection<GradleModuleDependencies> modules = resolveDirtyTrees(projectDir);
+            boolean java8, String javaHome, MavenArtifactResolver mavenResolver) {
+        final Collection<GradleModuleDependencies> modules = resolveDirtyTrees(projectDir, java8, javaHome);
         final Map<ArtifactCoords, DependencyNode> result = new HashMap<>(modules.size());
         for (GradleModuleDependencies module : modules) {
             final DependencyNode moduleNode = createNode(new Dependency(
@@ -54,7 +55,7 @@ public class GradleProjectReader {
         return result;
     }
 
-    private static Collection<GradleModuleDependencies> resolveDirtyTrees(Path projectDir) {
+    private static Collection<GradleModuleDependencies> resolveDirtyTrees(Path projectDir, boolean java8, String javaHome) {
         System.out.println("Connecting to " + projectDir);
         final ProjectConnection connection = GradleConnector.newConnector()
                 .forProjectDirectory(projectDir.toFile())
@@ -65,8 +66,21 @@ public class GradleProjectReader {
             final BuildActionExecuter<GradleProjectDependencies> actionExecuter = connection
                     .action(new GradleProjectDependencyResolver())
                     .withArguments("--init-script=" + dominoInitScript, "-PskipAndroid=true")
-                    //.setJavaHome(new File("/home/aloubyansky/jdk/jdk1.8.0_333"))
                     .setStandardOutput(System.out);
+            if ((javaHome == null || javaHome.isEmpty()) && java8) {
+                javaHome = System.getenv("JAVA8_HOME");
+                if (javaHome == null) {
+                    throw new IllegalArgumentException(
+                            "Gradle Java 8 option was enabled but JAVA8_HOME environment variable was not set");
+                }
+            }
+            if (javaHome != null && !javaHome.isEmpty()) {
+                final File jh = new File(javaHome);
+                if (!jh.isDirectory()) {
+                    throw new IllegalArgumentException("Provided Java home directory " + jh + " does not exist");
+                }
+                actionExecuter.setJavaHome(jh);
+            }
             final GradleActionOutcome<GradleProjectDependencies> outcome = GradleActionOutcome.of();
             actionExecuter.run(outcome);
             return outcome.getResult().getModules();

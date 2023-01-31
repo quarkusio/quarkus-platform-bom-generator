@@ -115,6 +115,14 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
             "--include-optional-deps" }, description = "Includes optional dependencies of the root project artifacts")
     public boolean includeOptionalDeps;
 
+    @CommandLine.Option(names = {
+            "--gradle-java8" }, description = "Whether to use Java 8 (configured with JAVA8_HOME) to fetch dependency information from a Gradle project")
+    public boolean gradleJava8;
+
+    @CommandLine.Option(names = {
+            "--gradle-java-home" }, description = "Java home directory to use for fetching dependency information from a Gradle project")
+    public String gradleJavaHome;
+
     private MavenArtifactResolver artifactResolver;
 
     @Override
@@ -186,7 +194,9 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
                         rootArtifacts.stream().map(ArtifactCoords::fromString).collect(Collectors.toList()))
                 .setValidateCodeRepoTags(validateCodeRepoTags)
                 .setIncludeAlreadyBuilt(includeAlreadyBuilt)
-                .setIncludeOptionalDeps(includeOptionalDeps);
+                .setIncludeOptionalDeps(includeOptionalDeps)
+                .setGradleJava8(gradleJava8)
+                .setGradleJavaHome(gradleJavaHome);
 
         if (exportTo != null) {
             config.persist(exportTo.toPath());

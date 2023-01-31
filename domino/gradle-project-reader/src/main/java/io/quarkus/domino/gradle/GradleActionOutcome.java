@@ -11,13 +11,18 @@ public class GradleActionOutcome<T> implements ResultHandler<T> {
     }
 
     private CompletableFuture<T> future = new CompletableFuture<>();
+    private Exception error;
 
     public T getResult() {
         try {
-            return future.get();
+            T result = future.get();
+            if (error == null) {
+                return result;
+            }
         } catch (Exception e) {
-            throw new RuntimeException("Failed to execute Gradle action", e);
+            throw new RuntimeException("Failed to perform a Gradle action", e);
         }
+        throw new RuntimeException("Failed to perform a Gradle action", error);
     }
 
     @Override
@@ -27,7 +32,7 @@ public class GradleActionOutcome<T> implements ResultHandler<T> {
 
     @Override
     public void onFailure(GradleConnectionException failure) {
-        failure.printStackTrace();
+        this.error = failure;
         future.complete(null);
     }
 }
