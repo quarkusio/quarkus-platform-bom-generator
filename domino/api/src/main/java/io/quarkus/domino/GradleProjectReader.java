@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import org.eclipse.aether.RepositoryException;
 import org.eclipse.aether.RepositorySystemSession;
+import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.collection.DependencyGraphTransformationContext;
 import org.eclipse.aether.graph.DefaultDependencyNode;
@@ -46,7 +47,10 @@ public class GradleProjectReader {
             moduleNode.setChildren(toMavenDeps(module.getDependencies()));
             try {
                 final DependencyNode node = converge(mavenResolver.getSession(), moduleNode);
-                result.put(ArtifactCoords.jar(module.getGroup(), module.getName(), module.getVersion()), node);
+                final Artifact a = node.getArtifact();
+                final ArtifactCoords coords = ArtifactCoords.of(a.getGroupId(), a.getArtifactId(),
+                        a.getClassifier(), a.getExtension(), a.getVersion());
+                result.put(coords, node);
                 //log(node, 0);
             } catch (AppModelResolverException e) {
                 throw new RuntimeException("Failed to converge Gradle dependency tree for module " + module, e);
@@ -95,8 +99,8 @@ public class GradleProjectReader {
         try (PrintStream out = new PrintStream(Files.newOutputStream(dominoInitScript))) {
             out.println("initscript {");
             out.println("    repositories {");
-            out.println("        mavenLocal()");
             out.println("        mavenCentral()");
+            out.println("        mavenLocal()");
             out.println("    }");
             out.println("    dependencies {");
             out.println(

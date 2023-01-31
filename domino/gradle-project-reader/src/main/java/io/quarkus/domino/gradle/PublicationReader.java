@@ -14,18 +14,18 @@ public class PublicationReader implements BuildAction<List<GradlePublication>> {
     public List<GradlePublication> execute(BuildController controller) {
         GradleProject project = controller.getModel(GradleProject.class);
         List<GradlePublication> publications = new ArrayList<>();
-        getPublications(project, controller, publications);
+        collectPublications(project, controller, publications);
         return publications;
     }
 
-    private void getPublications(GradleProject project, BuildController controller,
+    private void collectPublications(GradleProject project, BuildController controller,
             List<GradlePublication> publications) {
         ProjectPublications pp = controller.getModel(project, ProjectPublications.class);
         for (GradlePublication pub : pp.getPublications()) {
             publications.add(pub);
         }
         for (GradleProject child : project.getChildren()) {
-            getPublications(child, controller, publications);
+            collectPublications(child, controller, publications);
         }
     }
 }
