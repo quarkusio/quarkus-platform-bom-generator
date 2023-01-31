@@ -84,7 +84,8 @@ public class GradleProjectReader {
             out.println("        mavenLocal()");
             out.println("    }");
             out.println("    dependencies {");
-            out.println("        classpath \"io.quarkus.domino:io.quarkus.domino.gradle.plugin:0.0.75-SNAPSHOT\"");
+            out.println(
+                    "        classpath \"io.quarkus.domino:io.quarkus.domino.gradle.plugin:" + DominoVersion.VERSION + "\"");
             out.println("    }");
             out.println("}");
             out.println("allprojects {");
