@@ -428,8 +428,11 @@ public class ProjectDependencyResolver {
     }
 
     private void processRootArtifact(List<Dependency> managedDeps, ArtifactCoords rootArtifact) {
-
         final DependencyNode root = collectDependencies(rootArtifact, managedDeps);
+        if (root == null) {
+            // couldn't be resolved
+            return;
+        }
 
         if (config.isLogTrees()) {
             if (targetBomConstraints.contains(rootArtifact)) {
@@ -451,7 +454,8 @@ public class ProjectDependencyResolver {
                 extDep.logBomImportsAndParents();
             }
             for (DependencyNode d : root.getChildren()) {
-                if (!config.isIncludeOptionalDeps() && d.getDependency().isOptional()) {
+                if (d.getDependency().isOptional()
+                        && !(config.isIncludeOptionalDeps() || isIncluded(toCoords(d.getArtifact())))) {
                     continue;
                 }
                 processNodes(extDep, d, 1, false);
