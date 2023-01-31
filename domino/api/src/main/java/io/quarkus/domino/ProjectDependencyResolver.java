@@ -396,7 +396,8 @@ public class ProjectDependencyResolver {
             if (BuildTool.MAVEN.equals(buildTool)) {
                 result = MavenProjectReader.resolveModuleDependencies(resolver);
             } else if (BuildTool.GRADLE.equals(buildTool)) {
-                preResolvedRootArtifacts = GradleProjectReader.resolveModuleDependencies(config.getProjectDir(), resolver);
+                preResolvedRootArtifacts = GradleProjectReader.resolveModuleDependencies(config.getProjectDir(),
+                        config.isGradleJava8(), config.getGradleJavaHome(), resolver);
                 result = preResolvedRootArtifacts.keySet();
                 try {
                     final Repository gitRepo = Git.open(config.getProjectDir().toFile()).getRepository();

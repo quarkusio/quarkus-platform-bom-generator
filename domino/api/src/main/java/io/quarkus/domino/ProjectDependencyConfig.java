@@ -144,6 +144,21 @@ public interface ProjectDependencyConfig {
      */
     boolean isIncludeOptionalDeps();
 
+    /**
+     * Whether to use Java 8 to fetch dependency information from a Gradle project.
+     * In case this method returns true, the value of JAVA8_HOME environment variable will be used as the Java 8 home directory.
+     * 
+     * @return whether to use Java 8 to fetch dependency information from a Gradle project
+     */
+    boolean isGradleJava8();
+
+    /**
+     * Java home directory that should be used when fetching dependency information from a Gradle project.
+     * 
+     * @return Java home directory that should be used when fetching dependency information from a Gradle project.
+     */
+    String getGradleJavaHome();
+
     default Mutable mutable() {
         return new ProjectDependencyConfigImpl.Builder(this);
     }
@@ -233,6 +248,10 @@ public interface ProjectDependencyConfig {
         Mutable setIncludeAlreadyBuilt(boolean includeAlreadyBuilt);
 
         Mutable setIncludeOptionalDeps(boolean includeOptionalDeps);
+
+        Mutable setGradleJava8(boolean java8);
+
+        Mutable setGradleJavaHome(String javaHome);
 
         ProjectDependencyConfig build();
 

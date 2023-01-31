@@ -35,6 +35,8 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     private final boolean warnOnResolutionErrors;
     private final boolean includeAlreadyBuilt;
     private final boolean includeOptionalDeps;
+    private final boolean gradleJava8;
+    private final String gradleJavaHome;
 
     private ProjectDependencyConfigImpl(ProjectDependencyConfig other) {
         this.projectDir = other.getProjectDir();
@@ -59,6 +61,8 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         validateCodeRepoTags = other.isValidateCodeRepoTags();
         warnOnResolutionErrors = other.isWarnOnResolutionErrors();
         includeOptionalDeps = other.isIncludeOptionalDeps();
+        gradleJava8 = other.isGradleJava8();
+        gradleJavaHome = other.getGradleJavaHome();
     }
 
     @Override
@@ -171,6 +175,16 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         return includeOptionalDeps;
     }
 
+    @Override
+    public boolean isGradleJava8() {
+        return gradleJava8;
+    }
+
+    @Override
+    public String getGradleJavaHome() {
+        return gradleJavaHome;
+    }
+
     static class Builder implements ProjectDependencyConfig.Mutable {
 
         private Path projectDir;
@@ -195,6 +209,8 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         private boolean warnOnResolutionErrors;
         private boolean includeAlreadyBuilt;
         private boolean includeOptionalDeps;
+        private boolean gradleJava8;
+        private String gradleJavaHome;
 
         Builder() {
         }
@@ -222,6 +238,8 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
             warnOnResolutionErrors = other.isWarnOnResolutionErrors();
             includeAlreadyBuilt = other.isIncludeAlreadyBuilt();
             includeOptionalDeps = other.isIncludeOptionalDeps();
+            gradleJava8 = other.isGradleJava8();
+            gradleJavaHome = other.getGradleJavaHome();
         }
 
         @Override
@@ -338,6 +356,16 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         @Override
         public boolean isIncludeOptionalDeps() {
             return includeOptionalDeps;
+        }
+
+        @Override
+        public boolean isGradleJava8() {
+            return gradleJava8;
+        }
+
+        @Override
+        public String getGradleJavaHome() {
+            return gradleJavaHome;
         }
 
         @Override
@@ -475,6 +503,18 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         @Override
         public Mutable setIncludeOptionalDeps(boolean includeOptionalDeps) {
             this.includeOptionalDeps = includeOptionalDeps;
+            return this;
+        }
+
+        @Override
+        public Mutable setGradleJava8(boolean java8) {
+            this.gradleJava8 = java8;
+            return this;
+        }
+
+        @Override
+        public Mutable setGradleJavaHome(String javaHome) {
+            this.gradleJavaHome = javaHome;
             return this;
         }
 
