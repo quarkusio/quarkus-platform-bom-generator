@@ -11,16 +11,18 @@ This kind of report could be generated either using a CLI tool or a Maven plugin
 
 The latest release of the CLI tool, currently named domino.jar, can be downloaded from https://github.com/quarkusio/quarkus-platform-bom-generator/releases
 
-#### Generating a report for a local Maven project
+#### Generating dependency analysis reports for a local project
 
 ```
-java -jar domino.jar from-maven report --project-dir=<project-dir> --log-modules-to-build
+java -jar domino.jar report --project-dir=<project-dir> --log-modules-to-build
 ```
 
-This command will identify modules that are configured to be published (installed/deployed) to a Maven repository, analyzes their dependencies and generates
+This command will identify modules that are configured to be published (installed/deployed) to a Maven repository, analyze their dependencies and generate
 the report for the project grouping artifacts by their origins (source code location and tag) and sorting them according to their dependencies.
 The first group of artifacts (representing a project release) in the report will not have dependencies on any other group of artifacts while the last group of artifacts
 in the report will transitively depend on all of the artifact groups above it.
+
+`--project-dir` could point to either Maven or Gradle project.
 
 `--log-modules-to-build` will output artifacts coordinates as GAVs instead of GACTV format, which is what the build automation scripts expect.
 
@@ -66,12 +68,12 @@ The only argument that needs to be added to generate an SBOM instead of a text f
 
 For example, the following command will generate a text file containing Vert.X artifacts managed by the Vert.X BOM (the SCM info and summary could be disabled by adding `--log-code-repos=false --log-summary=false`):
 ```
-java -jar domino.jar from-maven report --bom=io.vertx:vertx-dependencies:4.3.4.redhat-00007 --output-file=report.txt
+java -jar domino.jar report --bom=io.vertx:vertx-dependencies:4.3.4.redhat-00007 --output-file=report.txt
 ```
 
 Adding the `--manifest` will turn the `report.txt` into an SBOM:
 ```
-java -jar domino.jar from-maven report --bom=io.vertx:vertx-dependencies:4.3.4.redhat-00007 --output-file=report.txt --manifest
+java -jar domino.jar report --bom=io.vertx:vertx-dependencies:4.3.4.redhat-00007 --output-file=report.txt --manifest
 ```
 
 The above report will include only the Vert.X artifacts. Adding `--include-non-managed` will include all the non-optional dependencies of Vert.X artifacts in the report:
