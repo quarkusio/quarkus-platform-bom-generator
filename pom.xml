@@ -225,6 +225,8 @@
             <configuration>
               <tagNameFormat>@{project.version}</tagNameFormat>
               <autoVersionSubmodules>true</autoVersionSubmodules>
+              <preparationGoals>clean install</preparationGoals>
+              <completionGoals>clean install</completionGoals>
             </configuration>
           </plugin>
           <plugin>
