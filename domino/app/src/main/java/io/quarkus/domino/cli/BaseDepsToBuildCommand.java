@@ -129,6 +129,23 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
     public Integer call() throws Exception {
 
         final ProjectDependencyConfig.Mutable config = ProjectDependencyConfig.builder();
+        initConfig(config);
+
+        if (exportTo != null) {
+            config.persist(exportTo.toPath());
+        } else {
+            final ProjectDependencyResolver dependencyResolver = ProjectDependencyResolver.builder()
+                    .setLogOutputFile(outputFile == null ? null : outputFile.toPath())
+                    .setAppendOutput(appendOutput)
+                    .setDependencyConfig(config)
+                    .setArtifactResolver(getArtifactResolver())
+                    .build();
+            return process(dependencyResolver);
+        }
+        return CommandLine.ExitCode.OK;
+    }
+
+    protected void initConfig(ProjectDependencyConfig.Mutable config) {
         if (bom != null) {
             config.setProjectBom(ArtifactCoords.fromString(bom));
         }
@@ -197,19 +214,6 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
                 .setIncludeOptionalDeps(includeOptionalDeps)
                 .setGradleJava8(gradleJava8)
                 .setGradleJavaHome(gradleJavaHome);
-
-        if (exportTo != null) {
-            config.persist(exportTo.toPath());
-        } else {
-            final ProjectDependencyResolver dependencyResolver = ProjectDependencyResolver.builder()
-                    .setLogOutputFile(outputFile == null ? null : outputFile.toPath())
-                    .setAppendOutput(appendOutput)
-                    .setDependencyConfig(config)
-                    .setArtifactResolver(getArtifactResolver())
-                    .build();
-            return process(dependencyResolver);
-        }
-        return CommandLine.ExitCode.OK;
     }
 
     protected MavenArtifactResolver getArtifactResolver() {
