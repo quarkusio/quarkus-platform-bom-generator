@@ -2,6 +2,7 @@ package io.quarkus.domino.cli;
 
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
+import io.quarkus.bootstrap.resolver.maven.options.BootstrapMavenOptions;
 import io.quarkus.domino.ProjectDependencyConfig;
 import io.quarkus.domino.ProjectDependencyResolver;
 import io.quarkus.maven.dependency.ArtifactCoords;
@@ -123,6 +124,11 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
             "--gradle-java-home" }, description = "Java home directory to use for fetching dependency information from a Gradle project")
     public String gradleJavaHome;
 
+    @CommandLine.Option(names = {
+            "--maven-profiles",
+            "-P" }, description = "Comma-separated list of Maven profiles that should be enabled when analyzing dependencies")
+    public String mavenProfiles;
+
     private MavenArtifactResolver artifactResolver;
 
     @Override
@@ -220,6 +226,11 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
         if (artifactResolver != null) {
             return artifactResolver;
         }
+
+        if (mavenProfiles != null) {
+            System.setProperty(BootstrapMavenOptions.QUARKUS_INTERNAL_MAVEN_CMD_LINE_ARGS, "-P" + mavenProfiles);
+        }
+
         try {
             if (projectDir == null) {
                 return artifactResolver = MavenArtifactResolver.builder().setWorkspaceDiscovery(false).build();
