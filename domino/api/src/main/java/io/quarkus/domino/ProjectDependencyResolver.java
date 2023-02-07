@@ -934,7 +934,9 @@ public class ProjectDependencyResolver {
             if (matcher.matches()) {
                 String name = matcher.group(2);
                 String value = props.get(name);
-                resolvedValue = expr.replace("${" + name + "}", value);
+                if (value != null) {
+                    resolvedValue = expr.replace("${" + name + "}", value);
+                }
             }
             if (resolvedValue == null) {
                 log.warn("Failed to resolve " + resolvedValue + " from " + dep);
