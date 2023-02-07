@@ -19,8 +19,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.ServiceLoader;
 import java.util.TreeMap;
 import java.util.function.Consumer;
 import org.apache.maven.model.MailingList;
@@ -115,7 +117,7 @@ public class ManifestGenerator {
     public Consumer<Collection<ReleaseRepo>> toConsumer() {
 
         return releases -> {
-            final Bom bom = new Bom();
+            Bom bom = new Bom();
             for (ReleaseRepo r : releases) {
                 for (Map.Entry<ArtifactCoords, List<RemoteRepository>> entry : r.getArtifacts().entrySet()) {
                     ArtifactCoords coords = entry.getKey();
@@ -158,6 +160,9 @@ public class ManifestGenerator {
                     bom.addComponent(c);
                 }
             }
+
+            bom = runTransformers(bom);
+
             final BomJsonGenerator bomGenerator = BomGeneratorFactory.createJson(schemaVersion(), bom);
             final String bomString = bomGenerator.toJsonString();
             if (outputFile == null) {
@@ -177,6 +182,21 @@ public class ManifestGenerator {
                 }
             }
         };
+    }
+
+    private Bom runTransformers(Bom bom) {
+        final Iterator<SbomTransformer> transformers = ServiceLoader.load(SbomTransformer.class).iterator();
+        if (transformers.hasNext()) {
+            final SbomTransformContextImpl ctx = new SbomTransformContextImpl(bom);
+            while (transformers.hasNext()) {
+                Bom transformed = transformers.next().transform(ctx);
+                if (transformed != null) {
+                    ctx.bom = transformed;
+                }
+            }
+            bom = ctx.bom;
+        }
+        return bom;
     }
 
     private static void extractMetadata(ReleaseRepo release, Model project, Component component) {
@@ -427,6 +447,20 @@ public class ManifestGenerator {
             public int hashCode() {
                 return hash;
             }
+        }
+    }
+
+    private static class SbomTransformContextImpl implements SbomTransformContext {
+
+        private Bom bom;
+
+        private SbomTransformContextImpl(Bom bom) {
+            this.bom = bom;
+        }
+
+        @Override
+        public Bom getOriginalBom() {
+            return bom;
         }
     }
 }
