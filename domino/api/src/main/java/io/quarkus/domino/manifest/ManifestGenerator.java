@@ -8,8 +8,6 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapModelBuilderFactory;
 import io.quarkus.bootstrap.resolver.maven.BootstrapModelResolver;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
-import io.quarkus.domino.ProjectDependencyConfig;
-import io.quarkus.domino.ProjectDependencyResolver;
 import io.quarkus.domino.ReleaseRepo;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.io.BufferedWriter;
@@ -112,24 +110,6 @@ public class ManifestGenerator {
             throw new RuntimeException("Failed to initialize Maven model resolver", e);
         }
         outputFile = builder.outputFile;
-    }
-
-    public static void main(String[] args) throws Exception {
-        final MavenArtifactResolver artifactResolver = MavenArtifactResolver.builder().setWorkspaceDiscovery(false).build();
-        ProjectDependencyResolver.builder()
-                .setArtifactResolver(artifactResolver)
-                .setDependencyConfig(ProjectDependencyConfig.builder()
-                        .setProjectBom(ArtifactCoords.pom("io.vertx", "vertx-dependencies", "4.3.5"))
-                        //.setProjectBom(ArtifactCoords.pom("io.quarkus", "quarkus-bootstrap-bom", "2.13.6.Final"))
-                        .setWarnOnResolutionErrors(true)
-                        .setIncludeNonManaged(true)
-                        .build())
-                .build()
-                .consumeSorted(
-                        builder()
-                                .setArtifactResolver(artifactResolver)
-                                .build()
-                                .toConsumer());
     }
 
     public Consumer<Collection<ReleaseRepo>> toConsumer() {
