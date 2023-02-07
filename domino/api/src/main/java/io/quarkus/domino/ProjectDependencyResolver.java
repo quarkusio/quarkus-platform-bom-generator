@@ -32,6 +32,8 @@ import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.apache.maven.artifact.versioning.ArtifactVersion;
 import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
@@ -51,6 +53,8 @@ import org.eclipse.jgit.lib.Repository;
 public class ProjectDependencyResolver {
 
     private static final String NOT_MANAGED = " [not managed]";
+    private static final String PROPERTY_REG_EXP = "([A-Za-z0-9-_\\.]*)\\$\\{([A-Za-z0-9-_\\.]+)}([A-Za-z0-9-_\\.]*)";
+    private static final Pattern PROPERTY_PATTERN = Pattern.compile(PROPERTY_REG_EXP);
 
     public static class Builder {
 
@@ -833,6 +837,7 @@ public class ProjectDependencyResolver {
     private Map<String, String> addImportedBomsAndParentPomToBuild(ArtifactCoords coords, DependencyNode node) {
         final ArtifactCoords pomCoords = coords.getType().equals(ArtifactCoords.TYPE_POM) ? coords
                 : ArtifactCoords.pom(coords.getGroupId(), coords.getArtifactId(), coords.getVersion());
+
         if (allDepsToBuild.containsKey(pomCoords)) {
             return effectivePomProps.getOrDefault(pomCoords, Map.of());
         }
@@ -923,14 +928,21 @@ public class ProjectDependencyResolver {
     }
 
     private String resolveProperty(String expr, org.apache.maven.model.Dependency dep, Map<String, String> props) {
-        if (expr.startsWith("${") && expr.endsWith("}")) {
-            final String name = expr.substring(2, expr.length() - 1);
-            final String value = props.get(name);
-            if (value == null) {
-                log.warn("Failed to resolve " + value + " from " + dep);
+        if (expr.contains("${") && expr.contains("}")) {
+            Matcher matcher = PROPERTY_PATTERN.matcher(expr);
+            String resolvedValue = null;
+            if (matcher.matches()) {
+                String name = matcher.group(2);
+                String value = props.get(name);
+                if (value != null) {
+                    resolvedValue = expr.replace("${" + name + "}", value);
+                }
+            }
+            if (resolvedValue == null) {
+                log.warn("Failed to resolve " + resolvedValue + " from " + dep);
                 return null;
             }
-            return resolveProperty(value, dep, props);
+            return resolveProperty(resolvedValue, dep, props);
         }
         return expr;
     }
