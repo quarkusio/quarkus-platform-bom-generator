@@ -13,29 +13,38 @@ public final class PropertyResolver {
     }
 
     private static String resolveProperty(String expr, Map<String, String> props, boolean nullIfNotResolved) {
-        StringBuilder sb = null;
-        int i = 0;
-        while (i < expr.length()) {
-            var c = expr.charAt(i++);
-            if (c == '$' && i + 1 < expr.length() && expr.charAt(i) == '{') {
-                var r = resolveProperty(expr, i - 1, props, nullIfNotResolved);
-                if (r.value == null) {
-                    return null;
-                }
-                if (sb == null) {
-                    if (i == 0 && r.endIndex == expr.length()) {
-                        return r.value;
+        while (true) {
+            StringBuilder sb = null;
+            int i = 0;
+            while (i < expr.length()) {
+                var c = expr.charAt(i++);
+                if (c == '$' && i + 1 < expr.length() && expr.charAt(i) == '{') {
+                    var r = resolveProperty(expr, i - 1, props, nullIfNotResolved);
+                    if (r.value == null) {
+                        return null;
                     }
-                    sb = new StringBuilder();
-                    sb.append(expr.substring(0, i - 1));
+                    if (sb == null) {
+                        if (i == 0 && r.endIndex == expr.length()) {
+                            return r.value;
+                        }
+                        sb = new StringBuilder();
+                        sb.append(expr.substring(0, i - 1));
+                    }
+                    sb.append(r.value);
+                    i = r.endIndex;
+                } else if (sb != null) {
+                    sb.append(c);
                 }
-                sb.append(r.value);
-                i = r.endIndex;
-            } else if (sb != null) {
-                sb.append(c);
             }
+            if (sb == null) {
+                return expr;
+            }
+            var resolved = sb.toString();
+            if (expr.equals(resolved)) {
+                return expr;
+            }
+            expr = resolved;
         }
-        return sb == null ? expr : sb.toString();
     }
 
     private static PropertyParsingResult resolveProperty(String s, int start, Map<String, String> props,
