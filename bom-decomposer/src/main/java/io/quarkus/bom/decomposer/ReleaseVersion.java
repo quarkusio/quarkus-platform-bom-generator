@@ -6,23 +6,27 @@ public interface ReleaseVersion {
 
     class Factory {
         public static ReleaseVersion tag(String tag) {
-            return new StringReleaseVersion("Tag", tag);
+            return new StringReleaseVersion("Tag", tag, true);
         }
 
         public static ReleaseVersion version(String version) {
-            return new StringReleaseVersion("Version", version);
+            return new StringReleaseVersion("Version", version, false);
         }
     }
+
+    boolean isTag();
 
     String asString();
 
     class StringReleaseVersion implements ReleaseVersion {
         final String type;
         final String value;
+        final boolean tag;
 
-        StringReleaseVersion(String type, String value) {
+        StringReleaseVersion(String type, String value, boolean tag) {
             this.type = Objects.requireNonNull(type);
             this.value = Objects.requireNonNull(value);
+            this.tag = tag;
         }
 
         @Override
@@ -50,6 +54,11 @@ public interface ReleaseVersion {
                 return false;
             StringReleaseVersion other = (StringReleaseVersion) obj;
             return Objects.equals(type, other.type) && Objects.equals(value, other.value);
+        }
+
+        @Override
+        public boolean isTag() {
+            return tag;
         }
     }
 }

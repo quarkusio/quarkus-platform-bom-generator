@@ -35,14 +35,18 @@
       <groupId>org.cyclonedx</groupId>
       <artifactId>cyclonedx-core-java</artifactId>
     </dependency>
-      <dependency>
-        <groupId>org.eclipse.jgit</groupId>
-        <artifactId>org.eclipse.jgit</artifactId>
-      </dependency>
-      <dependency>
-        <groupId>org.eclipse.jgit</groupId>
-        <artifactId>org.eclipse.jgit.ssh.jsch</artifactId>
-      </dependency>
+    <dependency>
+      <groupId>org.eclipse.jgit</groupId>
+      <artifactId>org.eclipse.jgit</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jgit</groupId>
+      <artifactId>org.eclipse.jgit.ssh.jsch</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.github.redhat-appstudio.jvmbuild</groupId>
+      <artifactId>hacbs-build-recipies-database</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>

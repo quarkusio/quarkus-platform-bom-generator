@@ -31,8 +31,11 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     private final boolean logNonManagedVisited;
     private final boolean logCodeRepos;
     private final boolean logCodeRepoTree;
+    private final List<String> recipeRepos;
     private final boolean validateCodeRepoTags;
+    private final boolean legacyScmLocator;
     private final boolean warnOnResolutionErrors;
+    private final boolean warnOnMissingScm;
     private final boolean includeAlreadyBuilt;
     private final boolean includeOptionalDeps;
     private final boolean gradleJava8;
@@ -58,8 +61,11 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         logCodeRepos = other.isLogCodeRepos();
         logCodeRepoTree = other.isLogCodeRepoTree();
         includeAlreadyBuilt = other.isIncludeAlreadyBuilt();
+        recipeRepos = toUnmodifiableList(other.getRecipeRepos());
         validateCodeRepoTags = other.isValidateCodeRepoTags();
+        legacyScmLocator = other.isLegacyScmLocator();
         warnOnResolutionErrors = other.isWarnOnResolutionErrors();
+        warnOnMissingScm = other.isWarnOnMissingScm();
         includeOptionalDeps = other.isIncludeOptionalDeps();
         gradleJava8 = other.isGradleJava8();
         gradleJavaHome = other.getGradleJavaHome();
@@ -156,13 +162,32 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     }
 
     @Override
+    public List<String> getRecipeRepos() {
+        return recipeRepos;
+    }
+
+    @Override
+    @Deprecated(since = "0.0.78")
+    /**
+     * @deprecated Deprecated in favor of the HACBS SCM locator that performs validation
+     */
     public boolean isValidateCodeRepoTags() {
         return validateCodeRepoTags;
     }
 
     @Override
+    public boolean isLegacyScmLocator() {
+        return legacyScmLocator;
+    }
+
+    @Override
     public boolean isWarnOnResolutionErrors() {
         return warnOnResolutionErrors;
+    }
+
+    @Override
+    public boolean isWarnOnMissingScm() {
+        return warnOnMissingScm;
     }
 
     @Override
@@ -205,8 +230,11 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         private boolean logNonManagedVisited;
         private boolean logCodeRepos;
         private boolean logCodeRepoTree;
+        private List<String> recipeRepoUrls = List.of();
         private boolean validateCodeRepoTags;
+        private boolean legacyScmLocator;
         private boolean warnOnResolutionErrors;
+        private boolean warnOnMissingScm;
         private boolean includeAlreadyBuilt;
         private boolean includeOptionalDeps;
         private boolean gradleJava8;
@@ -236,6 +264,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
             logCodeRepoTree = other.isLogCodeRepoTree();
             validateCodeRepoTags = other.isValidateCodeRepoTags();
             warnOnResolutionErrors = other.isWarnOnResolutionErrors();
+            warnOnMissingScm = other.isWarnOnMissingScm();
             includeAlreadyBuilt = other.isIncludeAlreadyBuilt();
             includeOptionalDeps = other.isIncludeOptionalDeps();
             gradleJava8 = other.isGradleJava8();
@@ -339,13 +368,32 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         }
 
         @Override
+        public List<String> getRecipeRepos() {
+            return recipeRepoUrls;
+        }
+
+        @Override
         public boolean isValidateCodeRepoTags() {
             return validateCodeRepoTags;
         }
 
         @Override
+        @Deprecated(since = "0.0.78")
+        /**
+         * @deprecated Deprecated in favor of the HACBS SCM locator that performs validation
+         */
+        public boolean isLegacyScmLocator() {
+            return legacyScmLocator;
+        }
+
+        @Override
         public boolean isWarnOnResolutionErrors() {
             return warnOnResolutionErrors;
+        }
+
+        @Override
+        public boolean isWarnOnMissingScm() {
+            return warnOnMissingScm;
         }
 
         @Override
@@ -486,14 +534,36 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         }
 
         @Override
+        public Mutable setRecipeRepos(List<String> recipeRepoUrls) {
+            this.recipeRepoUrls = recipeRepoUrls;
+            return this;
+        }
+
+        @Override
+        @Deprecated
+        /**
+         * @deprecated since 0.0.78 in favor of the HACBS SCM locator that performs validation
+         */
         public Mutable setValidateCodeRepoTags(boolean validateTags) {
             this.validateCodeRepoTags = validateTags;
             return this;
         }
 
         @Override
+        public Mutable setLegacyScmLocator(boolean legacyScmLocator) {
+            this.legacyScmLocator = legacyScmLocator;
+            return this;
+        }
+
+        @Override
         public Mutable setWarnOnResolutionErrors(boolean warn) {
             this.warnOnResolutionErrors = warn;
+            return this;
+        }
+
+        @Override
+        public Mutable setWarnOnMissingScm(boolean warnOnMissingScm) {
+            this.warnOnMissingScm = warnOnMissingScm;
             return this;
         }
 

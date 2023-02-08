@@ -29,7 +29,7 @@ in the report will transitively depend on all of the artifact groups above it.
 #### Generating a report for a released project using its BOM
 
 ```
-java -jar domino.jar from-maven report --bom=io.vertx:vertx-dependencies:4.3.7 --include-non-managed --log-modules-to-build
+java -jar domino.jar report --bom=io.vertx:vertx-dependencies:4.3.7 --include-non-managed --log-modules-to-build
 ```
 
 The command above will resolve the provided BOM artifact, collect dependencies of every constraint (managed dependency) present in the BOM and generate a complete
@@ -40,27 +40,10 @@ the report will contain only the constraints present in the BOM.
 #### Generating a report for specific Maven artifacts
 
 ```
-java -jar domino.jar from-maven report --root-artifacts=<g:a:v(,g:a:v)*> --log-modules-to-build
+java -jar domino.jar report --root-artifacts=<g:a:v(,g:a:v)*> --log-modules-to-build
 ```
 
 The command above will collect dependencies and generate a report for the provided artifacts.
-
-#### Generating a report for a released Gradle project
-
-Gradle projects currently require a slightly different approach. In perspective though, the same general set of commands should work for both Maven and Gradle projects.
-
-The first step to analyze a Gradle project would be to initialize one in the Domino tool:
-
-```
-java -jar domino.jar project create --name=kafka --repo-url=https://github.com/apache/kafka
-```
-
-The command above will create the `~/.domino` directory and clone Kafka code repository in there. Once that's been done, a dependency report could be generated using the following command:
-
-```
-java -jar domino.jar from-gradle --project=kafka --tag=3.3.1 --log-modules-to-build
-```
-The command will checkout the `3.3.1` tag in the cloned repository and print the report for it.
 
 #### Generating SBOMs
 
@@ -78,7 +61,43 @@ java -jar domino.jar report --bom=io.vertx:vertx-dependencies:4.3.4.redhat-00007
 
 The above report will include only the Vert.X artifacts. Adding `--include-non-managed` will include all the non-optional dependencies of Vert.X artifacts in the report:
 ```
-java -jar domino.jar from-maven report --bom=io.vertx:vertx-dependencies:4.3.4.redhat-00007 --include-non-managed --output-file=report.txt --manifest
+java -jar domino.jar report --bom=io.vertx:vertx-dependencies:4.3.4.redhat-00007 --include-non-managed --output-file=report.txt --manifest
+```
+
+#### Maven Artifact Resolver Settings
+
+The dependency analyzer will initialize a Maven artifact resolver taking into account user's Maven `settings.xml` file. The `report` command though allows passing custom Maven settings and/or activate specific profiles from the command line using the following arguments:
+
+* `-s` or `--maven-settings` can be used to provide a customer `settings.xml` file;
+* `-P` or `--maven-profiles` can be used to activate specific Maven profiles.
+
+#### SCM Location
+
+Domino is relying on the SCM locator library developed as part of the [Red Hat AppStudio's JVM buid service](https://github.com/redhat-appstudio/jvm-build-service/tree/main/java-components/build-recipes-database). The SCM locator library provides an API that fetches SCM info from a [GitHub repository](https://github.com/redhat-appstudio/jvm-build-data/tree/main/scm-info). It also allows configuring a fallback SCM locator.
+The Domino application comes pre-configured to use the SCM locator library and an SCM locator that fetchs SCM info from POM artifacts as a fallback.
+
+##### Fixing SCM location failures
+
+In case an SCM location was found to be missing for some artifacts, it would have to be looked up "manually" and added by openning a PR in the [SCM info repository](https://github.com/redhat-appstudio/jvm-build-data). A brief guide how to do that is available in the [Dealing With Missing Artifacts](https://github.com/apheleia-project/apheleia/blob/main/docs/index.adoc#dealing-with-missing-artifacts-artifactbuildmissing) chapter.
+
+A local clone of the SCM info repository could be passed to the Domino application with `--recipes` argument, whose value could be either a URL or a local filesystem path to the repository.
+```
+java -jar domino.jar report --bom=io.vertx:vertx-dependencies:4.3.4.redhat-00007 --output-file=report.txt --recipe-repos=/path/to/recipe/repo
+```
+
+##### Warn on missing SCM info
+
+By default, in case an SCM info couldn't be determined, the process will fail with a corresponding error. It is possible though to turn those errors into warnings in the logs by adding `--warn-on-missing-scm` argument to generate the complete report.
+The SCM information present in the resulting report will not be valid but it could be used to get an idea of it would look like if all the SCM info was available.
+```
+java -jar domino.jar report --bom=io.vertx:vertx-dependencies:4.3.4.redhat-00007 --output-file=report.txt --warn-on-missing-scm
+```
+
+##### Legacy SCM Locator
+
+Before intergating the SCM locator library from the AppStudio, Domino used its own SCM locator implementation. The plan is to remove it completely in the future, however until it's removed, it can be used instead of the SCM locator from AppStudio by adding `--legacy-scm-locator` argument to the command line:
+```
+java -jar domino.jar report --bom=io.vertx:vertx-dependencies:4.3.4.redhat-00007 --output-file=report.txt --legacy-scm-locator
 ```
 
 ### Maven plugin
@@ -107,7 +126,7 @@ There is also a Maven plugin goal that can be used to generate a dependency repo
         <plugin>
           <groupId>io.quarkus</groupId>
           <artifactId>quarkus-platform-bom-maven-plugin</artifactId>
-          <version>0.0.72</version>
+          <version>0.0.78</version>
           <configuration>
             <!-- The main BOM to productize -->
             <bom>io.vertx:vertx-dependencies:${vertx.version}</bom>
@@ -159,6 +178,18 @@ There is also a Maven plugin goal that can be used to generate a dependency repo
             <includeKeys>
               <key>xxx</key>
             </includeKeys>
+            -->
+            
+            <!-- Custom SCM info repo
+            <recipeRepos>
+              <repo>path/to/scm-info/repo</repo>
+            </recipeRepos>
+            -->
+            <!-- Warn on missing SCM info
+            <warnOnMissingScm>true</warnOnMissingScm>
+            -->
+            <!-- To use the legacy SCM locator
+            <legacyScmLocator>true</legacyScmLocator>
             -->
           </configuration>
         </plugin>

@@ -51,6 +51,7 @@
     <quarkus-jgit.version>2.3.1</quarkus-jgit.version>
     <jgit.version>6.4.0.202211300538-r</jgit.version>
     <junit.jupiter.version>5.7.1</junit.jupiter.version>
+    <hacbs-recipies-database.version>0.3</hacbs-recipies-database.version>
     <xom.version>1.3.7</xom.version>
   </properties>
   <modules>
@@ -157,6 +158,11 @@
         <groupId>org.cyclonedx</groupId>
         <artifactId>cyclonedx-core-java</artifactId>
         <version>${cyclonedx.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.redhat-appstudio.jvmbuild</groupId>
+        <artifactId>hacbs-build-recipies-database</artifactId>
+        <version>${hacbs-recipies-database.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>

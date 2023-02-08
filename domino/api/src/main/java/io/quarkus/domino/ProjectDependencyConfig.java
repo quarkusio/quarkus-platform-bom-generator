@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.Collection;
+import java.util.List;
 import java.util.Set;
 
 public interface ProjectDependencyConfig {
@@ -122,6 +123,13 @@ public interface ProjectDependencyConfig {
     boolean isLogCodeRepoTree();
 
     /**
+     * A list of build recipe repository URLs
+     * 
+     * @return list of build recipe repository URLs
+     */
+    List<String> getRecipeRepos();
+
+    /**
      * Whether to validate the discovered code repo and tags that are included in the report
      * 
      * @return whether to validate core repos and tags
@@ -129,11 +137,29 @@ public interface ProjectDependencyConfig {
     boolean isValidateCodeRepoTags();
 
     /**
+     * @deprecated Deprecated in favor of the HACBS SCM locator that performs validation
+     * 
+     *             Whether to use the legacy SCM detector.
+     * 
+     * @return whether to use the legacy SCM detector
+     */
+    @Deprecated(since = "0.0.78")
+    boolean isLegacyScmLocator();
+
+    /**
      * Whether to warn about errors not being able to resolve top level artifacts or fail the process
      * 
      * @return whether to warn on artifact resolution errors
      */
     boolean isWarnOnResolutionErrors();
+
+    /**
+     * Whether to issue a warning in case the SCM location could not be determined or fail with
+     * an error (the default behavior).
+     * 
+     * @return whether to fail in case the SCM location could not be determined
+     */
+    boolean isWarnOnMissingScm();
 
     boolean isIncludeAlreadyBuilt();
 
@@ -241,9 +267,16 @@ public interface ProjectDependencyConfig {
 
         Mutable setLogCodeRepoTree(boolean logCodeRepoGraph);
 
+        Mutable setRecipeRepos(List<String> recipeRepoUrls);
+
+        @Deprecated(since = "0.0.78")
         Mutable setValidateCodeRepoTags(boolean validateTags);
 
+        Mutable setLegacyScmLocator(boolean legacyScmLocator);
+
         Mutable setWarnOnResolutionErrors(boolean warn);
+
+        Mutable setWarnOnMissingScm(boolean warnOnMissingScm);
 
         Mutable setIncludeAlreadyBuilt(boolean includeAlreadyBuilt);
 

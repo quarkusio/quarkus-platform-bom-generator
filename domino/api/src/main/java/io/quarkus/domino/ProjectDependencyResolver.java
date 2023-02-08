@@ -1,5 +1,10 @@
 package io.quarkus.domino;
 
+import com.redhat.hacbs.recipies.GAV;
+import com.redhat.hacbs.recipies.scm.GitScmLocator;
+import com.redhat.hacbs.recipies.scm.RepositoryInfo;
+import com.redhat.hacbs.recipies.scm.ScmLocator;
+import com.redhat.hacbs.recipies.scm.TagInfo;
 import io.quarkus.bom.decomposer.BomDecomposerException;
 import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.decomposer.ReleaseIdDetector;
@@ -30,6 +35,7 @@ import java.util.Objects;
 import java.util.Properties;
 import java.util.ServiceLoader;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -50,6 +56,16 @@ import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.lib.Repository;
 
 public class ProjectDependencyResolver {
+
+    private static final String SCM_LOCATOR_STATS_PROP = "scm-locator-stats";
+
+    private static boolean isScmLocatorStats() {
+        if (!System.getProperties().containsKey(SCM_LOCATOR_STATS_PROP)) {
+            return false;
+        }
+        var s = System.getProperty(SCM_LOCATOR_STATS_PROP);
+        return s == null || Boolean.parseBoolean(s);
+    }
 
     private static final String NOT_MANAGED = " [not managed]";
 
@@ -507,7 +523,7 @@ public class ProjectDependencyResolver {
 
     private void initReleaseRepos() {
 
-        final ReleaseIdResolver idResolver = newReleaseIdResolver(resolver, log, config.isValidateCodeRepoTags(),
+        final ReleaseIdResolver idResolver = newReleaseIdResolver(resolver, log, config,
                 getRhCoordsUpstreamVersions());
 
         final Map<ArtifactCoords, ReleaseId> artifactReleases = new HashMap<>();
@@ -615,6 +631,107 @@ public class ProjectDependencyResolver {
     }
 
     private static ReleaseIdResolver newReleaseIdResolver(MavenArtifactResolver artifactResolver, MessageWriter log,
+            ProjectDependencyConfig config, Map<ArtifactCoords, String> versionMapping) {
+
+        if (config.isLegacyScmLocator()) {
+            return getLegacyReleaseIdResolver(artifactResolver, log, config.isValidateCodeRepoTags(), versionMapping);
+        }
+
+        final List<ReleaseIdDetector> releaseDetectors = ServiceLoader.load(ReleaseIdDetector.class).stream().map(p -> p.get())
+                .collect(Collectors.toList());
+
+        final AtomicReference<ReleaseIdResolver> ref = new AtomicReference<>();
+        final ScmLocator scmLocator = GitScmLocator.builder()
+                .setRecipeRepos(config.getRecipeRepos())
+                .setCacheRepoTags(true)
+                .setFallback(new ScmLocator() {
+                    @Override
+                    public TagInfo resolveTagInfo(GAV gav) {
+
+                        var pomArtifact = new DefaultArtifact(gav.getGroupId(), gav.getArtifactId(), ArtifactCoords.TYPE_POM,
+                                gav.getVersion());
+
+                        ReleaseId releaseId = null;
+                        for (ReleaseIdDetector rd : releaseDetectors) {
+                            try {
+                                var rid = rd.detectReleaseId(ref.get(), pomArtifact);
+                                if (releaseId != null && releaseId.origin().isUrl()
+                                        && releaseId.origin().toString().contains("git")) {
+                                    releaseId = rid;
+                                    break;
+                                }
+                            } catch (BomDecomposerException e) {
+                                log.warn("Failed to determine SCM for " + gav.getGroupId() + ":" + gav.getArtifactId() + ":"
+                                        + gav.getVersion() + ": " + e.getLocalizedMessage());
+                            }
+                        }
+
+                        if (releaseId == null) {
+                            try {
+                                releaseId = ref.get().defaultReleaseId(pomArtifact);
+                            } catch (BomDecomposerException e) {
+                                log.warn("Failed to determine SCM for " + gav.getGroupId() + ":" + gav.getArtifactId() + ":"
+                                        + gav.getVersion() + " from POM metadata: "
+                                        + e.getLocalizedMessage());
+                            }
+                        }
+
+                        if (releaseId != null && releaseId.origin().isUrl() && releaseId.origin().toString().contains("git")) {
+                            log.warn("The SCM recipe database is missing an entry for " + gav.getGroupId() + ":"
+                                    + gav.getArtifactId() + ":" + gav.getVersion() + ", " + releaseId
+                                    + " will be used as a fallback");
+                            return new TagInfo(new RepositoryInfo("git", releaseId.origin().toString()),
+                                    releaseId.version().asString(), null);
+                        }
+                        return null;
+                    }
+                })
+                .build();
+
+        final boolean scmLocatorStats = isScmLocatorStats();
+        var hacbsScmLocator = new ReleaseIdDetector() {
+            int total;
+            int succeeded;
+
+            @Override
+            public ReleaseId detectReleaseId(ReleaseIdResolver releaseResolver, Artifact artifact)
+                    throws BomDecomposerException {
+                final GAV gav = new GAV(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion());
+                ++total;
+                Exception error = null;
+                try {
+                    final TagInfo tag = scmLocator.resolveTagInfo(gav);
+                    if (tag != null) {
+                        ++succeeded;
+                        return ReleaseIdFactory.forScmAndTag(tag.getRepoInfo().getUri(), tag.getTag());
+                    }
+                } catch (Exception e) {
+                    error = e;
+                } finally {
+                    if (scmLocatorStats) {
+                        System.out.println("ScmLocator resolved " + succeeded + " out of " + total);
+                    }
+                }
+                var sb = new StringBuilder();
+                sb.append("Failed to determine SCM for ").append(artifact);
+                if (config.isWarnOnMissingScm()) {
+                    if (error != null) {
+                        sb.append(": ").append(error.getLocalizedMessage());
+                    }
+                    log.warn(sb.toString());
+                } else {
+                    throw new RuntimeException(sb.toString(), error);
+                }
+                return null;
+            }
+        };
+        final ReleaseIdResolver releaseResolver = new ReleaseIdResolver(artifactResolver, List.of(hacbsScmLocator), log,
+                config.isValidateCodeRepoTags(), versionMapping);
+        ref.set(releaseResolver);
+        return releaseResolver;
+    }
+
+    private static ReleaseIdResolver getLegacyReleaseIdResolver(MavenArtifactResolver artifactResolver, MessageWriter log,
             boolean validateCodeRepoTags, Map<ArtifactCoords, String> versionMapping) {
         final List<ReleaseIdDetector> releaseDetectors = new ArrayList<>();
         releaseDetectors.add(
