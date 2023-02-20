@@ -568,9 +568,19 @@ public class ProjectDependencyResolver {
         }
         final Map<String, List<ArtifactVersion>> upstreamVersions = new HashMap<>();
         final List<ArtifactCoords> rhCoords = new ArrayList<>();
+        final List<ArtifactCoords> allCoords = new ArrayList<>(allDepsToBuild.size());
         for (ArtifactCoords c : allDepsToBuild.keySet()) {
             if (RhVersionPattern.isRhVersion(c.getVersion())) {
                 rhCoords.add(c);
+                if (!allCoords.isEmpty()) {
+                    for (ArtifactCoords coords : allCoords) {
+                        upstreamVersions.computeIfAbsent(coords.getGroupId(), k -> new ArrayList<>())
+                                .add(new DefaultArtifactVersion(coords.getVersion()));
+                    }
+                    allCoords.clear();
+                }
+            } else if (rhCoords.isEmpty()) {
+                allCoords.add(c);
             } else {
                 upstreamVersions.computeIfAbsent(c.getGroupId(), k -> new ArrayList<>())
                         .add(new DefaultArtifactVersion(c.getVersion()));
@@ -589,7 +599,13 @@ public class ProjectDependencyResolver {
                     RhVersionPattern.ensureNoRhSuffix(c.getVersion()));
             for (ArtifactVersion v : originalVersions) {
                 if (v.equals(noRhSuffixVersion)) {
-                    rhCoordsUpstreamVersions.put(c, v.toString());
+                    try {
+                        resolver.resolve(new DefaultArtifact(c.getGroupId(), c.getArtifactId(), c.getClassifier(), c.getType(),
+                                v.toString()));
+                        rhCoordsUpstreamVersions.put(c, v.toString());
+                    } catch (BootstrapMavenException e) {
+                        rhCoordsUpstreamVersions.put(c, noRhSuffixVersion.toString());
+                    }
                     break;
                 }
             }

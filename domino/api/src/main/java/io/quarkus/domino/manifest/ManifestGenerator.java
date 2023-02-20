@@ -17,6 +17,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -58,6 +59,7 @@ public class ManifestGenerator {
 
         private MavenArtifactResolver resolver;
         private Path outputFile;
+        private List<SbomTransformer> transformers = List.of();
 
         private Builder() {
         }
@@ -69,6 +71,14 @@ public class ManifestGenerator {
 
         public Builder setOutputFile(Path outputFile) {
             this.outputFile = outputFile;
+            return this;
+        }
+
+        public Builder addTransformer(SbomTransformer transformer) {
+            if (transformers.isEmpty()) {
+                transformers = new ArrayList<>(1);
+            }
+            transformers.add(transformer);
             return this;
         }
 
@@ -100,6 +110,7 @@ public class ManifestGenerator {
 
     private final Map<ArtifactCoords, Model> effectiveModels = new HashMap<>();
     private final Path outputFile;
+    private final List<SbomTransformer> transformers;
 
     private ManifestGenerator(Builder builder) {
 
@@ -112,6 +123,7 @@ public class ManifestGenerator {
             throw new RuntimeException("Failed to initialize Maven model resolver", e);
         }
         outputFile = builder.outputFile;
+        transformers = builder.transformers;
     }
 
     public Consumer<Collection<ReleaseRepo>> toConsumer() {
@@ -185,16 +197,23 @@ public class ManifestGenerator {
     }
 
     private Bom runTransformers(Bom bom) {
-        final Iterator<SbomTransformer> transformers = ServiceLoader.load(SbomTransformer.class).iterator();
-        if (transformers.hasNext()) {
+        List<SbomTransformer> transformers = this.transformers;
+        final Iterator<SbomTransformer> i = ServiceLoader.load(SbomTransformer.class).iterator();
+        if (i.hasNext()) {
+            transformers = new ArrayList<>(this.transformers.size() + 2);
+            while (i.hasNext()) {
+                transformers.add(i.next());
+            }
+        }
+        if (!transformers.isEmpty()) {
             final SbomTransformContextImpl ctx = new SbomTransformContextImpl(bom);
-            while (transformers.hasNext()) {
-                Bom transformed = transformers.next().transform(ctx);
+            for (SbomTransformer t : transformers) {
+                Bom transformed = t.transform(ctx);
                 if (transformed != null) {
                     ctx.bom = transformed;
                 }
+                bom = ctx.bom;
             }
-            bom = ctx.bom;
         }
         return bom;
     }
