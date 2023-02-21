@@ -406,6 +406,9 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
 
         @Override
         public Mutable addExcludePattern(ArtifactCoords artifact) {
+            if (excludePatterns.isEmpty()) {
+                excludePatterns = new ArrayList<>();
+            }
             this.excludePatterns.add(artifact);
             return this;
         }
