@@ -129,6 +129,9 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
             "-P" }, description = "Comma-separated list of Maven profiles that should be enabled when analyzing dependencies")
     public String mavenProfiles;
 
+    @CommandLine.Option(names = { "--maven-settings", "-s" }, description = "Path to a custom Maven settings file")
+    public String mavenSettings;
+
     private MavenArtifactResolver artifactResolver;
 
     @Override
@@ -227,8 +230,18 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
             return artifactResolver;
         }
 
+        StringBuilder sb = null;
         if (mavenProfiles != null) {
-            System.setProperty(BootstrapMavenOptions.QUARKUS_INTERNAL_MAVEN_CMD_LINE_ARGS, "-P" + mavenProfiles);
+            sb = new StringBuilder().append("-P").append(mavenProfiles);
+        }
+        if (mavenSettings != null) {
+            if (sb == null) {
+                sb = new StringBuilder();
+            }
+            sb.append(" -s ").append(mavenSettings);
+        }
+        if (sb != null) {
+            System.setProperty(BootstrapMavenOptions.QUARKUS_INTERNAL_MAVEN_CMD_LINE_ARGS, sb.toString());
         }
 
         try {
