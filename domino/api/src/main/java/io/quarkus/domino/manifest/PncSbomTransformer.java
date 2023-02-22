@@ -22,6 +22,9 @@ import org.jboss.logging.Logger;
 
 public class PncSbomTransformer implements SbomTransformer {
 
+    private static final String PNC = "PNC";
+    private static final String BUILD_SYSTEM = "build-system";
+    private static final String BUILD_ID = "build-id";
     private static final String PUBLISHER = "redhat";
     private static final String MRRC_URL = "https://maven.repository.redhat.com/ga/";
 
@@ -31,6 +34,9 @@ public class PncSbomTransformer implements SbomTransformer {
     public Bom transform(SbomTransformContext ctx) {
         log.info("Adding PNC build info to the manifest");
         final Bom bom = ctx.getOriginalBom();
+        if (bom.getComponents() == null) {
+            return bom;
+        }
         for (Component c : bom.getComponents()) {
             if (RhVersionPattern.isRhVersion(c.getVersion())) {
 
@@ -82,10 +88,16 @@ public class PncSbomTransformer implements SbomTransformer {
                     if (content.getBuild() == null) {
                         log.warn("PNC build info not found for " + url);
                     } else {
-                        final Property prop = new Property();
-                        prop.setName("pnc-build-id");
-                        prop.setValue(content.getBuild().getId());
                         final List<Property> props = new ArrayList<>(c.getProperties());
+
+                        Property prop = new Property();
+                        prop.setName(BUILD_ID);
+                        prop.setValue(content.getBuild().getId());
+                        props.add(prop);
+
+                        prop = new Property();
+                        prop.setName(BUILD_SYSTEM);
+                        prop.setValue(PNC);
                         props.add(prop);
                         c.setProperties(props);
                     }
