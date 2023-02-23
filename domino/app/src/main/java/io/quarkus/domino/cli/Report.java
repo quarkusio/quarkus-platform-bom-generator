@@ -22,10 +22,11 @@ public class Report extends BaseDepsToBuildCommand {
     @Override
     protected Integer process(ProjectDependencyResolver depResolver) {
         if (manifest) {
-            depResolver.consumeSorted(ManifestGenerator.builder()
+            ManifestGenerator.builder()
                     .setArtifactResolver(getArtifactResolver())
                     .setOutputFile(outputFile == null ? null : this.outputFile.toPath())
-                    .build().toConsumer());
+                    .build().toConsumer()
+                    .accept(depResolver.getReleaseRepos());
         } else {
             depResolver.log();
         }
