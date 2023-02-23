@@ -29,6 +29,8 @@ import java.util.function.Consumer;
 import org.apache.maven.model.MailingList;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Parent;
+import org.apache.maven.model.Repository;
+import org.apache.maven.model.RepositoryPolicy;
 import org.apache.maven.model.building.DefaultModelBuildingRequest;
 import org.apache.maven.model.building.ModelBuilder;
 import org.apache.maven.model.building.ModelBuildingException;
@@ -52,6 +54,7 @@ import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.repository.RemoteRepository;
+import org.eclipse.aether.resolution.ArtifactResult;
 
 public class ManifestGenerator {
 
@@ -105,7 +108,6 @@ public class ManifestGenerator {
     private final BootstrapMavenContext mavenCtx;
     private final MavenArtifactResolver artifactResolver;
     private final ModelBuilder modelBuilder = BootstrapModelBuilderFactory.getDefaultModelBuilder();
-    private final ModelResolver modelResolver;
     private final ModelCache modelCache;
 
     private final Map<ArtifactCoords, Model> effectiveModels = new HashMap<>();
@@ -113,11 +115,9 @@ public class ManifestGenerator {
     private final List<SbomTransformer> transformers;
 
     private ManifestGenerator(Builder builder) {
-
         this.artifactResolver = builder.getInitializedResolver();
         mavenCtx = artifactResolver.getMavenContext();
         try {
-            modelResolver = BootstrapModelResolver.newInstance(mavenCtx, null);
             modelCache = new BootstrapModelCache(mavenCtx.getRepositorySystemSession());
         } catch (BootstrapMavenException e) {
             throw new RuntimeException("Failed to initialize Maven model resolver", e);
@@ -137,7 +137,7 @@ public class ManifestGenerator {
                         continue;
                     }
 
-                    final Model model = resolveModel(modelResolver, coords, entry.getValue());
+                    final Model model = resolveModel(coords, entry.getValue());
                     final Component c = new Component();
                     extractMetadata(r, model, c);
                     if (c.getPublisher() == null) {
@@ -332,53 +332,96 @@ public class ManifestGenerator {
         return Version.VERSION_14;
     }
 
-    private Model resolveModel(ModelResolver modelResolver, ArtifactCoords artifact, List<RemoteRepository> repos) {
+    private Model resolveModel(ArtifactCoords artifact, List<RemoteRepository> repos) {
         final ArtifactCoords pom = artifact.getType().equals(ArtifactCoords.TYPE_POM) ? artifact
                 : ArtifactCoords.pom(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion());
-        return effectiveModels.computeIfAbsent(pom, k -> {
-            File pomFile;
+        return effectiveModels.computeIfAbsent(pom, p -> doResolveModel(pom, repos));
+    }
+
+    private Model doResolveModel(ArtifactCoords coords, List<RemoteRepository> repos) {
+        final File pomFile;
+        final ArtifactResult pomResult;
+        try {
+            pomResult = artifactResolver.resolve(new DefaultArtifact(coords.getGroupId(), coords.getArtifactId(),
+                    coords.getClassifier(), coords.getType(), coords.getVersion()), repos);
+            pomFile = pomResult.getArtifact().getFile();
+        } catch (BootstrapMavenException e) {
+            throw new RuntimeException("Failed to resolve " + coords.toCompactCoords(), e);
+        }
+
+        final Model rawModel;
+        try {
+            rawModel = ModelUtils.readModel(pomFile.toPath());
+        } catch (IOException e1) {
+            throw new RuntimeException("Failed to read " + pomFile, e1);
+        }
+
+        final ModelResolver modelResolver;
+        try {
+            modelResolver = BootstrapModelResolver.newInstance(mavenCtx, null);
+        } catch (BootstrapMavenException e) {
+            throw new RuntimeException("Failed to initialize model resolver", e);
+        }
+
+        // override the relative path to the parent in case it's in the local Maven repo
+        Parent parent = rawModel.getParent();
+        if (parent != null) {
+            final Artifact parentPom = new DefaultArtifact(parent.getGroupId(), parent.getArtifactId(),
+                    ArtifactCoords.TYPE_POM, parent.getVersion());
+            final ArtifactResult parentResult;
+            final Path parentPomPath;
             try {
-                pomFile = artifactResolver.resolve(new DefaultArtifact(pom.getGroupId(), pom.getArtifactId(),
-                        pom.getClassifier(), pom.getType(), pom.getVersion()), repos).getArtifact().getFile();
+                parentResult = artifactResolver.resolve(parentPom, repos);
+                parentPomPath = parentResult.getArtifact().getFile().toPath();
             } catch (BootstrapMavenException e) {
-                throw new RuntimeException("Failed to resolve " + pom.toCompactCoords(), e);
+                throw new RuntimeException("Failed to resolve " + parentPom, e);
             }
+            rawModel.getParent().setRelativePath(pomFile.toPath().getParent().relativize(parentPomPath).toString());
 
-            final Model rawModel;
-            try {
-                rawModel = ModelUtils.readModel(pomFile.toPath());
-            } catch (IOException e1) {
-                throw new RuntimeException("Failed to read " + pomFile, e1);
-            }
-
-            // override the relative path to the parent in case it's in the local Maven repo
-            Parent parent = rawModel.getParent();
-            if (parent != null) {
-                final Artifact parentPom = new DefaultArtifact(parent.getGroupId(), parent.getArtifactId(),
-                        ArtifactCoords.TYPE_POM, parent.getVersion());
-                final Path parentPomPath;
-                try {
-                    parentPomPath = artifactResolver.resolve(parentPom, repos).getArtifact().getFile().toPath();
-                } catch (BootstrapMavenException e) {
-                    throw new RuntimeException("Failed to resolve " + parentPom, e);
+            String repoUrl = null;
+            for (RemoteRepository r : repos) {
+                if (r.getId().equals(parentResult.getRepository().getId())) {
+                    repoUrl = r.getUrl();
+                    break;
                 }
-                rawModel.getParent().setRelativePath(pomFile.toPath().getParent().relativize(parentPomPath).toString());
             }
+            if (repoUrl != null) {
+                Repository modelRepo = null;
+                for (Repository r : rawModel.getRepositories()) {
+                    if (r.getId().equals(parentResult.getRepository().getId())) {
+                        modelRepo = r;
+                        break;
+                    }
+                }
+                if (modelRepo == null) {
+                    modelRepo = new Repository();
+                    modelRepo.setId(parentResult.getRepository().getId());
+                    modelRepo.setLayout("default");
+                    modelRepo.setReleases(new RepositoryPolicy());
+                }
+                modelRepo.setUrl(repoUrl);
 
-            ModelBuildingRequest req = new DefaultModelBuildingRequest();
-            req.setPomFile(pomFile);
-            req.setRawModel(rawModel);
-            req.setModelResolver(modelResolver);
-            req.setSystemProperties(System.getProperties());
-            req.setUserProperties(System.getProperties());
-            req.setModelCache(modelCache);
-
-            try {
-                return modelBuilder.build(req).getEffectiveModel();
-            } catch (ModelBuildingException e) {
-                throw new RuntimeException("Failed to resolve the effective model of " + pom.toCompactCoords(), e);
+                try {
+                    modelResolver.addRepository(modelRepo, false);
+                } catch (Exception e) {
+                    throw new RuntimeException("Failed to add repository " + modelRepo, e);
+                }
             }
-        });
+        }
+
+        final ModelBuildingRequest req = new DefaultModelBuildingRequest();
+        req.setPomFile(pomFile);
+        req.setRawModel(rawModel);
+        req.setModelResolver(modelResolver);
+        req.setSystemProperties(System.getProperties());
+        req.setUserProperties(System.getProperties());
+        req.setModelCache(modelCache);
+
+        try {
+            return modelBuilder.build(req).getEffectiveModel();
+        } catch (ModelBuildingException e) {
+            throw new RuntimeException("Failed to resolve the effective model of " + coords.toCompactCoords(), e);
+        }
     }
 
     private static boolean doesComponentHaveExternalReference(final Component component, final ExternalReference.Type type) {
