@@ -334,13 +334,13 @@ public class ProjectDependencyResolver {
 
         for (ArtifactCoords coords : getProjectArtifacts()) {
             if (isIncluded(coords) || !isExcluded(coords)) {
-                processRootArtifact(artifactConstraintsProvider.apply(coords), coords);
+                processRootArtifact(coords, artifactConstraintsProvider.apply(coords));
             }
         }
 
         for (ArtifactCoords coords : config.getIncludeArtifacts()) {
             if (isIncluded(coords) || !isExcluded(coords)) {
-                processRootArtifact(artifactConstraintsProvider.apply(coords), coords);
+                processRootArtifact(coords, artifactConstraintsProvider.apply(coords));
             }
         }
 
@@ -428,7 +428,7 @@ public class ProjectDependencyResolver {
         return config.getProjectArtifacts();
     }
 
-    private void processRootArtifact(List<Dependency> managedDeps, ArtifactCoords rootArtifact) {
+    private void processRootArtifact(ArtifactCoords rootArtifact, List<Dependency> managedDeps) {
         final DependencyNode root = collectDependencies(rootArtifact, managedDeps);
         if (root == null) {
             // couldn't be resolved
