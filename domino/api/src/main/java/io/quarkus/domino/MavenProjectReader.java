@@ -32,8 +32,12 @@ public class MavenProjectReader {
         final List<ArtifactCoords> result = new ArrayList<>();
         for (LocalProject project : ws.getProjects().values()) {
             if (isPublished(project)) {
+                var type = project.getRawModel().getPackaging();
+                if ("maven-archetype".equals(type)) {
+                    type = ArtifactCoords.TYPE_JAR;
+                }
                 result.add(ArtifactCoords.of(project.getGroupId(), project.getArtifactId(),
-                        ArtifactCoords.DEFAULT_CLASSIFIER, project.getRawModel().getPackaging(), project.getVersion()));
+                        ArtifactCoords.DEFAULT_CLASSIFIER, type, project.getVersion()));
             }
         }
         return result;
