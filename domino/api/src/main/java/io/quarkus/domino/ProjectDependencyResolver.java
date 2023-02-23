@@ -38,6 +38,7 @@ import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
 import org.apache.maven.model.DependencyManagement;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Parent;
+import org.apache.maven.model.Profile;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.collection.CollectRequest;
@@ -899,6 +900,12 @@ public class ProjectDependencyResolver {
             return Map.of();
         }
         Map<String, String> pomProps = toMap(model.getProperties());
+        for (Profile profile : model.getProfiles()) {
+            if (profile.getActivation() != null && profile.getActivation().isActiveByDefault()
+                    && !profile.getProperties().isEmpty()) {
+                addAll(pomProps, profile.getProperties());
+            }
+        }
         pomProps.put("project.version", pomCoords.getVersion());
         pomProps.put("project.groupId", pomCoords.getGroupId());
         if (parentPomProps != null) {
@@ -943,6 +950,7 @@ public class ProjectDependencyResolver {
         final String value = PropertyResolver.resolvePropertyOrNull(expr, props);
         if (value == null) {
             log.warn("Failed to resolve property " + expr + " from " + dep);
+            throw new RuntimeException();
         }
         return value;
     }
@@ -1116,6 +1124,12 @@ public class ProjectDependencyResolver {
             map.put(toString(e.getKey()), toString(e.getValue()));
         }
         return map;
+    }
+
+    private static void addAll(Map<String, String> map, Properties props) {
+        for (Map.Entry<?, ?> e : props.entrySet()) {
+            map.put(toString(e.getKey()), toString(e.getValue()));
+        }
     }
 
     private static String toString(Object o) {
