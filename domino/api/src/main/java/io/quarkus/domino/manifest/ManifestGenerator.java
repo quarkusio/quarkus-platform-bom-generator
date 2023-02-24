@@ -7,6 +7,8 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.BootstrapModelBuilderFactory;
 import io.quarkus.bootstrap.resolver.maven.BootstrapModelResolver;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
+import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
+import io.quarkus.bootstrap.resolver.maven.workspace.LocalWorkspace;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.domino.ReleaseRepo;
 import io.quarkus.maven.dependency.ArtifactCoords;
@@ -339,6 +341,16 @@ public class ManifestGenerator {
     }
 
     private Model doResolveModel(ArtifactCoords coords, List<RemoteRepository> repos) {
+
+        final LocalWorkspace ws = artifactResolver.getMavenContext().getWorkspace();
+        if (ws != null) {
+            final LocalProject project = ws.getProject(coords.getGroupId(), coords.getArtifactId());
+            if (project != null && coords.getVersion().equals(project.getVersion())
+                    && project.getModelBuildingResult() != null) {
+                return project.getModelBuildingResult().getEffectiveModel();
+            }
+        }
+
         final File pomFile;
         final ArtifactResult pomResult;
         try {
