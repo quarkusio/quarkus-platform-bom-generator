@@ -8,6 +8,7 @@ import io.quarkus.domino.ProjectDependencyResolver;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -97,12 +98,23 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
     public String includeGroupIds;
 
     @CommandLine.Option(names = {
+            "--recipe-repos" }, description = "Build recipe repository URLs, the default one is https://github.com/redhat-appstudio/jvm-build-data")
+    public String recipeRepos;
+
+    @CommandLine.Option(names = {
             "--validate-code-repo-tags" }, description = "Whether to validate the discovered code repo and tags that are included in the report")
     public boolean validateCodeRepoTags;
+
+    @CommandLine.Option(names = { "--legacy-scm-locator" }, description = "Whether to use the legacy SCM locator")
+    public boolean legacyScmLocator;
 
     @CommandLine.Option(names = {
             "--warn-on-resolution-errors" }, description = "Whether to warn about artifact resolution errors instead of failing the process")
     public Boolean warnOnResolutionErrors;
+
+    @CommandLine.Option(names = {
+            "--warn-on-missing-scm" }, description = "Whether to issue a warning in case an SCM location could not be determined or fail with an error (the default behavior).")
+    public boolean warnOnMissingScm;
 
     @CommandLine.Option(names = {
             "--include-already-built" }, description = "Whether to include dependencies that have already been built")
@@ -200,6 +212,17 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
             excludeKeys = Set.of();
         }
 
+        if (recipeRepos != null) {
+            final String[] arr = recipeRepos.split(",");
+            final List<String> list = new ArrayList<>(arr.length);
+            for (String s : arr) {
+                if (!s.isBlank()) {
+                    list.add(s.trim());
+                }
+            }
+            config.setRecipeRepos(list);
+        }
+
         config.setExcludeBomImports(excludeBomImports)
                 .setExcludeGroupIds(excludeGroupIds) // TODO
                 .setExcludeKeys(excludeKeys)
@@ -219,10 +242,12 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
                 .setProjectArtifacts(
                         rootArtifacts.stream().map(ArtifactCoords::fromString).collect(Collectors.toList()))
                 .setValidateCodeRepoTags(validateCodeRepoTags)
+                .setLegacyScmLocator(legacyScmLocator)
                 .setIncludeAlreadyBuilt(includeAlreadyBuilt)
                 .setIncludeOptionalDeps(includeOptionalDeps)
                 .setGradleJava8(gradleJava8)
-                .setGradleJavaHome(gradleJavaHome);
+                .setGradleJavaHome(gradleJavaHome)
+                .setWarnOnMissingScm(warnOnMissingScm);
     }
 
     protected MavenArtifactResolver getArtifactResolver() {

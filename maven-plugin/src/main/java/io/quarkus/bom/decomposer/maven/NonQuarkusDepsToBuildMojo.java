@@ -173,14 +173,27 @@ public class NonQuarkusDepsToBuildMojo extends AbstractMojo {
     @Parameter(required = false)
     Set<String> includeKeys = Set.of();
 
+    /**
+     * @deprecated Deprecated in favor of the HACBS SCM locator that performs validation
+     */
+    @Deprecated(since = "0.0.78")
     @Parameter(required = false, property = "validateCodeRepoTags")
     boolean validateCodeRepoTags;
 
     @Parameter(required = false, property = "warnOnResolutionErrors")
     boolean warnOnResolutionErrors;
 
+    @Parameter(required = false, property = "warnOnMissingScm")
+    boolean warnOnMissingScm;
+
     @Parameter(required = false, property = "includeOptionalDeps")
     boolean includeOptionalDeps;
+
+    @Parameter(required = false, property = "recipeRepos")
+    List<String> recipeRepos;
+
+    @Parameter(required = false, property = "legacyScmLocator")
+    boolean legacyScmLocator;
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
@@ -231,8 +244,11 @@ public class NonQuarkusDepsToBuildMojo extends AbstractMojo {
                         .setLogSummary(logSummary)
                         .setLogTrees(logTrees)
                         .setValidateCodeRepoTags(validateCodeRepoTags)
+                        .setLegacyScmLocator(legacyScmLocator)
                         .setWarnOnResolutionErrors(warnOnResolutionErrors)
-                        .setIncludeOptionalDeps(includeOptionalDeps))
+                        .setWarnOnMissingScm(warnOnMissingScm)
+                        .setIncludeOptionalDeps(includeOptionalDeps)
+                        .setRecipeRepos(this.recipeRepos == null ? List.of() : this.recipeRepos))
                 .build().log();
     }
 

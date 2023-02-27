@@ -14,6 +14,8 @@ public interface ReleaseOrigin extends Comparable<ReleaseOrigin> {
         }
     }
 
+    boolean isUrl();
+
     class ScmConnectionOrigin implements ReleaseOrigin {
 
         final String connection;
@@ -47,6 +49,11 @@ public interface ReleaseOrigin extends Comparable<ReleaseOrigin> {
         @Override
         public int compareTo(ReleaseOrigin o) {
             return toString().compareTo(o.toString());
+        }
+
+        @Override
+        public boolean isUrl() {
+            return true;
         }
     }
 
@@ -84,6 +91,11 @@ public interface ReleaseOrigin extends Comparable<ReleaseOrigin> {
         @Override
         public int compareTo(ReleaseOrigin o) {
             return toString().compareTo(o.toString());
+        }
+
+        @Override
+        public boolean isUrl() {
+            return false;
         }
     }
 }

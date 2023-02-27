@@ -6,6 +6,7 @@ import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.maven.dependency.ArtifactCoords;
+import io.quarkus.maven.dependency.GAV;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -18,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.WeakHashMap;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.resolution.UnresolvableModelException;
 import org.eclipse.aether.artifact.Artifact;
@@ -32,6 +34,7 @@ public class ReleaseIdResolver {
     private final Map<ArtifactCoords, String> versionMapping;
     private Set<ReleaseId> validatedReleaseIds;
     private HttpClient httpClient;
+    private final WeakHashMap<GAV, ReleaseId> releaseIdCache = new WeakHashMap<>();
 
     public ReleaseIdResolver(MavenArtifactResolver resolver) {
         this(ArtifactResolverProvider.get(resolver));
@@ -82,14 +85,24 @@ public class ReleaseIdResolver {
     public ReleaseId releaseId(Artifact artifact, List<RemoteRepository> repos)
             throws BomDecomposerException, UnresolvableModelException {
         artifact = getTargetArtifact(artifact);
-        for (ReleaseIdDetector releaseDetector : releaseDetectors) {
-            final ReleaseId releaseId = releaseDetector.detectReleaseId(this, artifact);
-            if (releaseId != null) {
-                return validateRepoTag ? validateTag(releaseId) : releaseId;
+        var gav = new GAV(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion());
+        ReleaseId releaseId = releaseIdCache.get(gav);
+        if (releaseId == null) {
+            for (ReleaseIdDetector releaseDetector : releaseDetectors) {
+                releaseId = releaseDetector.detectReleaseId(this, artifact);
+                if (releaseId != null) {
+                    break;
+                }
             }
+            if (releaseId == null) {
+                releaseId = defaultReleaseId(artifact, repos);
+            }
+            if (validateRepoTag) {
+                validateTag(releaseId);
+            }
+            releaseIdCache.put(gav, releaseId);
         }
-
-        return validateRepoTag ? validateTag(defaultReleaseId(artifact, repos)) : defaultReleaseId(artifact, repos);
+        return releaseId;
     }
 
     public ReleaseId defaultReleaseId(Artifact artifact) throws BomDecomposerException {
