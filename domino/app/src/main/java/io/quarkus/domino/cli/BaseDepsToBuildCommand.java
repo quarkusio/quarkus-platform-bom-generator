@@ -30,7 +30,7 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
     public Boolean includeNonManaged;
 
     @CommandLine.Option(names = {
-            "--root-artifacts" }, description = "Root artifacts whose dependencies should be built from source")
+            "--root-artifacts" }, description = "Root artifacts whose dependencies should be built from source", split = ",")
     public Collection<String> rootArtifacts = List.of();
 
     @CommandLine.Option(names = {
