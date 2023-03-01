@@ -67,8 +67,6 @@ public class ProjectDependencyResolver {
         return s == null || Boolean.parseBoolean(s);
     }
 
-    private static final String NOT_MANAGED = " [not managed]";
-
     public static class Builder {
 
         private MavenArtifactResolver resolver;
@@ -77,12 +75,29 @@ public class ProjectDependencyResolver {
         private ProjectDependencyConfig depConfig;
         private Path logOutputFile;
         private boolean appendOutput;
+        private List<DependencyTreeVisitor> visitors = List.of();
 
         private Builder() {
         }
 
         private Builder(ProjectDependencyConfig config) {
             this.depConfig = config;
+        }
+
+        public Builder addDependencyTreeVisitor(DependencyTreeVisitor visitor) {
+            switch (visitors.size()) {
+                case 0:
+                    visitors = List.of(visitor);
+                    break;
+                case 1:
+                    visitors = List.of(visitors.get(0), visitor);
+                    break;
+                case 2:
+                    visitors = new ArrayList<>(visitors);
+                default:
+                    visitors.add(visitor);
+            }
+            return this;
         }
 
         public Builder setArtifactResolver(MavenArtifactResolver artifactResolver) {
@@ -142,6 +157,28 @@ public class ProjectDependencyResolver {
         }
     }
 
+    private static class DepVisit implements DependencyTreeVisitor.DependencyVisit {
+
+        final ArtifactCoords coords;
+        final boolean managed;
+
+        private DepVisit(ArtifactCoords coords, boolean managed) {
+            this.coords = coords;
+            this.managed = managed;
+        }
+
+        @Override
+        public ArtifactCoords getCoords() {
+            return coords;
+        }
+
+        @Override
+        public boolean isManaged() {
+            return managed;
+        }
+
+    }
+
     private static ArtifactCoordsPattern toPattern(ArtifactCoords c) {
         final ArtifactCoordsPattern.Builder pattern = ArtifactCoordsPattern.builder();
         pattern.groupIdPattern(c.getGroupId());
@@ -156,29 +193,30 @@ public class ProjectDependencyResolver {
         return pattern.build();
     }
 
-    public static Builder builder() {
-        return new ProjectDependencyResolver.Builder();
+    private static List<ArtifactCoordsPattern> toPatterns(Collection<ArtifactCoords> coords) {
+        if (coords.isEmpty()) {
+            return List.of();
+        }
+        final List<ArtifactCoordsPattern> result = new ArrayList<>(coords.size());
+        for (ArtifactCoords c : coords) {
+            result.add(toPattern(c));
+        }
+        return result;
     }
 
-    private ProjectDependencyResolver(Builder builder) {
-        this.resolver = builder.getInitializedResolver();
-        this.log = builder.getInitializedLog();
-        this.artifactConstraintsProvider = builder.artifactConstraintsProvider;
-        this.logOutputFile = builder.logOutputFile;
-        this.appendOutput = builder.appendOutput;
-        this.config = Objects.requireNonNull(builder.depConfig);
-        config.getExcludePatterns().forEach(p -> excludeSet.add(toPattern(p)));
-        config.getIncludePatterns().forEach(p -> includeSet.add(toPattern(p)));
-        config.getIncludeArtifacts().forEach(c -> includeSet.add(toPattern(c)));
+    public static Builder builder() {
+        return new ProjectDependencyResolver.Builder();
     }
 
     private final MavenArtifactResolver resolver;
     private final ProjectDependencyConfig config;
     private MessageWriter log;
-    private List<ArtifactCoordsPattern> excludeSet = new ArrayList<>();
-    private List<ArtifactCoordsPattern> includeSet = new ArrayList<>();
+    private final List<ArtifactCoordsPattern> excludeSet;
+    private final List<ArtifactCoordsPattern> includeSet;
+    private final List<DependencyTreeVisitor> treeVisitors;
 
     private PrintStream fileOutput;
+    private MessageWriter outputWriter;
     private final Path logOutputFile;
     private final boolean appendOutput;
 
@@ -203,6 +241,25 @@ public class ProjectDependencyResolver {
 
     private Map<ArtifactCoords, DependencyNode> preResolvedRootArtifacts = Map.of();
     private ReleaseId projectReleaseId;
+
+    private ProjectDependencyResolver(Builder builder) {
+        this.resolver = builder.getInitializedResolver();
+        this.log = builder.getInitializedLog();
+        this.artifactConstraintsProvider = builder.artifactConstraintsProvider;
+        this.logOutputFile = builder.logOutputFile;
+        this.appendOutput = builder.appendOutput;
+        this.config = Objects.requireNonNull(builder.depConfig);
+        excludeSet = toPatterns(config.getExcludePatterns());
+        includeSet = new ArrayList<>(config.getIncludeArtifacts().size() + config.getIncludePatterns().size());
+        config.getIncludePatterns().forEach(p -> includeSet.add(toPattern(p)));
+        config.getIncludeArtifacts().forEach(c -> includeSet.add(toPattern(c)));
+        if (config.isLogTrees()) {
+            treeVisitors = new ArrayList<>(builder.visitors.size() + 1);
+            treeVisitors.add(new LoggingDependencyTreeVisitor(getOutput(), true));
+        } else {
+            treeVisitors = builder.visitors;
+        }
+    }
 
     public ProjectDependencyConfig getConfig() {
         return config;
@@ -231,9 +288,8 @@ public class ProjectDependencyResolver {
 
         final boolean logCodeRepos = config.isLogCodeRepos() || config.isLogCodeRepoTree();
 
-        buildModel();
-
         try {
+            buildModel();
             int codeReposTotal = 0;
             if (config.isLogArtifactsToBuild() && !allDepsToBuild.isEmpty()) {
                 logComment("Artifacts to be built from source from "
@@ -451,12 +507,9 @@ public class ProjectDependencyResolver {
             return;
         }
 
-        if (config.isLogTrees()) {
-            if (targetBomConstraints.contains(rootArtifact)) {
-                logComment(rootArtifact.toCompactCoords());
-            } else {
-                logComment(rootArtifact.toCompactCoords() + NOT_MANAGED);
-            }
+        var visit = new DepVisit(rootArtifact, targetBomConstraints.contains(rootArtifact));
+        for (DependencyTreeVisitor v : treeVisitors) {
+            v.enterRootArtifact(visit);
         }
 
         final boolean addDependency;
@@ -483,8 +536,8 @@ public class ProjectDependencyResolver {
             }
         }
 
-        if (config.isLogTrees()) {
-            logComment("");
+        for (DependencyTreeVisitor v : treeVisitors) {
+            v.leaveRootArtifact(visit);
         }
     }
 
@@ -854,11 +907,11 @@ public class ProjectDependencyResolver {
         return list;
     }
 
-    private PrintStream getOutput() {
+    private MessageWriter getOutput() {
         if (logOutputFile == null) {
-            return System.out;
+            return log;
         }
-        if (fileOutput == null) {
+        if (outputWriter == null) {
             try {
                 if (logOutputFile.getParent() != null) {
                     Files.createDirectories(logOutputFile.getParent());
@@ -870,8 +923,9 @@ public class ProjectDependencyResolver {
             } catch (Exception e) {
                 throw new RuntimeException("Failed to open " + logOutputFile + " for writing", e);
             }
+            outputWriter = MessageWriter.info(fileOutput);
         }
-        return fileOutput;
+        return outputWriter;
     }
 
     private void logComment(String msg) {
@@ -879,7 +933,7 @@ public class ProjectDependencyResolver {
     }
 
     private void log(String msg) {
-        getOutput().println(msg);
+        getOutput().info(msg);
     }
 
     private void processNodes(ArtifactDependency parent, DependencyNode node, int level, boolean remaining) {
@@ -888,26 +942,20 @@ public class ProjectDependencyResolver {
             return;
         }
         ArtifactDependency artDep = null;
+        DepVisit visit = null;
         if (remaining) {
             addToRemaining(coords);
         } else if (config.getLevel() < 0 || level <= config.getLevel()) {
             if (addDependencyToBuild(coords, node)) {
-                if (config.isLogTrees()) {
-                    final StringBuilder buf = new StringBuilder();
-                    for (int i = 0; i < level; ++i) {
-                        buf.append("  ");
-                    }
-                    buf.append(coords.toCompactCoords());
-                    if (!targetBomConstraints.contains(coords)) {
-                        buf.append(' ').append(NOT_MANAGED);
-                    }
-                    logComment(buf.toString());
+                visit = new DepVisit(coords, targetBomConstraints.contains(coords));
+                for (DependencyTreeVisitor v : treeVisitors) {
+                    v.enterDependency(visit);
                 }
                 if (parent != null) {
                     artDep = getOrCreateArtifactDep(coords);
                     parent.addDependency(artDep);
                     if (config.isLogTrees()) {
-                        artDep.logBomImportsAndParents(level + 1);
+                        artDep.logBomImportsAndParents();
                     }
                 }
             } else if (config.isLogRemaining()) {
@@ -926,6 +974,12 @@ public class ProjectDependencyResolver {
         }
         for (DependencyNode child : node.getChildren()) {
             processNodes(artDep, child, level + 1, remaining);
+        }
+
+        if (visit != null) {
+            for (DependencyTreeVisitor v : treeVisitors) {
+                v.leaveDependency(visit);
+            }
         }
     }
 
@@ -1175,29 +1229,28 @@ public class ProjectDependencyResolver {
         }
 
         private void logBomImportsAndParents() {
-            logBomImportsAndParents(1);
-        }
-
-        private void logBomImportsAndParents(int depth) {
             if (parentPom == null && bomImports.isEmpty()) {
                 return;
             }
-            final StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < depth; ++i) {
-                sb.append("  ");
-            }
-            final String offset = sb.toString();
             if (parentPom != null) {
-                sb.setLength(0);
-                sb.append(offset).append(parentPom.coords.toCompactCoords()).append(" [parent pom]");
-                logComment(sb.toString());
-                parentPom.logBomImportsAndParents(depth + 1);
+                var visit = new DepVisit(parentPom.coords, false);
+                for (DependencyTreeVisitor v : treeVisitors) {
+                    v.enterParentPom(visit);
+                }
+                parentPom.logBomImportsAndParents();
+                for (DependencyTreeVisitor v : treeVisitors) {
+                    v.leaveParentPom(visit);
+                }
             }
             for (ArtifactDependency d : bomImports.values()) {
-                sb.setLength(0);
-                sb.append(offset).append(d.coords.toCompactCoords()).append(" [bom import]");
-                logComment(sb.toString());
-                d.logBomImportsAndParents(depth + 1);
+                var visit = new DepVisit(d.coords, true);
+                for (DependencyTreeVisitor v : treeVisitors) {
+                    v.enterBomImport(visit);
+                }
+                d.logBomImportsAndParents();
+                for (DependencyTreeVisitor v : treeVisitors) {
+                    v.leaveBomImport(visit);
+                }
             }
         }
     }
