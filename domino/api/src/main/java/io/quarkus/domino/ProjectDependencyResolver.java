@@ -507,11 +507,6 @@ public class ProjectDependencyResolver {
             return;
         }
 
-        var visit = new DepVisit(rootArtifact, targetBomConstraints.contains(rootArtifact));
-        for (DependencyTreeVisitor v : treeVisitors) {
-            v.enterRootArtifact(visit);
-        }
-
         final boolean addDependency;
         try {
             addDependency = addDependencyToBuild(rootArtifact, root);
@@ -519,6 +514,11 @@ public class ProjectDependencyResolver {
             throw new RuntimeException("Failed to process " + rootArtifact, e);
         }
         if (addDependency) {
+            var visit = new DepVisit(rootArtifact, targetBomConstraints.contains(rootArtifact));
+            for (DependencyTreeVisitor v : treeVisitors) {
+                v.enterRootArtifact(visit);
+            }
+
             final ArtifactDependency extDep = getOrCreateArtifactDep(rootArtifact);
             if (!config.isExcludeParentPoms() && config.isLogTrees()) {
                 extDep.logBomImportsAndParents();
@@ -530,14 +530,14 @@ public class ProjectDependencyResolver {
                 }
                 processNodes(extDep, d, 1, false);
             }
+
+            for (DependencyTreeVisitor v : treeVisitors) {
+                v.leaveRootArtifact(visit);
+            }
         } else if (config.isLogRemaining()) {
             for (DependencyNode d : root.getChildren()) {
                 processNodes(null, d, 1, true);
             }
-        }
-
-        for (DependencyTreeVisitor v : treeVisitors) {
-            v.leaveRootArtifact(visit);
         }
     }
 

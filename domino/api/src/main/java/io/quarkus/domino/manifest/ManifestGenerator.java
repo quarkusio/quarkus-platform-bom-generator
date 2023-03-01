@@ -134,44 +134,7 @@ public class ManifestGenerator {
             Bom bom = new Bom();
             for (ReleaseRepo r : releases) {
                 for (Map.Entry<ArtifactCoords, List<RemoteRepository>> entry : r.getArtifacts().entrySet()) {
-                    ArtifactCoords coords = entry.getKey();
-                    if (ArtifactCoords.TYPE_POM.equals(coords.getType())) {
-                        continue;
-                    }
-
-                    final Model model = resolveModel(coords, entry.getValue());
-                    final Component c = new Component();
-                    extractMetadata(r, model, c);
-                    if (c.getPublisher() == null) {
-                        c.setPublisher("central");
-                    }
-                    c.setGroup(coords.getGroupId());
-                    c.setName(coords.getArtifactId());
-                    c.setVersion(coords.getVersion());
-                    final TreeMap<String, String> qualifiers = new TreeMap<>();
-                    qualifiers.put("type", coords.getType());
-                    if (!coords.getClassifier().isEmpty()) {
-                        qualifiers.put("classifier", coords.getClassifier());
-                    }
-                    try {
-                        c.setPurl(new PackageURL(PackageURL.StandardTypes.MAVEN,
-                                coords.getGroupId(),
-                                coords.getArtifactId(),
-                                coords.getVersion(),
-                                qualifiers, null));
-                    } catch (MalformedPackageURLException e) {
-                        throw new RuntimeException("Failed to generate Purl for " + coords.toCompactCoords(), e);
-                    }
-
-                    final Property pkgType = new Property();
-                    pkgType.setName("package:type");
-                    pkgType.setValue("maven");
-                    final Property pkgLang = new Property();
-                    pkgLang.setName("package:language");
-                    pkgLang.setValue("java");
-                    c.setProperties(List.of(pkgType, pkgLang));
-                    c.setType(Component.Type.LIBRARY);
-                    bom.addComponent(c);
+                    addComponent(bom, r, entry.getKey(), entry.getValue());
                 }
             }
 
@@ -196,6 +159,46 @@ public class ManifestGenerator {
                 }
             }
         };
+    }
+
+    private void addComponent(Bom bom, ReleaseRepo release, ArtifactCoords coords, List<RemoteRepository> repos) {
+        if (ArtifactCoords.TYPE_POM.equals(coords.getType())) {
+            return;
+        }
+
+        final Model model = resolveModel(coords, repos);
+        final Component c = new Component();
+        extractMetadata(release, model, c);
+        if (c.getPublisher() == null) {
+            c.setPublisher("central");
+        }
+        c.setGroup(coords.getGroupId());
+        c.setName(coords.getArtifactId());
+        c.setVersion(coords.getVersion());
+        final TreeMap<String, String> qualifiers = new TreeMap<>();
+        qualifiers.put("type", coords.getType());
+        if (!coords.getClassifier().isEmpty()) {
+            qualifiers.put("classifier", coords.getClassifier());
+        }
+        try {
+            c.setPurl(new PackageURL(PackageURL.StandardTypes.MAVEN,
+                    coords.getGroupId(),
+                    coords.getArtifactId(),
+                    coords.getVersion(),
+                    qualifiers, null));
+        } catch (MalformedPackageURLException e) {
+            throw new RuntimeException("Failed to generate Purl for " + coords.toCompactCoords(), e);
+        }
+
+        final Property pkgType = new Property();
+        pkgType.setName("package:type");
+        pkgType.setValue("maven");
+        final Property pkgLang = new Property();
+        pkgLang.setName("package:language");
+        pkgLang.setValue("java");
+        c.setProperties(List.of(pkgType, pkgLang));
+        c.setType(Component.Type.LIBRARY);
+        bom.addComponent(c);
     }
 
     private Bom runTransformers(Bom bom) {
