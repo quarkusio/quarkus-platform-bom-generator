@@ -45,9 +45,9 @@
     <nexus-staging-maven-plugin.version>1.6.8</nexus-staging-maven-plugin.version>
     <surefire-plugin.version>3.0.0-M7</surefire-plugin.version>
 
-    <cyclonedx.version>7.3.1</cyclonedx.version>
+    <cyclonedx.version>7.3.2</cyclonedx.version>
     <gradle-tooling.version>7.5.1</gradle-tooling.version>
-    <quarkus.version>2.16.3.Final</quarkus.version>
+    <quarkus.version>2.16.4.Final</quarkus.version>
     <quarkus-jgit.version>2.3.1</quarkus-jgit.version>
     <jgit.version>6.4.0.202211300538-r</jgit.version>
     <junit.jupiter.version>5.7.1</junit.jupiter.version>
