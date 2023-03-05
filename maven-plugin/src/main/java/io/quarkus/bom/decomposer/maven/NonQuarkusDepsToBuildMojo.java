@@ -4,6 +4,7 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.domino.ProjectDependencyConfig;
 import io.quarkus.domino.ProjectDependencyResolver;
+import io.quarkus.domino.manifest.SbomGeneratingDependencyVisitor;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import java.io.File;
@@ -195,14 +196,11 @@ public class NonQuarkusDepsToBuildMojo extends AbstractMojo {
     @Parameter(required = false, property = "legacyScmLocator")
     boolean legacyScmLocator;
 
+    @Parameter(required = false, property = "manifest")
+    boolean manifest;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
-
-        ArtifactCoords targetBomCoords = ArtifactCoords.fromString(bom);
-        if (!ArtifactCoords.TYPE_POM.equals(targetBomCoords.getType())) {
-            targetBomCoords = ArtifactCoords.pom(targetBomCoords.getGroupId(), targetBomCoords.getArtifactId(),
-                    targetBomCoords.getVersion());
-        }
 
         MavenArtifactResolver resolver;
         try {
@@ -217,13 +215,13 @@ public class NonQuarkusDepsToBuildMojo extends AbstractMojo {
             throw new MojoExecutionException("Failed to initialize Maven artifact resolver", e);
         }
 
-        ProjectDependencyResolver.builder()
+        final ProjectDependencyResolver.Builder builder = ProjectDependencyResolver.builder()
                 .setArtifactResolver(resolver)
                 .setMessageWriter(new MojoMessageWriter(getLog()))
                 .setLogOutputFile(outputFile == null ? null : outputFile.toPath())
                 .setAppendOutput(appendOutput)
                 .setDependencyConfig(ProjectDependencyConfig.builder()
-                        .setProjectBom(targetBomCoords)
+                        .setProjectBom(bom == null ? null : ArtifactCoords.fromString(bom))
                         .setProjectArtifacts(
                                 topLevelArtifactsToBuild.stream().map(ArtifactCoords::fromString).collect(Collectors.toList()))
                         .setIncludeGroupIds(includeGroupIds)
@@ -248,8 +246,14 @@ public class NonQuarkusDepsToBuildMojo extends AbstractMojo {
                         .setWarnOnResolutionErrors(warnOnResolutionErrors)
                         .setWarnOnMissingScm(warnOnMissingScm)
                         .setIncludeOptionalDeps(includeOptionalDeps)
-                        .setRecipeRepos(this.recipeRepos == null ? List.of() : this.recipeRepos))
-                .build().log();
+                        .setRecipeRepos(this.recipeRepos == null ? List.of() : this.recipeRepos));
+        if (manifest) {
+            builder.addDependencyTreeVisitor(
+                    new SbomGeneratingDependencyVisitor(resolver, outputFile == null ? null : outputFile.toPath()))
+                    .build().resolveDependencies();
+        } else {
+            builder.build().log();
+        }
     }
 
     private static Set<ArtifactCoords> toCoordsSet(Collection<String> set) {

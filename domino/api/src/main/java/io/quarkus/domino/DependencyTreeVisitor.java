@@ -2,6 +2,8 @@ package io.quarkus.domino;
 
 import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.maven.dependency.ArtifactCoords;
+import java.util.List;
+import org.eclipse.aether.repository.RemoteRepository;
 
 public interface DependencyTreeVisitor {
 
@@ -11,8 +13,14 @@ public interface DependencyTreeVisitor {
 
         ArtifactCoords getCoords();
 
+        List<RemoteRepository> getRepositories();
+
         boolean isManaged();
     }
+
+    void beforeAllRoots();
+
+    void afterAllRoots();
 
     void enterRootArtifact(DependencyVisit visit);
 

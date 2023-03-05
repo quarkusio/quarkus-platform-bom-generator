@@ -16,6 +16,14 @@ public class LoggingDependencyTreeVisitor implements DependencyTreeVisitor {
     }
 
     @Override
+    public void beforeAllRoots() {
+    }
+
+    @Override
+    public void afterAllRoots() {
+    }
+
+    @Override
     public void enterRootArtifact(DependencyVisit visit) {
         if (visit.isManaged()) {
             logComment(visit.getCoords().toCompactCoords());

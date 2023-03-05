@@ -232,11 +232,11 @@ public class ProjectDependencyResolver {
         config.getIncludeArtifacts().forEach(c -> includeSet.add(toPattern(c)));
         if (config.isLogTrees()) {
             treeVisitors = new ArrayList<>(builder.visitors.size() + 1);
+            treeVisitors.addAll(builder.visitors);
             treeVisitors.add(new LoggingDependencyTreeVisitor(getOutput(), true));
         } else {
             treeVisitors = builder.visitors;
         }
-
         releaseIdResolver = newReleaseIdResolver(resolver, log, config);
     }
 
@@ -250,7 +250,7 @@ public class ProjectDependencyResolver {
      * @return collection of project releases representing the project and its dependencies
      */
     public ReleaseCollection getReleaseCollection() {
-        buildModel();
+        resolveDependencies();
         configureReleaseRepoDeps();
         return ReleaseCollection.of(new ArrayList<>(releaseRepos.values()));
     }
@@ -290,7 +290,7 @@ public class ProjectDependencyResolver {
         final boolean logCodeRepos = config.isLogCodeRepos() || config.isLogCodeRepoTree();
 
         try {
-            buildModel();
+            resolveDependencies();
             int codeReposTotal = 0;
             if (config.isLogArtifactsToBuild() && !allDepsToBuild.isEmpty()) {
                 logComment("Artifacts to be built from source from "
@@ -395,7 +395,7 @@ public class ProjectDependencyResolver {
         }
     }
 
-    private void buildModel() {
+    public void resolveDependencies() {
         targetBomManagedDeps = getBomConstraints(config.getProjectBom());
         targetBomConstraints = new HashSet<>(targetBomManagedDeps.size());
         for (Dependency d : targetBomManagedDeps) {
@@ -403,6 +403,10 @@ public class ProjectDependencyResolver {
         }
         if (artifactConstraintsProvider == null) {
             artifactConstraintsProvider = t -> targetBomManagedDeps;
+        }
+
+        for (DependencyTreeVisitor v : treeVisitors) {
+            v.beforeAllRoots();
         }
 
         for (ArtifactCoords coords : getProjectArtifacts()) {
@@ -419,6 +423,10 @@ public class ProjectDependencyResolver {
 
         if (!config.isIncludeAlreadyBuilt()) {
             removeProductizedDeps();
+        }
+
+        for (DependencyTreeVisitor v : treeVisitors) {
+            v.afterAllRoots();
         }
     }
 

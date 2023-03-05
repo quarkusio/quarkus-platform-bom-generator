@@ -8,7 +8,6 @@ import io.quarkus.bom.decomposer.ReleaseIdResolver;
 import io.quarkus.domino.manifest.PncArtifactBuildInfo;
 import io.quarkus.domino.manifest.PncArtifactBuildInfo.Build;
 import io.quarkus.domino.manifest.PncArtifactBuildInfo.Content;
-import io.quarkus.maven.dependency.GAV;
 import org.eclipse.aether.artifact.Artifact;
 
 public class PncReleaseIdDetector implements ReleaseIdDetector {
@@ -23,7 +22,7 @@ public class PncReleaseIdDetector implements ReleaseIdDetector {
     public ReleaseId detectReleaseId(ReleaseIdResolver releaseResolver, Artifact artifact)
             throws BomDecomposerException {
         var pncInfo = pncInfoProvider
-                .getBuildInfo(new GAV(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion()));
+                .getBuildInfo(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion());
         if (pncInfo == null) {
             return null;
         }
