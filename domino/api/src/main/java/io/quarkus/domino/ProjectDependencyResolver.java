@@ -39,8 +39,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import org.apache.maven.artifact.versioning.ArtifactVersion;
-import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
 import org.apache.maven.model.DependencyManagement;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Parent;
@@ -239,7 +237,7 @@ public class ProjectDependencyResolver {
             treeVisitors = builder.visitors;
         }
 
-        releaseIdResolver = newReleaseIdResolver(resolver, log, config, getRhCoordsUpstreamVersions());
+        releaseIdResolver = newReleaseIdResolver(resolver, log, config);
     }
 
     public ProjectDependencyConfig getConfig() {
@@ -609,63 +607,11 @@ public class ProjectDependencyResolver {
         return releaseId;
     }
 
-    private Map<ArtifactCoords, String> getRhCoordsUpstreamVersions() {
-        if (!config.isIncludeAlreadyBuilt()) {
-            // already excluded
-            return Map.of();
-        }
-        final Map<String, List<ArtifactVersion>> upstreamVersions = new HashMap<>();
-        final List<ArtifactCoords> rhCoords = new ArrayList<>();
-        final List<ArtifactCoords> allCoords = new ArrayList<>(allDepsToBuild.size());
-        for (ArtifactCoords c : allDepsToBuild.keySet()) {
-            if (RhVersionPattern.isRhVersion(c.getVersion())) {
-                rhCoords.add(c);
-                if (!allCoords.isEmpty()) {
-                    for (ArtifactCoords coords : allCoords) {
-                        upstreamVersions.computeIfAbsent(coords.getGroupId(), k -> new ArrayList<>())
-                                .add(new DefaultArtifactVersion(coords.getVersion()));
-                    }
-                    allCoords.clear();
-                }
-            } else if (rhCoords.isEmpty()) {
-                allCoords.add(c);
-            } else {
-                upstreamVersions.computeIfAbsent(c.getGroupId(), k -> new ArrayList<>())
-                        .add(new DefaultArtifactVersion(c.getVersion()));
-            }
-        }
-        if (rhCoords.isEmpty()) {
-            return Map.of();
-        }
-        final Map<ArtifactCoords, String> rhCoordsUpstreamVersions = new HashMap<>(rhCoords.size());
-        for (ArtifactCoords c : rhCoords) {
-            final List<ArtifactVersion> originalVersions = upstreamVersions.get(c.getGroupId());
-            if (originalVersions == null) {
-                continue;
-            }
-            final ArtifactVersion noRhSuffixVersion = new DefaultArtifactVersion(
-                    RhVersionPattern.ensureNoRhSuffix(c.getVersion()));
-            for (ArtifactVersion v : originalVersions) {
-                if (v.equals(noRhSuffixVersion)) {
-                    try {
-                        resolver.resolve(new DefaultArtifact(c.getGroupId(), c.getArtifactId(), c.getClassifier(), c.getType(),
-                                v.toString()));
-                        rhCoordsUpstreamVersions.put(c, v.toString());
-                    } catch (BootstrapMavenException e) {
-                        rhCoordsUpstreamVersions.put(c, noRhSuffixVersion.toString());
-                    }
-                    break;
-                }
-            }
-        }
-        return rhCoordsUpstreamVersions;
-    }
-
     private static ReleaseIdResolver newReleaseIdResolver(MavenArtifactResolver artifactResolver, MessageWriter log,
-            ProjectDependencyConfig config, Map<ArtifactCoords, String> versionMapping) {
+            ProjectDependencyConfig config) {
 
         if (config.isLegacyScmLocator()) {
-            return getLegacyReleaseIdResolver(artifactResolver, log, config.isValidateCodeRepoTags(), versionMapping);
+            return getLegacyReleaseIdResolver(artifactResolver, log, config.isValidateCodeRepoTags());
         }
 
         final List<ReleaseIdDetector> releaseDetectors = ServiceLoader.load(ReleaseIdDetector.class).stream().map(p -> p.get())
@@ -756,15 +702,18 @@ public class ProjectDependencyResolver {
                 return null;
             }
         };
-        final ReleaseIdResolver releaseResolver = new ReleaseIdResolver(artifactResolver, List.of(hacbsScmLocator), log,
-                config.isValidateCodeRepoTags(), versionMapping);
+        final ReleaseIdResolver releaseResolver = new ReleaseIdResolver(artifactResolver,
+                List.of(new PncReleaseIdDetector(new PncBuildInfoProvider()),
+                        hacbsScmLocator),
+                log, config.isValidateCodeRepoTags());
         ref.set(releaseResolver);
         return releaseResolver;
     }
 
     private static ReleaseIdResolver getLegacyReleaseIdResolver(MavenArtifactResolver artifactResolver, MessageWriter log,
-            boolean validateCodeRepoTags, Map<ArtifactCoords, String> versionMapping) {
+            boolean validateCodeRepoTags) {
         final List<ReleaseIdDetector> releaseDetectors = new ArrayList<>();
+        releaseDetectors.add(new PncReleaseIdDetector(new PncBuildInfoProvider()));
         releaseDetectors.add(
                 // Vert.X
                 new ReleaseIdDetector() {
@@ -852,7 +801,7 @@ public class ProjectDependencyResolver {
         releaseDetectors
                 .addAll(ServiceLoader.load(ReleaseIdDetector.class).stream().map(p -> p.get()).collect(Collectors.toList()));
 
-        return new ReleaseIdResolver(artifactResolver, releaseDetectors, log, validateCodeRepoTags, versionMapping);
+        return new ReleaseIdResolver(artifactResolver, releaseDetectors, log, validateCodeRepoTags);
     }
 
     private void logReleaseRepoDep(ReleaseRepo repo, int depth) {

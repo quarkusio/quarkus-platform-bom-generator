@@ -5,7 +5,6 @@ import io.quarkus.bom.resolver.ArtifactResolverProvider;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.devtools.messagewriter.MessageWriter;
-import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.GAV;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -31,10 +30,9 @@ public class ReleaseIdResolver {
     private final ArtifactResolver resolver;
     private final Collection<ReleaseIdDetector> releaseDetectors;
     private final boolean validateRepoTag;
-    private final Map<ArtifactCoords, String> versionMapping;
     private Set<ReleaseId> validatedReleaseIds;
     private HttpClient httpClient;
-    private final WeakHashMap<GAV, ReleaseId> releaseIdCache = new WeakHashMap<>();
+    private final Map<GAV, ReleaseId> releaseIdCache = new WeakHashMap<>();
 
     public ReleaseIdResolver(MavenArtifactResolver resolver) {
         this(ArtifactResolverProvider.get(resolver));
@@ -45,8 +43,8 @@ public class ReleaseIdResolver {
     }
 
     public ReleaseIdResolver(MavenArtifactResolver resolver, Collection<ReleaseIdDetector> releaseDetectors, MessageWriter log,
-            boolean validateRepoTag, Map<ArtifactCoords, String> versionMapping) {
-        this(ArtifactResolverProvider.get(resolver), releaseDetectors, log, validateRepoTag, versionMapping);
+            boolean validateRepoTag) {
+        this(ArtifactResolverProvider.get(resolver), releaseDetectors, log, validateRepoTag);
     }
 
     public ReleaseIdResolver(ArtifactResolver resolver) {
@@ -58,33 +56,18 @@ public class ReleaseIdResolver {
         this.releaseDetectors = releaseDetectors;
         this.validateRepoTag = false;
         this.log = MessageWriter.info();
-        this.versionMapping = Map.of();
     }
 
     public ReleaseIdResolver(ArtifactResolver resolver, Collection<ReleaseIdDetector> releaseDetectors, MessageWriter log,
-            boolean validateRepoTag, Map<ArtifactCoords, String> versionMapping) {
+            boolean validateRepoTag) {
         this.resolver = Objects.requireNonNull(resolver);
         this.releaseDetectors = releaseDetectors;
         this.validateRepoTag = validateRepoTag;
         this.log = log;
-        this.versionMapping = versionMapping;
-    }
-
-    private Artifact getTargetArtifact(Artifact artifact) {
-        if (versionMapping.isEmpty()) {
-            return artifact;
-        }
-        final String v = versionMapping.get(ArtifactCoords.of(artifact.getGroupId(), artifact.getArtifactId(),
-                artifact.getClassifier(), artifact.getExtension(), artifact.getVersion()));
-        if (v == null) {
-            return artifact;
-        }
-        return artifact.setVersion(v);
     }
 
     public ReleaseId releaseId(Artifact artifact, List<RemoteRepository> repos)
             throws BomDecomposerException, UnresolvableModelException {
-        artifact = getTargetArtifact(artifact);
         var gav = new GAV(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion());
         ReleaseId releaseId = releaseIdCache.get(gav);
         if (releaseId == null) {
