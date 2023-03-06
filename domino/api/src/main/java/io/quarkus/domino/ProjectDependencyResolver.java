@@ -215,7 +215,7 @@ public class ProjectDependencyResolver {
     private final Map<ReleaseId, ReleaseRepo> releaseRepos = new HashMap<>();
     private final Map<ArtifactCoords, Map<String, String>> effectivePomProps = new HashMap<>();
 
-    private final Map<Set<ReleaseId>, List<ReleaseId>> circularRepoDeps = new HashMap<>();
+    private final Map<Set<ReleaseId>, CircularReleaseDependency> circularRepoDeps = new HashMap<>();
     private final ReleaseIdResolver releaseIdResolver;
 
     private Map<ArtifactCoords, DependencyNode> preResolvedRootArtifacts = Map.of();
@@ -250,6 +250,9 @@ public class ProjectDependencyResolver {
         buildModel();
         initReleaseRepos();
         detectCircularRepoDeps();
+        if (!circularRepoDeps.isEmpty()) {
+            throw new CircularReleaseDependenciesException(circularRepoDeps.values());
+        }
         return new ArrayList<>(releaseRepos.values());
     }
 
@@ -291,11 +294,11 @@ public class ProjectDependencyResolver {
 
                     if (!circularRepoDeps.isEmpty()) {
                         logComment("ERROR: The following circular dependency chains were detected among releases:");
-                        final Iterator<List<ReleaseId>> chains = circularRepoDeps.values().iterator();
+                        final Iterator<CircularReleaseDependency> chains = circularRepoDeps.values().iterator();
                         int i = 0;
                         while (chains.hasNext()) {
                             logComment("  Chain #" + ++i + ":");
-                            chains.next().forEach(id -> logComment("    " + id));
+                            chains.next().getReleaseDependencyChain().forEach(id -> logComment("    " + id));
                             logComment("");
                         }
                     }
@@ -1246,7 +1249,7 @@ public class ProjectDependencyResolver {
                 loop.add(chain.get(j));
             }
             loop.add(r.id);
-            circularRepoDeps.computeIfAbsent(new HashSet<>(loop), k -> loop);
+            circularRepoDeps.computeIfAbsent(new HashSet<>(loop), k -> CircularReleaseDependency.of(loop));
             return;
         }
         chain.add(r.id);
