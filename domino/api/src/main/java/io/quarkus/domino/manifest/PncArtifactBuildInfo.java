@@ -2,15 +2,18 @@ package io.quarkus.domino.manifest;
 
 import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonSetter;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -48,6 +51,24 @@ public class PncArtifactBuildInfo {
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to deserialize PNC build info", e);
         }
+    }
+
+    public static void serialize(Object catalog, Path p) throws IOException {
+        serialize(getMapper(), catalog, p);
+    }
+
+    public static void serialize(ObjectMapper mapper, Object catalog, Path p) throws IOException {
+        final Path parent = p.getParent();
+        if (parent != null && !Files.exists(parent)) {
+            Files.createDirectories(parent);
+        }
+        try (BufferedWriter writer = Files.newBufferedWriter(p)) {
+            serialize(mapper, catalog, writer);
+        }
+    }
+
+    public static void serialize(ObjectMapper mapper, Object catalog, Writer writer) throws IOException {
+        mapper.writeValue(writer, catalog);
     }
 
     private List<Content> content;
@@ -179,8 +200,10 @@ public class PncArtifactBuildInfo {
     public static class Build {
 
         private String id;
-        private String startTime;
-        private String endTime;
+        private String scmUrl;
+        private String scmRevision;
+        private String scmTag;
+
         private Map<String, Object> any;
 
         public String getId() {
@@ -191,20 +214,31 @@ public class PncArtifactBuildInfo {
             this.id = id;
         }
 
-        public String getStartTime() {
-            return startTime;
+        public String getScmUrl() {
+            return scmUrl;
         }
 
-        public void setStartTime(String startTime) {
-            this.startTime = startTime;
+        @JsonSetter("scmUrl")
+        public void setScmUrl(String scmUrl) {
+            this.scmUrl = scmUrl;
         }
 
-        public String getEndTime() {
-            return endTime;
+        public String getScmRevision() {
+            return scmRevision;
         }
 
-        public void setEndTime(String endTime) {
-            this.endTime = endTime;
+        @JsonSetter("scmRevision")
+        public void setScmRevision(String scmRevision) {
+            this.scmRevision = scmRevision;
+        }
+
+        public String getScmTag() {
+            return scmTag;
+        }
+
+        @JsonSetter("scmTag")
+        public void setScmTag(String scmTag) {
+            this.scmTag = scmTag;
         }
 
         public Map<String, Object> getAny() {
@@ -215,5 +249,15 @@ public class PncArtifactBuildInfo {
         public void setAny(Map<String, Object> any) {
             this.any = any;
         }
+    }
+
+    public static Content getContent(PncArtifactBuildInfo info) {
+        if (info == null) {
+            return null;
+        }
+        if (info.getContent() == null || info.getContent().isEmpty()) {
+            return null;
+        }
+        return info.getContent().get(0);
     }
 }

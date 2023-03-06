@@ -1,10 +1,13 @@
 package io.quarkus.domino;
 
+import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.maven.dependency.ArtifactCoords;
 
 public interface DependencyTreeVisitor {
 
     interface DependencyVisit {
+
+        ReleaseId getReleaseId();
 
         ArtifactCoords getCoords();
 
