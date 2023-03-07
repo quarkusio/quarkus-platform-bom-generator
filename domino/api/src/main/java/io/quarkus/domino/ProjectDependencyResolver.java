@@ -49,6 +49,7 @@ import org.eclipse.aether.collection.CollectRequest;
 import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.repository.RemoteRepository;
+import org.eclipse.aether.resolution.ArtifactDescriptorResult;
 import org.eclipse.aether.util.artifact.JavaScopes;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.lib.Repository;
@@ -246,7 +247,7 @@ public class ProjectDependencyResolver {
 
     public Collection<ReleaseRepo> getReleaseRepos() {
         buildModel();
-        initReleaseRepos();
+        configureReleaseRepoDeps();
         detectCircularRepoDeps();
         if (!circularRepoDeps.isEmpty()) {
             throw new CircularReleaseDependenciesException(circularRepoDeps.values());
@@ -277,7 +278,7 @@ public class ProjectDependencyResolver {
                 logComment("Artifacts to be built from source from "
                         + (config.getProjectBom() == null ? "" : config.getProjectBom().toCompactCoords()) + ":");
                 if (logCodeRepos) {
-                    initReleaseRepos();
+                    configureReleaseRepoDeps();
                     detectCircularRepoDeps();
                     codeReposTotal = releaseRepos.size();
 
@@ -508,7 +509,7 @@ public class ProjectDependencyResolver {
                         && !(config.isIncludeOptionalDeps() || isIncluded(toCoords(d.getArtifact())))) {
                     continue;
                 }
-                processNodes(extDep, d, 1, false);
+                processNodes(d, 1, false);
             }
 
             for (DependencyTreeVisitor v : treeVisitors) {
@@ -516,7 +517,7 @@ public class ProjectDependencyResolver {
             }
         } else if (config.isLogRemaining()) {
             for (DependencyNode d : root.getChildren()) {
-                processNodes(null, d, 1, true);
+                processNodes(d, 1, true);
             }
         }
     }
@@ -554,7 +555,7 @@ public class ProjectDependencyResolver {
                 a.getType(), a.getVersion());
     }
 
-    private void initReleaseRepos() {
+    private void configureReleaseRepoDeps() {
 
         final Iterator<Map.Entry<ReleaseId, ReleaseRepo>> i = releaseRepos.entrySet().iterator();
         while (i.hasNext()) {
@@ -565,16 +566,15 @@ public class ProjectDependencyResolver {
 
         for (ArtifactDependency d : artifactDeps.values()) {
             final ArtifactCoords c = d.resolved.getCoords();
-            final List<Dependency> directDeps;
+            final Artifact pomArtifact = new DefaultArtifact(c.getGroupId(), c.getArtifactId(), ArtifactCoords.TYPE_POM,
+                    c.getVersion());
+            final ArtifactDescriptorResult descriptor;
             try {
-                directDeps = resolver
-                        .resolveDescriptor(
-                                new DefaultArtifact(c.getGroupId(), c.getArtifactId(), ArtifactCoords.TYPE_POM, c.getVersion()))
-                        .getDependencies();
+                descriptor = resolver.resolveDescriptor(pomArtifact);
             } catch (BootstrapMavenException e) {
                 throw new RuntimeException("Failed to resolve artifact descriptor for " + c, e);
             }
-            for (Dependency directDep : directDeps) {
+            for (Dependency directDep : descriptor.getDependencies()) {
                 final Artifact a = directDep.getArtifact();
                 final ArtifactDependency dirArt = artifactDeps.get(ArtifactCoords.of(a.getGroupId(), a.getArtifactId(),
                         a.getClassifier(), a.getExtension(), a.getVersion()));
@@ -582,6 +582,7 @@ public class ProjectDependencyResolver {
                     d.addDependency(dirArt);
                 }
             }
+            // TODO do the same for managed deps
         }
 
         for (ArtifactDependency d : artifactDeps.values()) {
@@ -863,12 +864,11 @@ public class ProjectDependencyResolver {
         getOutput().info(msg);
     }
 
-    private void processNodes(ArtifactDependency parent, DependencyNode node, int level, boolean remaining) {
+    private void processNodes(DependencyNode node, int level, boolean remaining) {
         final ArtifactCoords coords = toCoords(node.getArtifact());
         if (isExcluded(coords)) {
             return;
         }
-        ArtifactDependency artDep = null;
         ResolvedDependency visit = null;
         if (remaining) {
             addToRemaining(coords);
@@ -878,12 +878,9 @@ public class ProjectDependencyResolver {
                 for (DependencyTreeVisitor v : treeVisitors) {
                     v.enterDependency(visit);
                 }
-                if (parent != null) {
-                    artDep = getOrCreateArtifactDep(visit);
-                    parent.addDependency(artDep);
-                    if (config.isLogTrees()) {
-                        artDep.logBomImportsAndParents();
-                    }
+                final ArtifactDependency artDep = getOrCreateArtifactDep(visit);
+                if (config.isLogTrees()) {
+                    artDep.logBomImportsAndParents();
                 }
             } else if (config.isLogRemaining()) {
                 remaining = true;
@@ -900,7 +897,7 @@ public class ProjectDependencyResolver {
             }
         }
         for (DependencyNode child : node.getChildren()) {
-            processNodes(artDep, child, level + 1, remaining);
+            processNodes(child, level + 1, remaining);
         }
 
         if (visit != null) {
@@ -995,6 +992,19 @@ public class ProjectDependencyResolver {
         if (config.isExcludeBomImports()) {
             return Map.of();
         }
+        Map<String, String> pomProps = getModelProperties(pomCoords, model);
+        if (parentPomProps != null) {
+            final Map<String, String> tmp = new HashMap<>(parentPomProps.size() + pomProps.size());
+            tmp.putAll(parentPomProps);
+            tmp.putAll(pomProps);
+            pomProps = tmp;
+        }
+        effectivePomProps.put(pomCoords, pomProps);
+        addImportedBomsToBuild(artDep, model, pomProps);
+        return pomProps;
+    }
+
+    private Map<String, String> getModelProperties(ArtifactCoords pomCoords, Model model) {
         Map<String, String> pomProps = toMap(model.getProperties());
         for (Profile profile : model.getProfiles()) {
             if (profile.getActivation() != null && profile.getActivation().isActiveByDefault()
@@ -1004,14 +1014,6 @@ public class ProjectDependencyResolver {
         }
         pomProps.put("project.version", pomCoords.getVersion());
         pomProps.put("project.groupId", pomCoords.getGroupId());
-        if (parentPomProps != null) {
-            final Map<String, String> tmp = new HashMap<>(parentPomProps.size() + pomProps.size());
-            tmp.putAll(parentPomProps);
-            tmp.putAll(pomProps);
-            pomProps = tmp;
-        }
-        effectivePomProps.put(pomCoords, pomProps);
-        addImportedBomsToBuild(artDep, model, pomProps);
         return pomProps;
     }
 
