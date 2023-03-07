@@ -214,7 +214,6 @@ public class ProjectDependencyResolver {
     private final Map<ReleaseId, ReleaseRepo> releaseRepos = new HashMap<>();
     private final Map<ArtifactCoords, Map<String, String>> effectivePomProps = new HashMap<>();
 
-    private final Map<Set<ReleaseId>, CircularReleaseDependency> circularRepoDeps = new HashMap<>();
     private final ReleaseIdResolver releaseIdResolver;
 
     private Map<ArtifactCoords, DependencyNode> preResolvedRootArtifacts = Map.of();
@@ -245,24 +244,43 @@ public class ProjectDependencyResolver {
         return config;
     }
 
-    public Collection<ReleaseRepo> getReleaseRepos() {
+    /**
+     * Returns a collection of project releases representing the project and its dependencies.
+     * 
+     * @return collection of project releases representing the project and its dependencies
+     */
+    public ReleaseCollection getReleaseCollection() {
         buildModel();
         configureReleaseRepoDeps();
-        detectCircularRepoDeps();
-        if (!circularRepoDeps.isEmpty()) {
-            throw new CircularReleaseDependenciesException(circularRepoDeps.values());
-        }
-        return new ArrayList<>(releaseRepos.values());
+        return ReleaseCollection.of(new ArrayList<>(releaseRepos.values()));
     }
 
+    /**
+     * @deprecated in favor of {@link #getReleaseCollection()}
+     * 
+     * @return collection of dependency releases
+     */
+    @Deprecated(since = "0.0.79")
+    public Collection<ReleaseRepo> getReleaseRepos() {
+        return getReleaseCollection().getReleases();
+    }
+
+    /**
+     * @deprecated in favor of {@link #getReleaseCollection()}
+     * 
+     * @return collection of dependency releases sorted according to their dependencies
+     */
+    @Deprecated(since = "0.0.79")
     public Collection<ReleaseRepo> getSortedReleaseRepos() {
-        return sortReleaseRepos(getReleaseRepos());
+        return ReleaseCollection.sort(getReleaseRepos());
     }
 
+    @Deprecated(since = "0.0.79")
     public void consumeSorted(Consumer<Collection<ReleaseRepo>> consumer) {
         consumer.accept(getSortedReleaseRepos());
     }
 
+    @Deprecated(since = "0.0.79")
     public <T> T applyToSorted(Function<Collection<ReleaseRepo>, T> func) {
         return func.apply(getSortedReleaseRepos());
     }
@@ -279,10 +297,9 @@ public class ProjectDependencyResolver {
                         + (config.getProjectBom() == null ? "" : config.getProjectBom().toCompactCoords()) + ":");
                 if (logCodeRepos) {
                     configureReleaseRepoDeps();
-                    detectCircularRepoDeps();
                     codeReposTotal = releaseRepos.size();
 
-                    final List<ReleaseRepo> sorted = sortReleaseRepos(releaseRepos.values());
+                    final List<ReleaseRepo> sorted = ReleaseCollection.sort(releaseRepos.values());
                     for (ReleaseRepo e : sorted) {
                         logComment("repo-url " + e.id().origin());
                         logComment("tag " + e.id().version().asString());
@@ -291,9 +308,10 @@ public class ProjectDependencyResolver {
                         }
                     }
 
-                    if (!circularRepoDeps.isEmpty()) {
+                    var circularDeps = ReleaseCollection.detectCircularDependencies(releaseRepos.values());
+                    if (!circularDeps.isEmpty()) {
                         logComment("ERROR: The following circular dependency chains were detected among releases:");
-                        final Iterator<CircularReleaseDependency> chains = circularRepoDeps.values().iterator();
+                        final Iterator<CircularReleaseDependency> chains = circularDeps.iterator();
                         int i = 0;
                         while (chains.hasNext()) {
                             logComment("  Chain #" + ++i + ":");
@@ -402,28 +420,6 @@ public class ProjectDependencyResolver {
         if (!config.isIncludeAlreadyBuilt()) {
             removeProductizedDeps();
         }
-    }
-
-    private static List<ReleaseRepo> sortReleaseRepos(Collection<ReleaseRepo> releaseRepos) {
-        final int codeReposTotal = releaseRepos.size();
-        final List<ReleaseRepo> sorted = new ArrayList<>(codeReposTotal);
-        final Set<ReleaseId> processedRepos = new HashSet<>(codeReposTotal);
-        for (ReleaseRepo r : releaseRepos) {
-            if (r.isRoot()) {
-                sort(r, processedRepos, sorted);
-            }
-        }
-        return sorted;
-    }
-
-    private static void sort(ReleaseRepo repo, Set<ReleaseId> processed, List<ReleaseRepo> sorted) {
-        if (!processed.add(repo.id)) {
-            return;
-        }
-        for (ReleaseRepo d : repo.dependencies.values()) {
-            sort(d, processed, sorted);
-        }
-        sorted.add(repo);
     }
 
     private void removeProductizedDeps() {
@@ -1183,31 +1179,6 @@ public class ProjectDependencyResolver {
 
     private ReleaseRepo getRepo(ReleaseId id) {
         return Objects.requireNonNull(releaseRepos.get(id));
-    }
-
-    private void detectCircularRepoDeps() {
-        for (ReleaseRepo r : releaseRepos.values()) {
-            final List<ReleaseId> chain = new ArrayList<>();
-            detectCircularRepoDeps(r, chain);
-        }
-    }
-
-    private void detectCircularRepoDeps(ReleaseRepo r, List<ReleaseId> chain) {
-        final int i = chain.indexOf(r.id);
-        if (i >= 0) {
-            final List<ReleaseId> loop = new ArrayList<>(chain.size() - i + 1);
-            for (int j = i; j < chain.size(); ++j) {
-                loop.add(chain.get(j));
-            }
-            loop.add(r.id);
-            circularRepoDeps.computeIfAbsent(new HashSet<>(loop), k -> CircularReleaseDependency.of(loop));
-            return;
-        }
-        chain.add(r.id);
-        for (ReleaseRepo d : r.dependencies.values()) {
-            detectCircularRepoDeps(d, chain);
-        }
-        chain.remove(chain.size() - 1);
     }
 
     private static Map<String, String> toMap(Properties props) {
