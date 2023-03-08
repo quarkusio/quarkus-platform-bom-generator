@@ -268,7 +268,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         if (dependenciesToBuild != null) {
-            generateDepsToBuildModule(pom);
+            generateDepsToBuildModule(pom, "quarkus-dependencies-to-build", "depsToBuild", "dependencies-to-build",
+                    "-deps-to-build.txt");
+            generateDepsToBuildModule(pom, "quarkus-sbom", "sbom", "sbom", "-sbom.json");
         }
 
         if (platformConfig.getGenerateMavenRepoZip() != null) {
@@ -318,9 +320,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
     }
 
-    private void generateDepsToBuildModule(Model parentPom) throws MojoExecutionException {
+    private void generateDepsToBuildModule(Model parentPom, String artifactId, String profileId, String outputDirName,
+            String outputFileSuffix) throws MojoExecutionException {
         final Model pom = newModel();
-        final String artifactId = "quarkus-dependencies-to-build";
         pom.setArtifactId(artifactId);
         pom.setPackaging(ArtifactCoords.TYPE_POM);
         pom.setName(getNameBase(parentPom) + " " + artifactIdToName(artifactId));
@@ -346,13 +348,13 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         plugin.setArtifactId(pluginDescriptor().getArtifactId());
 
         Profile profile = new Profile();
-        profile.setId("depsToBuild");
+        profile.setId(profileId);
         pom.addProfile(profile);
         final Activation activation = new Activation();
         profile.setActivation(activation);
         final ActivationProperty ap = new ActivationProperty();
         activation.setProperty(ap);
-        ap.setName("depsToBuild");
+        ap.setName(profileId);
 
         build = new Build();
         profile.setBuild(build);
@@ -373,7 +375,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
         build.setDefaultGoal(sb.toString());
 
-        Path outputDir = buildDir.toPath().resolve("dependencies-to-build");
+        Path outputDir = buildDir.toPath().resolve(outputDirName);
         final String prefix = pomXml.toPath().getParent().relativize(outputDir).toString();
         for (PlatformMemberImpl m : members.values()) {
             if (m.config.isHidden() || !m.config.isEnabled()) {
@@ -390,7 +392,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                     m.generatedBomCoords().getGroupId() + ":" + m.generatedBomCoords().getArtifactId() + ":"
                             + getDependencyVersion(pom, m.descriptorCoords())));
             config.addChild(
-                    textDomElement("outputFile", prefix + "/" + m.generatedBomCoords().getArtifactId() + "-deps-to-build.txt"));
+                    textDomElement("outputFile", prefix + "/" + m.generatedBomCoords().getArtifactId() + outputFileSuffix));
 
             final ProjectDependencyFilterConfig depsToBuildConfig = m.config().getDependenciesToBuild();
             if (depsToBuildConfig != null) {
