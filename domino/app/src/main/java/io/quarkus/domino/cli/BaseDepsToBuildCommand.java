@@ -50,6 +50,10 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
     public boolean logTrees;
 
     @CommandLine.Option(names = {
+            "--log-trees-for" }, description = "Comma-separate list of artifacts to log dependency trees for")
+    public String logTreesFor;
+
+    @CommandLine.Option(names = {
             "--log-remaining" }, description = "Whether to log the coordinates of the artifacts below the depth specified. The default is false.")
     public boolean logRemaining;
 
@@ -155,15 +159,18 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
         if (exportTo != null) {
             config.persist(exportTo.toPath());
         } else {
-            final ProjectDependencyResolver dependencyResolver = ProjectDependencyResolver.builder()
+            final ProjectDependencyResolver.Builder resolverBuilder = ProjectDependencyResolver.builder()
                     .setLogOutputFile(outputFile == null ? null : outputFile.toPath())
                     .setAppendOutput(appendOutput)
                     .setDependencyConfig(config)
-                    .setArtifactResolver(getArtifactResolver())
-                    .build();
-            return process(dependencyResolver);
+                    .setArtifactResolver(getArtifactResolver());
+            initResolver(resolverBuilder);
+            return process(resolverBuilder.build());
         }
         return CommandLine.ExitCode.OK;
+    }
+
+    protected void initResolver(ProjectDependencyResolver.Builder resolverBuilder) {
     }
 
     protected void initConfig(ProjectDependencyConfig.Mutable config) {
@@ -232,6 +239,7 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
                 .setIncludeKeys(Set.of()) // TODO
                 .setLevel(level)
                 .setLogArtifactsToBuild(logArtifactsToBuild)
+                .setLogTreesFor(logTreesFor)
                 .setLogCodeRepoTree(logCodeRepoGraph)
                 .setLogCodeRepos(logCodeRepos)
                 .setLogModulesToBuild(logModulesToBuild)

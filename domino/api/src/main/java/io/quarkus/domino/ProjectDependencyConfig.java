@@ -88,6 +88,13 @@ public interface ProjectDependencyConfig {
     boolean isLogTrees();
 
     /**
+     * Comma-separated list of artifacts to log dependency trees for.
+     * 
+     * @return comma-separated list of artifacts to log dependency trees for
+     */
+    String getLogTreesFor();
+
+    /**
      * Whether to log the coordinates of the artifacts below the depth specified. The default is false.
      * 
      * @return whether to log remaining artifacts
@@ -256,6 +263,8 @@ public interface ProjectDependencyConfig {
         Mutable setLogModulesToBuild(boolean logModulesToBuild);
 
         Mutable setLogTrees(boolean logTrees);
+
+        Mutable setLogTreesFor(String logTreesFor);
 
         Mutable setLogRemaining(boolean logRemaining);
 

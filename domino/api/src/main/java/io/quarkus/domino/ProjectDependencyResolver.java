@@ -45,7 +45,6 @@ import org.apache.maven.model.Parent;
 import org.apache.maven.model.Profile;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
-import org.eclipse.aether.collection.CollectRequest;
 import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.repository.RemoteRepository;
@@ -230,10 +229,10 @@ public class ProjectDependencyResolver {
         includeSet = new ArrayList<>(config.getIncludeArtifacts().size() + config.getIncludePatterns().size());
         config.getIncludePatterns().forEach(p -> includeSet.add(toPattern(p)));
         config.getIncludeArtifacts().forEach(c -> includeSet.add(toPattern(c)));
-        if (config.isLogTrees()) {
+        if (config.isLogTrees() || config.getLogTreesFor() != null) {
             treeVisitors = new ArrayList<>(builder.visitors.size() + 1);
             treeVisitors.addAll(builder.visitors);
-            treeVisitors.add(new LoggingDependencyTreeVisitor(getOutput(), true));
+            treeVisitors.add(new LoggingDependencyTreeVisitor(getOutput(), true, config.getLogTreesFor()));
         } else {
             treeVisitors = builder.visitors;
         }
@@ -488,6 +487,7 @@ public class ProjectDependencyResolver {
     }
 
     private void processRootArtifact(ArtifactCoords rootArtifact, List<Dependency> managedDeps) {
+
         final DependencyNode root = collectDependencies(rootArtifact, managedDeps);
         if (root == null) {
             // couldn't be resolved
@@ -500,6 +500,7 @@ public class ProjectDependencyResolver {
         } catch (Exception e) {
             throw new RuntimeException("Failed to process " + rootArtifact, e);
         }
+
         if (resolved != null) {
             for (DependencyTreeVisitor v : treeVisitors) {
                 v.enterRootArtifact(resolved);
@@ -531,13 +532,11 @@ public class ProjectDependencyResolver {
         if (root != null) {
             return root;
         }
+
         try {
             final Artifact a = toAetherArtifact(coords);
-            root = resolver.getSystem().collectDependencies(resolver.getSession(), new CollectRequest()
-                    .setManagedDependencies(managedDeps)
-                    .setRepositories(resolver.getRepositories())
-                    .setRoot(new Dependency(a, JavaScopes.RUNTIME)))
-                    .getRoot();
+            root = resolver.collectManagedDependencies(a, List.of(), managedDeps, List.of(), List.of(), JavaScopes.PROVIDED,
+                    JavaScopes.TEST).getRoot();
             // if the dependencies are not found, make sure the artifact actually exists
             if (root.getChildren().isEmpty()) {
                 resolver.resolve(a);
