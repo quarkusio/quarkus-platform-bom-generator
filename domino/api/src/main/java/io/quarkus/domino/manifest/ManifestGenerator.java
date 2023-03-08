@@ -2,6 +2,7 @@ package io.quarkus.domino.manifest;
 
 import com.github.packageurl.MalformedPackageURLException;
 import com.github.packageurl.PackageURL;
+import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.BootstrapModelBuilderFactory;
@@ -168,7 +169,7 @@ public class ManifestGenerator {
 
         final Model model = resolveModel(coords, repos);
         final Component c = new Component();
-        extractMetadata(release, model, c);
+        extractMetadata(release.id(), model, c);
         if (c.getPublisher() == null) {
             c.setPublisher("central");
         }
@@ -223,7 +224,7 @@ public class ManifestGenerator {
         return bom;
     }
 
-    private static void extractMetadata(ReleaseRepo release, Model project, Component component) {
+    static void extractMetadata(ReleaseId releaseId, Model project, Component component) {
         if (component.getPublisher() == null) {
             // If we don't already have publisher information, retrieve it.
             if (project.getOrganization() != null) {
@@ -284,12 +285,12 @@ public class ManifestGenerator {
                 }
             }
             if (!doesComponentHaveExternalReference(component, ExternalReference.Type.VCS)) {
-                addExternalReference(ExternalReference.Type.VCS, release.id().origin().toString(), component);
+                addExternalReference(ExternalReference.Type.VCS, releaseId.origin().toString(), component);
             }
         }
     }
 
-    private static LicenseChoice resolveMavenLicenses(List<org.apache.maven.model.License> projectLicenses,
+    static LicenseChoice resolveMavenLicenses(List<org.apache.maven.model.License> projectLicenses,
             boolean includeLicenseText) {
         final LicenseChoice licenseChoice = new LicenseChoice();
         for (org.apache.maven.model.License artifactLicense : projectLicenses) {
@@ -319,7 +320,7 @@ public class ManifestGenerator {
         return licenseChoice;
     }
 
-    private static boolean resolveLicenseInfo(LicenseChoice licenseChoice, LicenseChoice licenseChoiceToResolve) {
+    static boolean resolveLicenseInfo(LicenseChoice licenseChoice, LicenseChoice licenseChoiceToResolve) {
         if (licenseChoiceToResolve != null) {
             if (licenseChoiceToResolve.getLicenses() != null && !licenseChoiceToResolve.getLicenses().isEmpty()) {
                 licenseChoice.addLicense(licenseChoiceToResolve.getLicenses().get(0));
@@ -333,7 +334,7 @@ public class ManifestGenerator {
         return false;
     }
 
-    private static Version schemaVersion() {
+    static Version schemaVersion() {
         return Version.VERSION_14;
     }
 
@@ -527,11 +528,11 @@ public class ManifestGenerator {
         }
     }
 
-    private static class SbomTransformContextImpl implements SbomTransformContext {
+    static class SbomTransformContextImpl implements SbomTransformContext {
 
-        private Bom bom;
+        Bom bom;
 
-        private SbomTransformContextImpl(Bom bom) {
+        SbomTransformContextImpl(Bom bom) {
             this.bom = bom;
         }
 

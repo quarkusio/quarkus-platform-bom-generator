@@ -8,6 +8,7 @@ import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.domino.ProjectDependencyConfig;
 import io.quarkus.domino.ProjectDependencyResolver;
 import io.quarkus.domino.manifest.ManifestGenerator;
+import io.quarkus.domino.manifest.SbomGeneratingDependencyVisitor;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.paths.PathTree;
 import io.quarkus.registry.CatalogMergeUtility;
@@ -186,6 +187,9 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     @Parameter(required = false, property = "manifest")
     boolean manifest;
 
+    @Parameter(required = false, property = "flatManifest")
+    boolean flatManifest;
+
     @Parameter(required = false, property = "redhatSupported")
     boolean redhatSupported;
 
@@ -319,7 +323,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             supported.put(deploymentCoords, ext);
         }
 
-        final ProjectDependencyResolver depsResolver = ProjectDependencyResolver.builder()
+        final ProjectDependencyResolver.Builder depsResolver = ProjectDependencyResolver.builder()
                 .setArtifactConstraintsProvider(coords -> {
                     final Extension ext = supported.get(coords);
                     return ext == null ? targetBomManagedDeps : getConstraintsForExtension(ext);
@@ -353,16 +357,19 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                         .setValidateCodeRepoTags(validateCodeRepoTags)
                         .setLegacyScmLocator(legacyScmLocator)
                         .setRecipeRepos(recipeRepos)
-                        .setWarnOnMissingScm(warnOnMissingScm))
-                .build();
+                        .setWarnOnMissingScm(warnOnMissingScm));
 
         if (manifest) {
-            depsResolver.consumeSorted(ManifestGenerator.builder()
+            depsResolver.addDependencyTreeVisitor(
+                    new SbomGeneratingDependencyVisitor(resolver, outputFile == null ? null : outputFile.toPath()))
+                    .build().resolveDependencies();
+        } else if (flatManifest) {
+            depsResolver.build().consumeSorted(ManifestGenerator.builder()
                     .setArtifactResolver(resolver)
                     .setOutputFile(outputFile == null ? null : outputFile.toPath())
                     .build().toConsumer());
         } else {
-            depsResolver.log();
+            depsResolver.build().log();
         }
     }
 

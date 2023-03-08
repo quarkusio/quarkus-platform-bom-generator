@@ -30,6 +30,7 @@ class ResolvedDependency implements DependencyTreeVisitor.DependencyVisit {
         return coords;
     }
 
+    @Override
     public List<RemoteRepository> getRepositories() {
         return repos;
     }

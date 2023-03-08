@@ -2,7 +2,6 @@ package io.quarkus.domino;
 
 import io.quarkus.bootstrap.util.PropertyUtils;
 import io.quarkus.domino.manifest.PncArtifactBuildInfo;
-import io.quarkus.maven.dependency.GAV;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.MalformedURLException;
@@ -26,11 +25,11 @@ public class PncBuildInfoProvider {
         cacheDir = Path.of(PropertyUtils.getUserHome()).resolve(DOT_DOMINO).resolve(PNC_BUILD_INFO);
     }
 
-    public PncArtifactBuildInfo getBuildInfo(GAV gav) {
-        if (!RhVersionPattern.isRhVersion(gav.getVersion())) {
+    public PncArtifactBuildInfo getBuildInfo(String groupId, String artifactId, String version) {
+        if (!RhVersionPattern.isRhVersion(version)) {
             return null;
         }
-        final Path cachedJson = cacheDir.resolve(gav.getGroupId()).resolve(gav.getArtifactId()).resolve(gav.getVersion())
+        final Path cachedJson = cacheDir.resolve(groupId).resolve(artifactId).resolve(version)
                 .resolve(PNC_BUILD_INFO_JSON);
         if (Files.exists(cachedJson)) {
             return PncArtifactBuildInfo.deserialize(cachedJson);
@@ -40,9 +39,9 @@ public class PncBuildInfoProvider {
         try {
             url = new URL("https", "orch.psi.redhat.com", 443,
                     "/pnc-rest/v2/artifacts?q=identifier==%22"
-                            + gav.getGroupId() + ":"
-                            + gav.getArtifactId() + ":pom:"
-                            + gav.getVersion()
+                            + groupId + ":"
+                            + artifactId + ":pom:"
+                            + version
                             + "%22");
             log.infof("Requesting build info %s", url);
         } catch (MalformedURLException e) {
