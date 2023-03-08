@@ -81,7 +81,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
      * Whether to exclude dependencies (and their transitive dependencies) that aren't managed in the BOM. The default is true.
      */
     @Parameter(required = false, property = "includeNonManaged")
-    boolean includeNonManaged;
+    Boolean includeNonManaged;
 
     /**
      * Whether to log the coordinates of the artifacts captured down to the depth specified. The default is true.
@@ -102,6 +102,12 @@ public class DependenciesToBuildMojo extends AbstractMojo {
      */
     @Parameter(required = false, property = "logTrees")
     boolean logTrees;
+
+    /**
+     * Comma-separated list of root artifacts to log dependency trees for
+     */
+    @Parameter(required = false, property = "logTreesFor")
+    String logTreesFor;
 
     /**
      * Whether to log the coordinates of the artifacts below the depth specified. The default is false.
@@ -262,13 +268,15 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 catalogs.add(catalog);
                 for (ArtifactCoords descrCoords : otherDescriptorCoords) {
                     final ExtensionCatalog otherCatalog = resolveCatalog(descrCoords);
-                    catalogs.add(otherCatalog);
+                    if (!isManifestMode()) {
+                        catalogs.add(otherCatalog);
+                    }
 
                     final ArtifactCoords otherBomCoords = otherCatalog.getBom();
                     final List<Dependency> otherBomDeps = getBomConstraints(otherBomCoords);
                     final List<Dependency> enforcedConstraints = new ArrayList<>(
                             targetBomManagedDeps.size() + otherBomDeps.size());
-                    enforcedConstraints.addAll(otherBomDeps);
+                    enforcedConstraints.addAll(targetBomManagedDeps);
                     enforcedConstraints.addAll(otherBomDeps);
                     enforcedConstraintsForBom.put(otherBomCoords, enforcedConstraints);
                 }
@@ -330,7 +338,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 })
                 .setArtifactResolver(resolver)
                 .setMessageWriter(new MojoMessageWriter(getLog()))
-                .setLogOutputFile(outputFile == null ? null : outputFile.toPath())
+                .setLogOutputFile(isManifestMode() ? null : (outputFile == null ? null : outputFile.toPath()))
                 .setAppendOutput(appendOutput)
                 .setDependencyConfig(ProjectDependencyConfig.builder()
                         .setProjectBom(targetBomCoords)
@@ -343,7 +351,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                         .setExcludeKeys(dependenciesToBuild.getExcludeKeys())
                         .setExcludeBomImports(excludeBomImports)
                         .setExcludeParentPoms(excludeParentPoms)
-                        .setIncludeNonManaged(includeNonManaged)
+                        .setIncludeNonManaged(includeNonManaged == null ? isManifestMode() : includeNonManaged)
                         .setLevel(level)
                         .setLogArtifactsToBuild(logArtifactsToBuild)
                         .setLogCodeRepoTree(logCodeRepoGraph)
@@ -353,6 +361,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                         .setLogRemaining(logRemaining)
                         .setLogSummary(logSummary)
                         .setLogTrees(logTrees)
+                        .setLogTreesFor(logTreesFor)
                         .setIncludeAlreadyBuilt(includeAlreadyBuilt)
                         .setValidateCodeRepoTags(validateCodeRepoTags)
                         .setLegacyScmLocator(legacyScmLocator)
@@ -371,6 +380,10 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         } else {
             depsResolver.build().log();
         }
+    }
+
+    private boolean isManifestMode() {
+        return manifest || flatManifest;
     }
 
     private List<Dependency> getConstraintsForExtension(Extension ext) {

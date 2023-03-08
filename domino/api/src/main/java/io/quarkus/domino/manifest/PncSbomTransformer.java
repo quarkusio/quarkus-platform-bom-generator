@@ -27,7 +27,7 @@ public class PncSbomTransformer implements SbomTransformer {
 
     @Override
     public Bom transform(SbomTransformContext ctx) {
-        log.info("Adding PNC build info to the manifest");
+        log.debug("Adding PNC build info to the manifest");
         final Bom bom = ctx.getOriginalBom();
         if (bom.getComponents() == null) {
             return bom;

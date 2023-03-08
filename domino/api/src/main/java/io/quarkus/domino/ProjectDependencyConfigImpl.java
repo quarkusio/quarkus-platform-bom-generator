@@ -26,6 +26,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     private final boolean logArtifactsToBuild;
     private final boolean logModulesToBuild;
     private final boolean logTrees;
+    private final String logTreesFor;
     private final boolean logRemaining;
     private final boolean logSummary;
     private final boolean logNonManagedVisited;
@@ -55,6 +56,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         logArtifactsToBuild = other.isLogArtifactsToBuild();
         logModulesToBuild = other.isLogModulesToBuild();
         logTrees = other.isLogTrees();
+        logTreesFor = other.getLogTreesFor();
         logRemaining = other.isLogRemaining();
         logSummary = other.isLogSummary();
         logNonManagedVisited = other.isLogNonManagedVisitied();
@@ -134,6 +136,11 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     @Override
     public boolean isLogTrees() {
         return logTrees;
+    }
+
+    @Override
+    public String getLogTreesFor() {
+        return logTreesFor;
     }
 
     @Override
@@ -225,6 +232,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         private boolean logArtifactsToBuild;
         private boolean logModulesToBuild;
         private boolean logTrees;
+        private String logTreesFor;
         private boolean logRemaining;
         private boolean logSummary;
         private boolean logNonManagedVisited;
@@ -257,6 +265,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
             logArtifactsToBuild = other.isLogArtifactsToBuild();
             logModulesToBuild = other.isLogModulesToBuild();
             logTrees = other.isLogTrees();
+            logTreesFor = other.getLogTreesFor();
             logRemaining = other.isLogRemaining();
             logSummary = other.isLogSummary();
             logNonManagedVisited = other.isLogNonManagedVisitied();
@@ -340,6 +349,11 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         @Override
         public boolean isLogTrees() {
             return logTrees;
+        }
+
+        @Override
+        public String getLogTreesFor() {
+            return logTreesFor;
         }
 
         @Override
@@ -500,6 +514,12 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         @Override
         public Mutable setLogTrees(boolean logTrees) {
             this.logTrees = logTrees;
+            return this;
+        }
+
+        @Override
+        public Mutable setLogTreesFor(String logTreesFor) {
+            this.logTreesFor = logTreesFor;
             return this;
         }
 
