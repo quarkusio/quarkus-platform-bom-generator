@@ -10,11 +10,20 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Plugin;
 import org.apache.maven.model.PluginExecution;
 
 public class MavenProjectReader {
+
+    private static final Map<String, String> PACKAGING_TYPE = Map.of(
+            "maven-archetype", ArtifactCoords.TYPE_JAR,
+            "bundle", ArtifactCoords.TYPE_JAR);
+
+    private static String getTypeForPackaging(String packaging) {
+        return PACKAGING_TYPE.getOrDefault(packaging, packaging);
+    }
 
     public static List<ArtifactCoords> resolveModuleDependencies(MavenArtifactResolver resolver) {
 
@@ -32,10 +41,7 @@ public class MavenProjectReader {
         final List<ArtifactCoords> result = new ArrayList<>();
         for (LocalProject project : ws.getProjects().values()) {
             if (isPublished(project)) {
-                var type = project.getRawModel().getPackaging();
-                if ("maven-archetype".equals(type)) {
-                    type = ArtifactCoords.TYPE_JAR;
-                }
+                var type = getTypeForPackaging(project.getRawModel().getPackaging());
                 result.add(ArtifactCoords.of(project.getGroupId(), project.getArtifactId(),
                         ArtifactCoords.DEFAULT_CLASSIFIER, type, project.getVersion()));
             }
