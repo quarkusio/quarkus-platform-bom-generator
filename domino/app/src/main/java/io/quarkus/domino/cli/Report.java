@@ -20,8 +20,11 @@ public class Report extends BaseDepsToBuildCommand {
     @Override
     protected void initConfig(ProjectDependencyConfig.Mutable config) {
         super.initConfig(config);
-        if (manifest) {
+        if (manifest || flatManifest) {
             config.setIncludeAlreadyBuilt(true);
+            if (excludeParentPoms == null) {
+                config.setExcludeParentPoms(true);
+            }
         }
     }
 

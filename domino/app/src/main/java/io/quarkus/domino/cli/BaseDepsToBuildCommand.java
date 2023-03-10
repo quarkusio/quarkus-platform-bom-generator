@@ -83,7 +83,7 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
 
     @CommandLine.Option(names = {
             "--exclude-parent-poms" }, description = "Whether to exclude parent POMs from the list of artifacts to be built from source")
-    public boolean excludeParentPoms;
+    public Boolean excludeParentPoms;
 
     @CommandLine.Option(names = {
             "--exclude-bom-imports" }, description = "Whether to exclude BOMs imported in the POMs of artifacts to be built from the list of artifacts to be built from source")
@@ -233,7 +233,7 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
         config.setExcludeBomImports(excludeBomImports)
                 .setExcludeGroupIds(excludeGroupIds) // TODO
                 .setExcludeKeys(excludeKeys)
-                .setExcludeParentPoms(excludeParentPoms)
+                .setExcludeParentPoms(excludeParentPoms == null ? false : excludeParentPoms)
                 .setIncludeArtifacts(Set.of()) // TODO
                 .setIncludeGroupIds(Set.of()) // TODO
                 .setIncludeKeys(Set.of()) // TODO

@@ -920,8 +920,7 @@ public class ProjectDependencyResolver {
             nonManagedVisited.add(coords);
         }
 
-        if (managed || config.isIncludeNonManaged() || isIncluded(coords)
-                || !config.isExcludeParentPoms() && coords.getType().equals(ArtifactCoords.TYPE_POM)) {
+        if (managed || config.isIncludeNonManaged() || isIncluded(coords)) {
             ResolvedDependency resolved = new ResolvedDependency(getReleaseId(coords, repos), coords, repos, managed);
             if (!config.isExcludeParentPoms() && !isExcludeParentPoms(coords)) {
                 addImportedBomsAndParentPomToBuild(resolved);
