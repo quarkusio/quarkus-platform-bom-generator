@@ -151,10 +151,6 @@ public class SbomGeneratingDependencyVisitor implements DependencyTreeVisitor {
     }
 
     private void addComponent(Bom bom, VisitedComponent visited) {
-        if (ArtifactCoords.TYPE_POM.equals(visited.coords.getType())) {
-            return;
-        }
-
         final ArtifactCoords coords = visited.coords;
         final Model model = resolveModel(visited);
         final Component c = new Component();
@@ -168,13 +164,12 @@ public class SbomGeneratingDependencyVisitor implements DependencyTreeVisitor {
         c.setPurl(visited.getPurl());
         c.setBomRef(visited.getBomRef());
 
-        final Property pkgType = new Property();
-        pkgType.setName("package:type");
-        pkgType.setValue("maven");
-        final Property pkgLang = new Property();
-        pkgLang.setName("package:language");
-        pkgLang.setValue("java");
-        c.setProperties(List.of(pkgType, pkgLang));
+        final List<Property> props = new ArrayList<>(2);
+        ManifestGenerator.addProperty(props, "package:type", "maven");
+        if (!ArtifactCoords.TYPE_POM.equals(coords.getType())) {
+            ManifestGenerator.addProperty(props, "package:language", "java");
+        }
+        c.setProperties(props);
         c.setType(Component.Type.LIBRARY);
         bom.addComponent(c);
 

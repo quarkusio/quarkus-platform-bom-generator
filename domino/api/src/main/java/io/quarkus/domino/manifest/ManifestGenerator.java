@@ -163,10 +163,6 @@ public class ManifestGenerator {
     }
 
     private void addComponent(Bom bom, ReleaseRepo release, ArtifactCoords coords, List<RemoteRepository> repos) {
-        if (ArtifactCoords.TYPE_POM.equals(coords.getType())) {
-            return;
-        }
-
         final Model model = resolveModel(coords, repos);
         final Component c = new Component();
         extractMetadata(release.id(), model, c);
@@ -191,15 +187,21 @@ public class ManifestGenerator {
             throw new RuntimeException("Failed to generate Purl for " + coords.toCompactCoords(), e);
         }
 
-        final Property pkgType = new Property();
-        pkgType.setName("package:type");
-        pkgType.setValue("maven");
-        final Property pkgLang = new Property();
-        pkgLang.setName("package:language");
-        pkgLang.setValue("java");
-        c.setProperties(List.of(pkgType, pkgLang));
+        final List<Property> props = new ArrayList<>(2);
+        addProperty(props, "package:type", "maven");
+        if (!ArtifactCoords.TYPE_POM.equals(coords.getType())) {
+            addProperty(props, "package:language", "java");
+        }
+        c.setProperties(props);
         c.setType(Component.Type.LIBRARY);
         bom.addComponent(c);
+    }
+
+    static void addProperty(List<Property> props, String name, String value) {
+        var prop = new Property();
+        prop.setName(name);
+        prop.setValue(value);
+        props.add(prop);
     }
 
     private Bom runTransformers(Bom bom) {
