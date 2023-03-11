@@ -1,5 +1,6 @@
 package io.quarkus.domino;
 
+import io.quarkus.domino.ProjectDependencyConfig.Mutable;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import java.io.IOException;
@@ -32,6 +33,14 @@ public interface ProjectDependencyConfig {
     Collection<ArtifactCoords> getIncludePatterns();
 
     Collection<ArtifactCoords> getExcludePatterns();
+
+    /**
+     * Dependency scopes that should be excluded resolving dependencies of root artifact.
+     * If not configured, provided and test scoped dependencies will be excluded by default.
+     * 
+     * @return dependency scopes that should be excluded resolving dependencies of root artifact
+     */
+    Set<String> getExcludeScopes();
 
     /**
      * Whether to exclude dependencies (and their transitive dependencies) that aren't managed in the BOM. The default is true.
@@ -249,6 +258,8 @@ public interface ProjectDependencyConfig {
         Mutable setExcludePatterns(Set<ArtifactCoords> artifacts);
 
         Mutable addExcludePattern(ArtifactCoords pattern);
+
+        Mutable setExcludeScopes(Set<String> excludeScopes);
 
         Mutable setIncludeNonManaged(boolean includeNonManaged);
 

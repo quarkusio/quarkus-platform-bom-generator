@@ -64,6 +64,17 @@ The above report will include only the Vert.X artifacts. Adding `--include-non-m
 java -jar domino.jar report --bom=io.vertx:vertx-dependencies:4.3.4.redhat-00007 --include-non-managed --output-file=report.txt --manifest
 ```
 
+##### Filtering dependencies by scope
+
+By default, dependencies with Maven scopes `provided` and `test` will be excluded when collecting dependencies of the root project artifacts, since these dependencies won't be
+included in the dependency trees when the root project artifacts are added as dependencies to other projects. However, `--exclude-scopes` argument allows to provide an alternative set of scopes
+that should be excluded. For example, in case only the `test` scope should be excluded, the command could look like this:
+```
+java -jar domino.jar report --project-dir=path/to/project-dir --output-file=report.txt --manifest --exclude-scopes=test
+```
+
+In case none of the scopes should be excluded, simply add `--exclude-scopes=none`.
+
 #### Maven Artifact Resolver Settings
 
 The dependency analyzer will initialize a Maven artifact resolver taking into account user's Maven `settings.xml` file. The `report` command though allows passing custom Maven settings and/or activate specific profiles from the command line using the following arguments:
