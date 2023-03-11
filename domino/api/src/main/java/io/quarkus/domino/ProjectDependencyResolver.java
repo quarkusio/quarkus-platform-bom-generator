@@ -49,7 +49,6 @@ import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.resolution.ArtifactDescriptorResult;
-import org.eclipse.aether.util.artifact.JavaScopes;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.lib.Repository;
 
@@ -535,8 +534,10 @@ public class ProjectDependencyResolver {
 
         try {
             final Artifact a = toAetherArtifact(coords);
-            root = resolver.collectManagedDependencies(a, List.of(), managedDeps, List.of(), List.of(), JavaScopes.PROVIDED,
-                    JavaScopes.TEST).getRoot();
+            root = resolver.getSystem().collectDependencies(resolver.getSession(),
+                    resolver.newCollectManagedRequest(a, List.of(), managedDeps, List.of(), List.of(),
+                            config.getExcludeScopes()))
+                    .getRoot();
             // if the dependencies are not found, make sure the artifact actually exists
             if (root.getChildren().isEmpty()) {
                 resolver.resolve(a);

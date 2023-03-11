@@ -19,6 +19,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     private final Collection<ArtifactCoords> includeArtifacts;
     private final Collection<ArtifactCoords> includePatterns;
     private final Collection<ArtifactCoords> excludePatterns;
+    private final Set<String> excludeScopes;
     private final boolean includeNonManaged;
     private final boolean excludeParentPoms;
     private final boolean excludeBomImports;
@@ -49,6 +50,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         includeArtifacts = toUnmodifiableList(other.getIncludeArtifacts());
         includePatterns = toUnmodifiableList(other.getIncludePatterns());
         excludePatterns = toUnmodifiableList(other.getExcludePatterns());
+        excludeScopes = toUnmodifiableSet(other.getExcludeScopes());
         includeNonManaged = other.isIncludeNonManaged();
         excludeParentPoms = other.isExcludeParentPoms();
         excludeBomImports = other.isExcludeBomImports();
@@ -101,6 +103,11 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     @Override
     public Collection<ArtifactCoords> getExcludePatterns() {
         return excludePatterns;
+    }
+
+    @Override
+    public Set<String> getExcludeScopes() {
+        return excludeScopes;
     }
 
     @Override
@@ -225,6 +232,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         private Collection<ArtifactCoords> includeArtifacts = new ArrayList<>();
         private Collection<ArtifactCoords> includePatterns = new ArrayList<>();
         private Collection<ArtifactCoords> excludePatterns = new ArrayList<>();
+        private Set<String> excludeScopes = Set.of("provided", "test");
         private boolean includeNonManaged;
         private boolean excludeParentPoms;
         private boolean excludeBomImports;
@@ -258,6 +266,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
             includeArtifacts.addAll(other.getIncludeArtifacts());
             includePatterns.addAll(other.getIncludePatterns());
             excludePatterns.addAll(other.getExcludePatterns());
+            excludeScopes = other.getExcludeScopes();
             includeNonManaged = other.isIncludeNonManaged();
             excludeParentPoms = other.isExcludeParentPoms();
             excludeBomImports = other.isExcludeBomImports();
@@ -314,6 +323,11 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         @Override
         public Collection<ArtifactCoords> getExcludePatterns() {
             return excludePatterns;
+        }
+
+        @Override
+        public Set<String> getExcludeScopes() {
+            return excludeScopes;
         }
 
         @Override
@@ -463,6 +477,12 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         @Override
         public Mutable setExcludePatterns(Set<ArtifactCoords> artifacts) {
             this.excludePatterns = artifacts;
+            return this;
+        }
+
+        @Override
+        public Mutable setExcludeScopes(Set<String> excludeScopes) {
+            this.excludeScopes = excludeScopes;
             return this;
         }
 
@@ -622,5 +642,12 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
             return List.of();
         }
         return List.copyOf(o);
+    }
+
+    static <T> Set<T> toUnmodifiableSet(Collection<T> o) {
+        if (o == null || o.isEmpty()) {
+            return Set.of();
+        }
+        return Set.copyOf(o);
     }
 }

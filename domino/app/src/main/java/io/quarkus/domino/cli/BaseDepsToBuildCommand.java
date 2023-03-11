@@ -102,6 +102,10 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
     public String includeGroupIds;
 
     @CommandLine.Option(names = {
+            "--exclude-scopes" }, description = "Command-separated list of dependency scopes that should be excluded when collecting dependencies of the root project artifacts", split = ",")
+    public Set<String> excludeScopes;
+
+    @CommandLine.Option(names = {
             "--recipe-repos" }, description = "Build recipe repository URLs, the default one is https://github.com/redhat-appstudio/jvm-build-data")
     public String recipeRepos;
 
@@ -230,6 +234,12 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
             config.setRecipeRepos(list);
         }
 
+        if (excludeScopes != null) {
+            if (excludeScopes.size() == 1 && excludeScopes.contains("none")) {
+                excludeScopes = Set.of();
+            }
+            config.setExcludeScopes(excludeScopes);
+        }
         config.setExcludeBomImports(excludeBomImports)
                 .setExcludeGroupIds(excludeGroupIds) // TODO
                 .setExcludeKeys(excludeKeys)
