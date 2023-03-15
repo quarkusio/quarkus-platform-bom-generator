@@ -216,6 +216,7 @@ public class ProjectDependencyResolver {
 
     private Map<ArtifactCoords, DependencyNode> preResolvedRootArtifacts = Map.of();
     private ReleaseId projectReleaseId;
+    private Set<GAV> projectGavs;
 
     private ProjectDependencyResolver(Builder builder) {
         this.resolver = builder.getInitializedResolver();
@@ -448,9 +449,9 @@ public class ProjectDependencyResolver {
     }
 
     protected Iterable<ArtifactCoords> getProjectArtifacts() {
+        Collection<ArtifactCoords> result = null;
         if (config.getProjectDir() != null) {
             final BuildTool buildTool = BuildTool.forProjectDir(config.getProjectDir());
-            Collection<ArtifactCoords> result;
             if (BuildTool.MAVEN.equals(buildTool)) {
                 result = MavenProjectReader.resolveModuleDependencies(resolver);
             } else if (BuildTool.GRADLE.equals(buildTool)) {
@@ -469,20 +470,36 @@ public class ProjectDependencyResolver {
             } else {
                 throw new IllegalStateException("Unrecognized build tool " + buildTool);
             }
-            return result;
         }
 
         if (config.getProjectArtifacts().isEmpty()) {
-            final List<ArtifactCoords> result = new ArrayList<>();
+            if (result == null) {
+                result = new ArrayList<>();
+            } else {
+                result = new HashSet<>(result);
+            }
             for (ArtifactCoords d : targetBomConstraints) {
                 if (d.getGroupId().startsWith(config.getProjectBom().getGroupId()) && d.isJar() && !isExcluded(d)) {
                     result.add(d);
                     log.debug(d.toCompactCoords() + " selected as a top level artifact to build");
                 }
             }
-            return result;
+        } else if (result == null) {
+            result = config.getProjectArtifacts();
+        } else {
+            result = new HashSet<>(result);
+            result.addAll(config.getProjectArtifacts());
         }
-        return config.getProjectArtifacts();
+
+        if (config.getProjectDir() == null) {
+            projectGavs = Set.of();
+        } else {
+            projectGavs = new HashSet<>(result.size());
+            for (ArtifactCoords c : result) {
+                projectGavs.add(toGav(c));
+            }
+        }
+        return result;
     }
 
     private void processRootArtifact(ArtifactCoords rootArtifact, List<Dependency> managedDeps) {
@@ -911,19 +928,20 @@ public class ProjectDependencyResolver {
         }
     }
 
-    private boolean isExcludeParentPoms(ArtifactCoords coords) {
-        return preResolvedRootArtifacts.containsKey(coords);
-    }
-
     private ResolvedDependency addArtifactToBuild(ArtifactCoords coords, List<RemoteRepository> repos) {
         final boolean managed = targetBomConstraints.contains(coords);
         if (!managed) {
             nonManagedVisited.add(coords);
         }
 
-        if (managed || config.isIncludeNonManaged() || isIncluded(coords)) {
+        if (managed
+                || config.isIncludeNonManaged()
+                || isIncluded(coords)
+                || coords.getType().equals(ArtifactCoords.TYPE_POM)
+                        && (!config.isExcludeParentPoms()
+                                || projectGavs.contains(toGav(coords)))) {
             ResolvedDependency resolved = new ResolvedDependency(getReleaseId(coords, repos), coords, repos, managed);
-            if (!config.isExcludeParentPoms() && !isExcludeParentPoms(coords)) {
+            if (!config.isExcludeParentPoms()) {
                 addImportedBomsAndParentPomToBuild(resolved);
             }
             allDepsToBuild.put(coords, resolved);
@@ -1204,6 +1222,10 @@ public class ProjectDependencyResolver {
 
     private static String toString(Object o) {
         return o == null ? null : o.toString();
+    }
+
+    private static GAV toGav(ArtifactCoords coords) {
+        return new GAV(coords.getGroupId(), coords.getArtifactId(), coords.getVersion());
     }
 
     private static ArtifactCoords toCoords(Artifact a) {
