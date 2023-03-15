@@ -46,6 +46,16 @@
     <dependency>
       <groupId>io.github.redhat-appstudio.jvmbuild</groupId>
       <artifactId>hacbs-build-recipies-database</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>io.quarkiverse.jgit</groupId>
+          <artifactId>quarkus-jgit</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.maven</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
