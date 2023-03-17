@@ -643,6 +643,7 @@ public class ProjectDependencyResolver {
         final ScmLocator scmLocator = GitScmLocator.builder()
                 .setRecipeRepos(config.getRecipeRepos())
                 .setCacheRepoTags(true)
+                .setCloneLocalRecipeRepos(false)
                 .setFallback(new ScmLocator() {
                     @Override
                     public TagInfo resolveTagInfo(GAV gav) {
