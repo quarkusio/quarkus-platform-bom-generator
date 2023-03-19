@@ -46,7 +46,9 @@ import org.cyclonedx.BomGeneratorFactory;
 import org.cyclonedx.generators.json.BomJsonGenerator;
 import org.cyclonedx.model.Bom;
 import org.cyclonedx.model.Component;
+import org.cyclonedx.model.Component.Type;
 import org.cyclonedx.model.Dependency;
+import org.cyclonedx.model.Metadata;
 import org.cyclonedx.model.Property;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
@@ -57,6 +59,7 @@ public class SbomGeneratingDependencyVisitor implements DependencyTreeVisitor {
 
     private final MavenArtifactResolver resolver;
     private final Path outputFile;
+    private final ProductInfo productInfo;
     private final Map<ArtifactCoords, List<VisitedComponent>> visitedComponents = new HashMap<>();
     private final ArrayDeque<VisitedComponent> componentStack = new ArrayDeque<>();
 
@@ -64,9 +67,10 @@ public class SbomGeneratingDependencyVisitor implements DependencyTreeVisitor {
     private final ModelCache modelCache;
     private final Map<ArtifactCoords, Model> effectiveModels = new HashMap<>();
 
-    public SbomGeneratingDependencyVisitor(MavenArtifactResolver resolver, Path outputFile) {
+    public SbomGeneratingDependencyVisitor(MavenArtifactResolver resolver, Path outputFile, ProductInfo productInfo) {
         this.resolver = resolver;
         this.outputFile = outputFile;
+        this.productInfo = productInfo;
         try {
             modelCache = new BootstrapModelCache(resolver.getMavenContext().getRepositorySystemSession());
         } catch (BootstrapMavenException e) {
@@ -81,6 +85,50 @@ public class SbomGeneratingDependencyVisitor implements DependencyTreeVisitor {
     @Override
     public void afterAllRoots() {
         Bom bom = new Bom();
+
+        if (productInfo != null) {
+            var metadata = new Metadata();
+            var c = new Component();
+            if (productInfo.getGroup() != null) {
+                c.setGroup(productInfo.getGroup());
+            }
+            if (productInfo.getName() != null) {
+                c.setName(productInfo.getName());
+            }
+            if (productInfo.getVersion() != null) {
+                c.setVersion(productInfo.getVersion());
+            }
+            if (productInfo.getType() != null) {
+                c.setType(Type.valueOf(productInfo.getType()));
+            }
+            if (productInfo.getBuildId() != null) {
+                var prop = new Property();
+                prop.setName("build-id");
+                prop.setValue(productInfo.getBuildId());
+                c.addProperty(prop);
+            }
+            if (productInfo.getBuildSystem() != null) {
+                var prop = new Property();
+                prop.setName("build-system");
+                prop.setValue(productInfo.getBuildSystem());
+                c.addProperty(prop);
+            }
+            if (productInfo.getId() != null) {
+                var prop = new Property();
+                prop.setName("product-id");
+                prop.setValue(productInfo.getId());
+                c.addProperty(prop);
+            }
+            if (productInfo.getStream() != null) {
+                var prop = new Property();
+                prop.setName("product-stream");
+                prop.setValue(productInfo.getStream());
+                c.addProperty(prop);
+            }
+            metadata.setComponent(c);
+            bom.setMetadata(metadata);
+        }
+
         for (ArtifactCoords coords : sortAlphabetically(visitedComponents.keySet())) {
             for (VisitedComponent c : visitedComponents.get(coords)) {
                 addComponent(bom, c);

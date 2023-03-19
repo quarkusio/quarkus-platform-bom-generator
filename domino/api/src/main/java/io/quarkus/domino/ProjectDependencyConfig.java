@@ -324,7 +324,7 @@ public interface ProjectDependencyConfig {
      * Read config from the specified file
      *
      * @param path File to read from (yaml or json)
-     * @return read-only ExtensionCatalog object
+     * @return read-only {@link ProjectDependencyConfig} object
      * @throws IOException in case of a failure
      */
     static ProjectDependencyConfig fromFile(Path path) throws IOException {
@@ -335,7 +335,7 @@ public interface ProjectDependencyConfig {
      * Read config from the specified file
      *
      * @param path File to read from (yaml or json)
-     * @return read-only ExtensionCatalog object (empty/default for an empty file)
+     * @return mutable {@link ProjectDependencyConfig}
      * @throws IOException in case of a failure
      */
     static ProjectDependencyConfig.Mutable mutableFromFile(Path path) throws IOException {
@@ -348,7 +348,7 @@ public interface ProjectDependencyConfig {
      * Read config from an input stream
      *
      * @param inputStream input stream to read from
-     * @return read-only ExtensionCatalog object (empty/default for an empty file)
+     * @return read-only {@link ProjectDependencyConfig} object (empty/default for an empty file)
      * @throws IOException in case of a failure
      */
     static ProjectDependencyConfig fromStream(InputStream inputStream) throws IOException {

@@ -1,5 +1,7 @@
 package io.quarkus.bom.platform;
 
+import io.quarkus.domino.manifest.ProductInfo;
+import io.quarkus.domino.manifest.ProductInfoImpl;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -32,6 +34,8 @@ public class PlatformMemberConfig {
     private RedHatExtensionDependencyCheck dependencyCheck;
 
     private ProjectDependencyFilterConfig depsToBuild;
+
+    private ProductInfo productInfo;
 
     public void applyOverrides(PlatformMemberConfig overrides) {
         if (overrides.bom != null) {
@@ -281,5 +285,13 @@ public class PlatformMemberConfig {
 
     public void setDependenciesToBuild(ProjectDependencyFilterConfig depsToBuild) {
         this.depsToBuild = depsToBuild;
+    }
+
+    public ProductInfo getProductInfo() {
+        return productInfo;
+    }
+
+    public void setProductInfo(ProductInfoImpl.Builder productInfo) {
+        this.productInfo = productInfo.build();
     }
 }

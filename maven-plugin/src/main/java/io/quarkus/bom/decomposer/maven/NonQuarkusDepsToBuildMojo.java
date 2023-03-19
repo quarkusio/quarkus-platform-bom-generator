@@ -4,6 +4,7 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.domino.ProjectDependencyConfig;
 import io.quarkus.domino.ProjectDependencyResolver;
+import io.quarkus.domino.manifest.ProductInfoImpl;
 import io.quarkus.domino.manifest.SbomGeneratingDependencyVisitor;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
@@ -199,6 +200,9 @@ public class NonQuarkusDepsToBuildMojo extends AbstractMojo {
     @Parameter(required = false, property = "manifest")
     boolean manifest;
 
+    @Parameter(required = false)
+    ProductInfoImpl.Builder productInfo;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
 
@@ -249,7 +253,7 @@ public class NonQuarkusDepsToBuildMojo extends AbstractMojo {
                         .setRecipeRepos(this.recipeRepos == null ? List.of() : this.recipeRepos));
         if (manifest) {
             builder.addDependencyTreeVisitor(
-                    new SbomGeneratingDependencyVisitor(resolver, outputFile == null ? null : outputFile.toPath()))
+                    new SbomGeneratingDependencyVisitor(resolver, outputFile == null ? null : outputFile.toPath(), productInfo))
                     .build().resolveDependencies();
         } else {
             builder.build().log();

@@ -268,9 +268,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         if (dependenciesToBuild != null) {
-            generateDepsToBuildModule(pom, "quarkus-dependencies-to-build", "depsToBuild", "dependencies-to-build",
-                    "-deps-to-build.txt");
-            generateDepsToBuildModule(pom, "quarkus-sbom", "sbom", "sbom", "-sbom.json");
+            generateDepsToBuildModule(pom);
+            generateSbomModule(pom);
         }
 
         if (platformConfig.getGenerateMavenRepoZip() != null) {
@@ -320,8 +319,17 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
     }
 
+    private void generateDepsToBuildModule(Model parentPom) throws MojoExecutionException {
+        generateDepsToBuildModule(parentPom, "quarkus-dependencies-to-build", "depsToBuild", "dependencies-to-build",
+                "-deps-to-build.txt", false);
+    }
+
+    private void generateSbomModule(Model parentPom) throws MojoExecutionException {
+        generateDepsToBuildModule(parentPom, "quarkus-sbom", "sbom", "sbom", "-sbom.json", true);
+    }
+
     private void generateDepsToBuildModule(Model parentPom, String artifactId, String profileId, String outputDirName,
-            String outputFileSuffix) throws MojoExecutionException {
+            String outputFileSuffix, boolean includeProductInfo) throws MojoExecutionException {
         final Model pom = newModel();
         pom.setArtifactId(artifactId);
         pom.setPackaging(ArtifactCoords.TYPE_POM);
@@ -394,6 +402,36 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             config.addChild(
                     textDomElement("outputFile", prefix + "/" + m.generatedBomCoords().getArtifactId() + outputFileSuffix));
 
+            if (includeProductInfo && m.config().getProductInfo() != null) {
+                var productInfo = m.config().getProductInfo();
+                final Xpp3Dom productInfoDom = newDomSelfAppend("productInfo");
+                config.addChild(productInfoDom);
+                if (productInfo.getId() != null) {
+                    productInfoDom.addChild(textDomElement("id", productInfo.getId()));
+                }
+                if (productInfo.getStream() != null) {
+                    productInfoDom.addChild(textDomElement("stream", productInfo.getStream()));
+                }
+                productInfoDom.addChild(textDomElement("type", productInfo.getType() == null
+                        ? "FRAMEWORK"
+                        : productInfo.getType().toUpperCase()));
+                productInfoDom.addChild(textDomElement("group", productInfo.getGroup() != null
+                        ? productInfo.getGroup()
+                        : m.generatedBomCoords().getGroupId()));
+                productInfoDom.addChild(textDomElement("name", productInfo.getName() != null
+                        ? productInfo.getName()
+                        : m.generatedBomCoords().getArtifactId()));
+                productInfoDom.addChild(textDomElement("version", productInfo.getVersion() != null
+                        ? productInfo.getVersion()
+                        : "${project.version}"));
+                if (productInfo.getBuildSystem() != null) {
+                    productInfoDom.addChild(textDomElement("buildSystem", productInfo.getBuildSystem()));
+                }
+                if (productInfo.getBuildId() != null) {
+                    productInfoDom.addChild(textDomElement("buildId", productInfo.getBuildId()));
+                }
+            }
+
             final ProjectDependencyFilterConfig depsToBuildConfig = m.config().getDependenciesToBuild();
             if (depsToBuildConfig != null) {
                 final Xpp3Dom depsToBuildDom = newDomSelfAppend("dependenciesToBuild");
@@ -402,18 +440,14 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                     final Xpp3Dom excludeArtifactsDom = newDomChildrenAppend("excludeArtifacts");
                     depsToBuildDom.addChild(excludeArtifactsDom);
                     for (ArtifactCoords artifact : depsToBuildConfig.getExcludeArtifacts()) {
-                        final Xpp3Dom artifactDom = newDom("artifact");
-                        excludeArtifactsDom.addChild(artifactDom);
-                        artifactDom.setValue(artifact.toGACTVString());
+                        excludeArtifactsDom.addChild(textDomElement("artifact", artifact.toGACTVString()));
                     }
                 }
                 if (!depsToBuildConfig.getExcludeGroupIds().isEmpty()) {
                     final Xpp3Dom excludeGroupIdsDom = newDomChildrenAppend("excludeGroupIds");
                     depsToBuildDom.addChild(excludeGroupIdsDom);
                     for (String groupId : depsToBuildConfig.getExcludeGroupIds()) {
-                        final Xpp3Dom groupIdDom = newDom("groupId");
-                        excludeGroupIdsDom.addChild(groupIdDom);
-                        groupIdDom.setValue(groupId);
+                        excludeGroupIdsDom.addChild(textDomElement("groupId", groupId));
                     }
                 }
                 if (!depsToBuildConfig.getExcludeKeys().isEmpty()) {
@@ -425,37 +459,49 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                         keyDom.setValue(key.toString());
                     }
                 }
+
+                final Xpp3Dom includeArtifactsDom = newDomChildrenAppend("includeArtifacts");
+                depsToBuildDom.addChild(includeArtifactsDom);
+                includeGeneratedBomArtifact(m, includeArtifactsDom);
                 if (!depsToBuildConfig.getIncludeArtifacts().isEmpty()) {
-                    final Xpp3Dom includeArtifactsDom = newDomChildrenAppend("includeArtifacts");
-                    depsToBuildDom.addChild(includeArtifactsDom);
                     for (ArtifactCoords artifact : depsToBuildConfig.getIncludeArtifacts()) {
-                        final Xpp3Dom artifactDom = newDom("artifact");
-                        includeArtifactsDom.addChild(artifactDom);
-                        artifactDom.setValue(artifact.toGACTVString());
+                        includeArtifactsDom.addChild(textDomElement("artifact", artifact.toGACTVString()));
                     }
                 }
+
                 if (!depsToBuildConfig.getIncludeGroupIds().isEmpty()) {
                     final Xpp3Dom includeGroupIdsDom = newDomChildrenAppend("includeGroupIds");
                     depsToBuildDom.addChild(includeGroupIdsDom);
                     for (String groupId : depsToBuildConfig.getIncludeGroupIds()) {
-                        final Xpp3Dom groupIdDom = newDom("groupId");
-                        includeGroupIdsDom.addChild(groupIdDom);
-                        groupIdDom.setValue(groupId);
+                        includeGroupIdsDom.addChild(textDomElement("groupId", groupId));
                     }
                 }
                 if (!depsToBuildConfig.getIncludeKeys().isEmpty()) {
                     final Xpp3Dom includeKeysDom = newDomChildrenAppend("includeKeys");
                     depsToBuildDom.addChild(includeKeysDom);
                     for (ArtifactKey key : depsToBuildConfig.getIncludeKeys()) {
-                        final Xpp3Dom keyDom = newDom("key");
-                        includeKeysDom.addChild(keyDom);
-                        keyDom.setValue(key.toString());
+                        includeKeysDom.addChild(textDomElement("key", key.toString()));
                     }
                 }
+            } else {
+                final Xpp3Dom depsToBuildDom = newDomSelfAppend("dependenciesToBuild");
+                config.addChild(depsToBuildDom);
+                final Xpp3Dom includeArtifactsDom = newDomChildrenAppend("includeArtifacts");
+                depsToBuildDom.addChild(includeArtifactsDom);
+                includeGeneratedBomArtifact(m, includeArtifactsDom);
             }
         }
 
         persistPom(pom);
+    }
+
+    private static void includeGeneratedBomArtifact(PlatformMemberImpl m, final Xpp3Dom includeArtifactsDom) {
+        includeArtifactsDom.addChild(textDomElement("artifact",
+                m.generatedBomCoords().getGroupId() + ":"
+                        + m.generatedBomCoords().getArtifactId() + ":"
+                        + m.generatedBomCoords().getClassifier() + ":"
+                        + m.generatedBomCoords().getExtension() + ":"
+                        + m.generatedBomCoords().getVersion()));
     }
 
     private static void generateReleasesReport(DecomposedBom originalBom, Path outputFile)
