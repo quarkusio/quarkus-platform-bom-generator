@@ -8,6 +8,7 @@ import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.domino.ProjectDependencyConfig;
 import io.quarkus.domino.ProjectDependencyResolver;
 import io.quarkus.domino.manifest.ManifestGenerator;
+import io.quarkus.domino.manifest.ProductInfoImpl;
 import io.quarkus.domino.manifest.SbomGeneratingDependencyVisitor;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.paths.PathTree;
@@ -199,6 +200,9 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     @Parameter(required = false, property = "redhatSupported")
     boolean redhatSupported;
 
+    @Parameter(required = false)
+    ProductInfoImpl.Builder productInfo;
+
     private Set<ArtifactCoords> targetBomConstraints;
     private Map<ArtifactCoords, List<Dependency>> enforcedConstraintsForBom = new HashMap<>();
 
@@ -370,7 +374,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
 
         if (manifest) {
             depsResolver.addDependencyTreeVisitor(
-                    new SbomGeneratingDependencyVisitor(resolver, outputFile == null ? null : outputFile.toPath()))
+                    new SbomGeneratingDependencyVisitor(resolver, outputFile == null ? null : outputFile.toPath(), productInfo))
                     .build().resolveDependencies();
         } else if (flatManifest) {
             depsResolver.build().consumeSorted(ManifestGenerator.builder()

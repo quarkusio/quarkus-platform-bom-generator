@@ -29,55 +29,68 @@ public class PncSbomTransformer implements SbomTransformer {
     public Bom transform(SbomTransformContext ctx) {
         log.debug("Adding PNC build info to the manifest");
         final Bom bom = ctx.getOriginalBom();
+        final Component product = bom.getMetadata() == null ? null : bom.getMetadata().getComponent();
+        if (product != null) {
+            addBuildId(product,
+                    getContent(pncInfoProvider.getBuildInfo(product.getGroup(), product.getName(), product.getVersion())));
+        }
         if (bom.getComponents() == null) {
             return bom;
         }
         for (Component c : bom.getComponents()) {
-            if (RhVersionPattern.isRhVersion(c.getVersion())) {
-                final PncArtifactBuildInfo buildInfo = pncInfoProvider.getBuildInfo(c.getGroup(), c.getName(), c.getVersion());
-                final Content content = getContent(buildInfo);
-                if (content == null) {
-                    log.warn("PNC build info not found for " + c.getGroup() + ":" + c.getName() + ":" + c.getVersion());
-                } else {
-                    final List<Hash> hashes = new ArrayList<>(3);
-                    if (content.getMd5() != null) {
-                        hashes.add(new Hash(Algorithm.MD5, content.getMd5()));
-                    }
-                    if (content.getSha1() != null) {
-                        hashes.add(new Hash(Algorithm.SHA1, content.getSha1()));
-                    }
-                    if (content.getSha256() != null) {
-                        hashes.add(new Hash(Algorithm.SHA_256, content.getSha256()));
-                    }
-                    c.setHashes(hashes);
-
-                    if (content.getBuild() == null) {
-                        log.warn("PNC build info not found for " + c.getGroup() + ":" + c.getName() + ":" + c.getVersion());
-                    } else {
-                        final List<Property> props = new ArrayList<>(c.getProperties());
-
-                        Property prop = new Property();
-                        prop.setName(BUILD_ID);
-                        prop.setValue(content.getBuild().getId());
-                        props.add(prop);
-
-                        prop = new Property();
-                        prop.setName(BUILD_SYSTEM);
-                        prop.setValue(PNC);
-                        props.add(prop);
-                        c.setProperties(props);
-                    }
-                }
-
-                addMrrc(c);
-            }
+            addPncBuildInfo(c);
         }
         return bom;
     }
 
+    private void addPncBuildInfo(Component c) {
+        if (!RhVersionPattern.isRhVersion(c.getVersion())) {
+            return;
+        }
+        final PncArtifactBuildInfo buildInfo = pncInfoProvider.getBuildInfo(c.getGroup(), c.getName(), c.getVersion());
+        final Content content = getContent(buildInfo);
+        if (content == null) {
+            log.warn("PNC build info not found for " + c.getGroup() + ":" + c.getName() + ":" + c.getVersion());
+        } else {
+            final List<Hash> hashes = new ArrayList<>(3);
+            if (content.getMd5() != null) {
+                hashes.add(new Hash(Algorithm.MD5, content.getMd5()));
+            }
+            if (content.getSha1() != null) {
+                hashes.add(new Hash(Algorithm.SHA1, content.getSha1()));
+            }
+            if (content.getSha256() != null) {
+                hashes.add(new Hash(Algorithm.SHA_256, content.getSha256()));
+            }
+            c.setHashes(hashes);
+            addBuildId(c, content);
+        }
+        addMrrc(c);
+    }
+
+    private void addBuildId(Component c, final Content content) {
+        if (content == null || content.getBuild() == null) {
+            log.warn("PNC build info not found for " + c.getGroup() + ":" + c.getName() + ":" + c.getVersion());
+        } else {
+            final List<Property> props = new ArrayList<>(c.getProperties());
+
+            Property prop = new Property();
+            prop.setName(BUILD_ID);
+            prop.setValue(content.getBuild().getId());
+            props.add(prop);
+
+            prop = new Property();
+            prop.setName(BUILD_SYSTEM);
+            prop.setValue(PNC);
+            props.add(prop);
+            c.setProperties(props);
+        }
+    }
+
     private void addMrrc(Component c) {
         c.setPublisher(PUBLISHER);
-        List<ExternalReference> externalRefs = new ArrayList<>(c.getExternalReferences());
+        final List<ExternalReference> externalRefs = c.getExternalReferences() == null ? new ArrayList<>()
+                : new ArrayList<>(c.getExternalReferences());
         ExternalReference dist = null;
         for (ExternalReference r : externalRefs) {
             if (r.getType().equals(ExternalReference.Type.DISTRIBUTION)) {

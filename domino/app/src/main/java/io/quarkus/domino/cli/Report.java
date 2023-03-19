@@ -37,7 +37,7 @@ public class Report extends BaseDepsToBuildCommand {
         if (manifest) {
             resolverBuilder.addDependencyTreeVisitor(
                     new SbomGeneratingDependencyVisitor(getArtifactResolver(),
-                            outputFile == null ? null : outputFile.toPath()));
+                            outputFile == null ? null : outputFile.toPath(), null));
         }
     }
 
