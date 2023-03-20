@@ -11,8 +11,6 @@ public class ProductInfoImpl implements ProductInfo {
     private final String type;
     private final String version;
     private final String stream;
-    private final String buildSystem;
-    private final String buildId;
 
     private ProductInfoImpl(ProductInfo other) {
         id = other.getId();
@@ -21,8 +19,6 @@ public class ProductInfoImpl implements ProductInfo {
         type = other.getType();
         version = other.getVersion();
         stream = other.getStream();
-        buildSystem = other.getBuildSystem();
-        buildId = other.getBuildId();
     }
 
     @Override
@@ -55,16 +51,6 @@ public class ProductInfoImpl implements ProductInfo {
         return stream;
     }
 
-    @Override
-    public String getBuildSystem() {
-        return buildSystem;
-    }
-
-    @Override
-    public String getBuildId() {
-        return buildId;
-    }
-
     /**
      * Public for Mojos
      */
@@ -76,8 +62,6 @@ public class ProductInfoImpl implements ProductInfo {
         private String type;
         private String version;
         private String stream;
-        private String buildSystem;
-        private String buildId;
 
         /**
          * Public for Mojos
@@ -92,8 +76,6 @@ public class ProductInfoImpl implements ProductInfo {
             type = other.getType();
             version = other.getVersion();
             stream = other.getStream();
-            buildSystem = other.getBuildSystem();
-            buildId = other.getBuildId();
         }
 
         @Override
@@ -124,16 +106,6 @@ public class ProductInfoImpl implements ProductInfo {
         @Override
         public String getStream() {
             return stream;
-        }
-
-        @Override
-        public String getBuildSystem() {
-            return buildSystem;
-        }
-
-        @Override
-        public String getBuildId() {
-            return buildId;
         }
 
         @Override
@@ -174,18 +146,6 @@ public class ProductInfoImpl implements ProductInfo {
         @Override
         public Mutable setStream(String stream) {
             this.stream = stream;
-            return this;
-        }
-
-        @Override
-        public Mutable setBuildSystem(String buildSystem) {
-            this.buildSystem = buildSystem;
-            return this;
-        }
-
-        @Override
-        public Mutable setBuildId(String buildId) {
-            this.buildId = buildId;
             return this;
         }
     }

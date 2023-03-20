@@ -424,12 +424,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 productInfoDom.addChild(textDomElement("version", productInfo.getVersion() != null
                         ? productInfo.getVersion()
                         : "${project.version}"));
-                if (productInfo.getBuildSystem() != null) {
-                    productInfoDom.addChild(textDomElement("buildSystem", productInfo.getBuildSystem()));
-                }
-                if (productInfo.getBuildId() != null) {
-                    productInfoDom.addChild(textDomElement("buildId", productInfo.getBuildId()));
-                }
             }
 
             final ProjectDependencyFilterConfig depsToBuildConfig = m.config().getDependenciesToBuild();

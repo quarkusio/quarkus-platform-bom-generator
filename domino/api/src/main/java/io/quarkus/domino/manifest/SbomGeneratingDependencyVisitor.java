@@ -101,18 +101,6 @@ public class SbomGeneratingDependencyVisitor implements DependencyTreeVisitor {
             if (productInfo.getType() != null) {
                 c.setType(Type.valueOf(productInfo.getType()));
             }
-            if (productInfo.getBuildId() != null) {
-                var prop = new Property();
-                prop.setName("build-id");
-                prop.setValue(productInfo.getBuildId());
-                c.addProperty(prop);
-            }
-            if (productInfo.getBuildSystem() != null) {
-                var prop = new Property();
-                prop.setName("build-system");
-                prop.setValue(productInfo.getBuildSystem());
-                c.addProperty(prop);
-            }
             if (productInfo.getId() != null) {
                 var prop = new Property();
                 prop.setName("product-id");

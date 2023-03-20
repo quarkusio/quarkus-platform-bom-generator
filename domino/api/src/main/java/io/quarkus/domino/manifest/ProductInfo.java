@@ -22,20 +22,6 @@ public interface ProductInfo {
 
     String getVersion();
 
-    /**
-     * Build system, e.g. PNC
-     * 
-     * @return build system
-     */
-    String getBuildSystem();
-
-    /**
-     * Build ID
-     * 
-     * @return build ID
-     */
-    String getBuildId();
-
     default Mutable mutable() {
         return new ProductInfoImpl.Builder(this);
     }
@@ -63,20 +49,6 @@ public interface ProductInfo {
         Mutable setVersion(String version);
 
         Mutable setStream(String stream);
-
-        /**
-         * Build system, e.g. PNC
-         * 
-         * @return this mutable instance
-         */
-        Mutable setBuildSystem(String buildSystem);
-
-        /**
-         * Build ID
-         * 
-         * @return this mutable instance
-         */
-        Mutable setBuildId(String buildId);
 
         ProductInfo build();
 
