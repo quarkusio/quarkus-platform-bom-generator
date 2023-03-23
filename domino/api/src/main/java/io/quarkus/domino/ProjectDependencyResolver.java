@@ -479,7 +479,13 @@ public class ProjectDependencyResolver {
                 result = new HashSet<>(result);
             }
             for (ArtifactCoords d : targetBomConstraints) {
-                if (d.getGroupId().startsWith(config.getProjectBom().getGroupId()) && d.isJar() && !isExcluded(d)) {
+                final boolean collect;
+                if (includeSet.isEmpty()) {
+                    collect = d.getGroupId().startsWith(config.getProjectBom().getGroupId()) && !isExcluded(d);
+                } else {
+                    collect = isIncluded(d);
+                }
+                if (collect) {
                     result.add(d);
                     log.debug(d.toCompactCoords() + " selected as a top level artifact to build");
                 }
