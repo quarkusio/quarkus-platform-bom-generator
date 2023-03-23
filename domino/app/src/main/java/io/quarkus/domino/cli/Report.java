@@ -17,6 +17,10 @@ public class Report extends BaseDepsToBuildCommand {
             "--flat-manifest" }, description = "Generate an SBOM without dependency tree information", defaultValue = "false")
     public boolean flatManifest;
 
+    @CommandLine.Option(names = {
+            "--enable-sbom-transformers" }, description = "Apply SBOM transformers found on the classpath", defaultValue = "false")
+    public boolean enableSbomTransformers;
+
     @Override
     protected void initConfig(ProjectDependencyConfig.Mutable config) {
         super.initConfig(config);
@@ -37,7 +41,7 @@ public class Report extends BaseDepsToBuildCommand {
         if (manifest) {
             resolverBuilder.addDependencyTreeVisitor(
                     new SbomGeneratingDependencyVisitor(getArtifactResolver(),
-                            outputFile == null ? null : outputFile.toPath(), null));
+                            outputFile == null ? null : outputFile.toPath(), null, enableSbomTransformers));
         }
     }
 

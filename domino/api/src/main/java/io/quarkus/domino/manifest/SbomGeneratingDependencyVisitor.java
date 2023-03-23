@@ -60,6 +60,7 @@ public class SbomGeneratingDependencyVisitor implements DependencyTreeVisitor {
     private final MavenArtifactResolver resolver;
     private final Path outputFile;
     private final ProductInfo productInfo;
+    private final boolean enableSbomTransformers;
     private final Map<ArtifactCoords, List<VisitedComponent>> visitedComponents = new HashMap<>();
     private final ArrayDeque<VisitedComponent> componentStack = new ArrayDeque<>();
 
@@ -67,10 +68,12 @@ public class SbomGeneratingDependencyVisitor implements DependencyTreeVisitor {
     private final ModelCache modelCache;
     private final Map<ArtifactCoords, Model> effectiveModels = new HashMap<>();
 
-    public SbomGeneratingDependencyVisitor(MavenArtifactResolver resolver, Path outputFile, ProductInfo productInfo) {
+    public SbomGeneratingDependencyVisitor(MavenArtifactResolver resolver, Path outputFile, ProductInfo productInfo,
+            boolean enableSbomTransformers) {
         this.resolver = resolver;
         this.outputFile = outputFile;
         this.productInfo = productInfo;
+        this.enableSbomTransformers = enableSbomTransformers;
         try {
             modelCache = new BootstrapModelCache(resolver.getMavenContext().getRepositorySystemSession());
         } catch (BootstrapMavenException e) {
@@ -122,7 +125,10 @@ public class SbomGeneratingDependencyVisitor implements DependencyTreeVisitor {
                 addComponent(bom, c);
             }
         }
-        bom = runTransformers(bom);
+
+        if (enableSbomTransformers) {
+            bom = runTransformers(bom);
+        }
 
         final BomJsonGenerator bomGenerator = BomGeneratorFactory.createJson(ManifestGenerator.schemaVersion(), bom);
         final String bomString = bomGenerator.toJsonString();

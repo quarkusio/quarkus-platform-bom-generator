@@ -253,7 +253,8 @@ public class NonQuarkusDepsToBuildMojo extends AbstractMojo {
                         .setRecipeRepos(this.recipeRepos == null ? List.of() : this.recipeRepos));
         if (manifest) {
             builder.addDependencyTreeVisitor(
-                    new SbomGeneratingDependencyVisitor(resolver, outputFile == null ? null : outputFile.toPath(), productInfo))
+                    new SbomGeneratingDependencyVisitor(resolver, outputFile == null ? null : outputFile.toPath(), productInfo,
+                            true))
                     .build().resolveDependencies();
         } else {
             builder.build().log();
