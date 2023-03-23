@@ -98,8 +98,8 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
     public String excludeKeys;
 
     @CommandLine.Option(names = {
-            "--include-group-ids" }, description = "Command-separated list of groupIds of dependencies that should be included")
-    public String includeGroupIds;
+            "--include-group-ids" }, description = "Command-separated list of groupIds of dependencies that should be included", split = ",")
+    public Set<String> includeGroupIds;
 
     @CommandLine.Option(names = {
             "--exclude-scopes" }, description = "Command-separated list of dependency scopes that should be excluded when collecting dependencies of the root project artifacts", split = ",")
@@ -245,7 +245,7 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
                 .setExcludeKeys(excludeKeys)
                 .setExcludeParentPoms(excludeParentPoms == null ? false : excludeParentPoms)
                 .setIncludeArtifacts(Set.of()) // TODO
-                .setIncludeGroupIds(Set.of()) // TODO
+                .setIncludeGroupIds(includeGroupIds == null ? Set.of() : includeGroupIds)
                 .setIncludeKeys(Set.of()) // TODO
                 .setLevel(level)
                 .setLogArtifactsToBuild(logArtifactsToBuild)
