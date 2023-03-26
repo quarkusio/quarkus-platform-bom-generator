@@ -7,7 +7,7 @@
     <version>0.0.82-SNAPSHOT</version>
   </parent>
   <artifactId>quarkus-domino</artifactId>
-  <name>Quarkus - Platform BOM Tools - Domino - App</name>
+  <name>Quarkus - Platform BOM Tools - Domino - CLI</name>
   <properties>
     <quarkus.package.add-runner-suffix>false</quarkus.package.add-runner-suffix>
     <skipOriginalJarRename>true</skipOriginalJarRename>

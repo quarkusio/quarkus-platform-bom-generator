@@ -1,6 +1,6 @@
 package io.quarkus.domino.cli;
 
-import io.quarkus.domino.DominoVersion;
+import io.quarkus.domino.DominoInfo;
 import java.util.concurrent.Callable;
 import picocli.CommandLine;
 
@@ -9,7 +9,7 @@ public class Version implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
-        System.out.println(DominoVersion.VERSION);
+        System.out.println(DominoInfo.VERSION);
         return CommandLine.ExitCode.OK;
     }
 }
