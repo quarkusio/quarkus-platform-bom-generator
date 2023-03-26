@@ -10,13 +10,16 @@
   <url>https://quarkus.io/</url>
   <developers>
     <developer>
-      <id>jboss.org</id>
-      <name>JBoss.org Community</name>
-      <organization>JBoss.org</organization>
-      <organizationUrl>http://www.jboss.org</organizationUrl>
+      <id>quarkus.io</id>
+      <name>Quarkus Community</name>
+      <organization>Quarkus Community</organization>
+      <organizationUrl>https://quarkus.io</organizationUrl>
     </developer>
   </developers>
- 
+  <organization>
+    <name>Quarkus Community</name>
+    <url>https://quarkus.io</url>
+  </organization>
   <licenses>
     <license>
       <name>Apache License, Version 2.0</name>
@@ -214,6 +217,19 @@
               <maven.home>${maven.home}</maven.home>
             </systemPropertyVariables>
           </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>templating-maven-plugin</artifactId>
+          <version>1.0.0</version>
+          <executions>
+            <execution>
+              <id>filter-src</id>
+              <goals>
+                <goal>filter-sources</goal>
+              </goals>
+            </execution>
+          </executions>
         </plugin>
       </plugins>
     </pluginManagement>

@@ -11,14 +11,18 @@ import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalWorkspace;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.domino.DependencyTreeVisitor;
+import io.quarkus.domino.DominoInfo;
 import io.quarkus.domino.manifest.ManifestGenerator.BootstrapModelCache;
 import io.quarkus.domino.manifest.ManifestGenerator.SbomTransformContextImpl;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -48,14 +52,20 @@ import org.cyclonedx.model.Bom;
 import org.cyclonedx.model.Component;
 import org.cyclonedx.model.Component.Type;
 import org.cyclonedx.model.Dependency;
+import org.cyclonedx.model.Hash;
 import org.cyclonedx.model.Metadata;
 import org.cyclonedx.model.Property;
+import org.cyclonedx.model.Tool;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.resolution.ArtifactResult;
+import org.eclipse.jgit.util.Hex;
+import org.jboss.logging.Logger;
 
 public class SbomGeneratingDependencyVisitor implements DependencyTreeVisitor {
+
+    private static final Logger log = Logger.getLogger(SbomGeneratingDependencyVisitor.class);
 
     private final MavenArtifactResolver resolver;
     private final Path outputFile;
@@ -89,8 +99,11 @@ public class SbomGeneratingDependencyVisitor implements DependencyTreeVisitor {
     public void afterAllRoots() {
         Bom bom = new Bom();
 
+        var metadata = new Metadata();
+        bom.setMetadata(metadata);
+        addToolInfo(metadata);
+
         if (productInfo != null) {
-            var metadata = new Metadata();
             var c = new Component();
             if (productInfo.getGroup() != null) {
                 c.setGroup(productInfo.getGroup());
@@ -117,7 +130,6 @@ public class SbomGeneratingDependencyVisitor implements DependencyTreeVisitor {
                 c.addProperty(prop);
             }
             metadata.setComponent(c);
-            bom.setMetadata(metadata);
         }
 
         for (ArtifactCoords coords : sortAlphabetically(visitedComponents.keySet())) {
@@ -147,6 +159,88 @@ public class SbomGeneratingDependencyVisitor implements DependencyTreeVisitor {
             } catch (IOException e) {
                 throw new RuntimeException("Failed to write to " + outputFile, e);
             }
+        }
+    }
+
+    private void addToolInfo(Metadata metadata) {
+        var tool = new Tool();
+        tool.setName(DominoInfo.PROJECT_NAME);
+        tool.setVendor(DominoInfo.ORGANIZATION_NAME);
+        tool.setVersion(DominoInfo.VERSION);
+        metadata.setTools(List.of(tool));
+
+        var toolLocation = getToolLocation();
+        if (toolLocation == null) {
+            return;
+        }
+
+        String toolName = toolLocation.getFileName().toString();
+        if (toolName.endsWith(".jar")) {
+            toolName = toolName.substring(0, toolName.length() - ".jar".length());
+        }
+        String[] parts = toolName.split("-");
+        var sb = new StringBuilder();
+        for (int i = 0; i < parts.length; ++i) {
+            var s = parts[i];
+            if (s.isBlank()) {
+                continue;
+            }
+            sb.append(Character.toUpperCase(s.charAt(0)));
+            if (s.length() > 1) {
+                sb.append(s.substring(1));
+            }
+            sb.append(' ');
+        }
+        tool.setName(sb.append("SBOM Generator").toString());
+
+        final byte[] bytes;
+        try {
+            bytes = Files.readAllBytes(toolLocation);
+        } catch (IOException e) {
+            log.warn("Failed to read the tool's binary", e);
+            return;
+        }
+
+        final List<String> algs = List.of("MD5", "SHA-1", "SHA-256", "SHA-512", "SHA-384", "SHA3-384", "SHA3-256", "SHA3-512");
+        final List<Hash> hashes = new ArrayList<>(algs.size());
+        for (String alg : algs) {
+            var hash = getHash(alg, bytes);
+            if (hash != null) {
+                hashes.add(hash);
+            }
+        }
+        if (hashes != null) {
+            tool.setHashes(hashes);
+        }
+    }
+
+    private static Hash getHash(String alg, byte[] content) {
+        final MessageDigest md;
+        try {
+            md = MessageDigest.getInstance(alg);
+        } catch (NoSuchAlgorithmException e) {
+            log.warn("Failed to initialize a message digest with algorithm " + alg + ": " + e.getLocalizedMessage());
+            return null;
+        }
+        return new Hash(md.getAlgorithm(), Hex.toHexString(md.digest(content)));
+    }
+
+    private Path getToolLocation() {
+        var cs = getClass().getProtectionDomain().getCodeSource();
+        if (cs == null) {
+            log.warn("Failed to determine code source of the tool");
+            return null;
+        }
+        var url = cs.getLocation();
+        if (url == null) {
+            log.warn("Failed to determine code source URL of the tool");
+            return null;
+        }
+        try {
+            return Path.of(url.toURI());
+        } catch (URISyntaxException e) {
+            log.warn("Failed to translate " + url + " to a file system path", e);
+            return null;
         }
     }
 

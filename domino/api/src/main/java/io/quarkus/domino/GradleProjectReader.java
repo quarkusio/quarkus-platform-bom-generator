@@ -104,7 +104,7 @@ public class GradleProjectReader {
             out.println("    }");
             out.println("    dependencies {");
             out.println(
-                    "        classpath \"io.quarkus.domino:io.quarkus.domino.gradle.plugin:" + DominoVersion.VERSION + "\"");
+                    "        classpath \"io.quarkus.domino:io.quarkus.domino.gradle.plugin:" + DominoInfo.VERSION + "\"");
             out.println("    }");
             out.println("}");
             out.println("allprojects {");
