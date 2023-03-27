@@ -478,6 +478,13 @@ public class ProjectDependencyResolver {
             } else {
                 result = new HashSet<>(result);
             }
+            if (config.getProjectBom() != null) {
+                var bom = config.getProjectBom();
+                if (!ArtifactCoords.TYPE_POM.equals(bom.getType())) {
+                    bom = ArtifactCoords.pom(bom.getGroupId(), bom.getArtifactId(), bom.getVersion());
+                }
+                result.add(bom);
+            }
             for (ArtifactCoords d : targetBomConstraints) {
                 final boolean collect;
                 if (includeSet.isEmpty()) {
@@ -498,7 +505,9 @@ public class ProjectDependencyResolver {
         }
 
         if (config.getProjectDir() == null) {
-            projectGavs = Set.of();
+            projectGavs = config.getProjectBom() == null ? Set.of()
+                    : Set.of(new GAV(config.getProjectBom().getGroupId(), config.getProjectBom().getArtifactId(),
+                            config.getProjectBom().getVersion()));
         } else {
             projectGavs = new HashSet<>(result.size());
             for (ArtifactCoords c : result) {
