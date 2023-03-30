@@ -8,6 +8,7 @@ import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalWorkspace;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.domino.DominoInfo;
+import io.quarkus.domino.RhVersionPattern;
 import io.quarkus.domino.manifest.ManifestGenerator.BootstrapModelCache;
 import io.quarkus.domino.manifest.ManifestGenerator.SbomTransformContextImpl;
 import io.quarkus.maven.dependency.ArtifactCoords;
@@ -214,6 +215,11 @@ public class SbomGenerator {
         }
         c.setProperties(props);
         c.setType(Component.Type.LIBRARY);
+
+        // fix distribution and publisher for components built by RH
+        if (RhVersionPattern.isRhVersion(c.getVersion())) {
+            PncSbomTransformer.addMrrc(c);
+        }
         bom.addComponent(c);
 
         List<VisitedComponent> dependencies = visited.getDependencies();
