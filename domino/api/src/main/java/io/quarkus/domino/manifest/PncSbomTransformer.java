@@ -87,7 +87,7 @@ public class PncSbomTransformer implements SbomTransformer {
         }
     }
 
-    private void addMrrc(Component c) {
+    static void addMrrc(Component c) {
         c.setPublisher(PUBLISHER);
         final List<ExternalReference> externalRefs = c.getExternalReferences() == null ? new ArrayList<>()
                 : new ArrayList<>(c.getExternalReferences());

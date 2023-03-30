@@ -424,6 +424,43 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 productInfoDom.addChild(textDomElement("version", productInfo.getVersion() != null
                         ? productInfo.getVersion()
                         : "${project.version}"));
+                if (productInfo.getPurl() != null) {
+                    productInfoDom.addChild(textDomElement("purl", productInfo.getPurl()));
+                }
+                if (productInfo.getCpe() != null) {
+                    productInfoDom.addChild(textDomElement("cpe", productInfo.getCpe()));
+                }
+                if (productInfo.getDescription() != null) {
+                    productInfoDom.addChild(textDomElement("description", productInfo.getDescription()));
+                }
+
+                var rn = productInfo.getReleaseNotes();
+                if (rn != null) {
+                    final Xpp3Dom releaseNotesDom = newDomSelfAppend("releaseNotes");
+                    productInfoDom.addChild(releaseNotesDom);
+                    if (rn.getType() != null) {
+                        releaseNotesDom.addChild(textDomElement("type", rn.getType()));
+                    }
+                    if (rn.getTitle() != null) {
+                        releaseNotesDom.addChild(textDomElement("title", rn.getTitle()));
+                    }
+                    if (!rn.getAliases().isEmpty()) {
+                        final Xpp3Dom aliasesDom = newDomSelfAppend("aliases");
+                        releaseNotesDom.addChild(aliasesDom);
+                        for (String a : rn.getAliases()) {
+                            aliasesDom.addChild(textDomElement("alias", a));
+                        }
+                    }
+                    if (!rn.getProperties().isEmpty()) {
+                        final Xpp3Dom propsDom = newDomSelfAppend("properties");
+                        releaseNotesDom.addChild(propsDom);
+                        final List<String> names = new ArrayList<>(rn.getProperties().keySet());
+                        Collections.sort(names);
+                        for (String name : names) {
+                            propsDom.addChild(textDomElement(name, rn.getProperties().get(name)));
+                        }
+                    }
+                }
             }
 
             final ProjectDependencyFilterConfig depsToBuildConfig = m.config().getDependenciesToBuild();

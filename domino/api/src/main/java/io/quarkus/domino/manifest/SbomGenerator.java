@@ -8,6 +8,7 @@ import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalWorkspace;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.domino.DominoInfo;
+import io.quarkus.domino.RhVersionPattern;
 import io.quarkus.domino.manifest.ManifestGenerator.BootstrapModelCache;
 import io.quarkus.domino.manifest.ManifestGenerator.SbomTransformContextImpl;
 import io.quarkus.maven.dependency.ArtifactCoords;
@@ -47,6 +48,7 @@ import org.cyclonedx.model.Dependency;
 import org.cyclonedx.model.Hash;
 import org.cyclonedx.model.Metadata;
 import org.cyclonedx.model.Property;
+import org.cyclonedx.model.ReleaseNotes;
 import org.cyclonedx.model.Tool;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
@@ -155,15 +157,15 @@ public class SbomGenerator {
 
         var metadata = new Metadata();
         bom.setMetadata(metadata);
-
         addToolInfo(metadata);
-        addProductInfo(metadata);
 
         for (VisitedComponent c : sortAlphabetically(topComponents)) {
             addComponent(c);
         }
 
         bom = transform(bom);
+
+        addProductInfo(metadata);
 
         final BomJsonGenerator bomGenerator = BomGeneratorFactory.createJson(ManifestGenerator.schemaVersion(), bom);
         final String bomString = bomGenerator.toJsonString();
@@ -213,6 +215,11 @@ public class SbomGenerator {
         }
         c.setProperties(props);
         c.setType(Component.Type.LIBRARY);
+
+        // fix distribution and publisher for components built by RH
+        if (RhVersionPattern.isRhVersion(c.getVersion())) {
+            PncSbomTransformer.addMrrc(c);
+        }
         bom.addComponent(c);
 
         List<VisitedComponent> dependencies = visited.getDependencies();
@@ -228,19 +235,83 @@ public class SbomGenerator {
 
     private void addProductInfo(Metadata metadata) {
         if (productInfo != null) {
+            var group = productInfo.getGroup();
+            var name = productInfo.getName();
+            var version = productInfo.getVersion();
+
             var c = new Component();
-            if (productInfo.getGroup() != null) {
-                c.setGroup(productInfo.getGroup());
+            if (group != null) {
+                c.setGroup(group);
             }
-            if (productInfo.getName() != null) {
-                c.setName(productInfo.getName());
+            if (name != null) {
+                c.setName(name);
             }
-            if (productInfo.getVersion() != null) {
-                c.setVersion(productInfo.getVersion());
+            if (version != null) {
+                c.setVersion(version);
+            }
+            if (productInfo.getPurl() != null) {
+                c.setPurl(productInfo.getPurl());
             }
             if (productInfo.getType() != null) {
                 c.setType(Type.valueOf(productInfo.getType()));
             }
+            if (productInfo.getCpe() != null) {
+                c.setCpe(productInfo.getCpe());
+            }
+            if (productInfo.getDescription() != null) {
+                c.setDescription(productInfo.getDescription());
+            }
+
+            if (group != null && name != null && version != null) {
+                Component addedComponent = null;
+                for (VisitedComponent visited : topComponents) {
+                    var coords = visited.getArtifactCoords();
+                    if (name.equals(coords.getArtifactId()) && group.equals(coords.getGroupId())
+                            && version.equals(coords.getVersion())) {
+                        for (Component added : bom.getComponents()) {
+                            if (added.getBomRef().equals(visited.getBomRef())) {
+                                addedComponent = added;
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                }
+                if (addedComponent != null) {
+                    c.setLicenseChoice(addedComponent.getLicenseChoice());
+                    if (c.getPurl() == null) {
+                        c.setPurl(addedComponent.getPurl());
+                    }
+                }
+            }
+
+            if (productInfo.getReleaseNotes() != null) {
+                var config = productInfo.getReleaseNotes();
+                var rn = new ReleaseNotes();
+                if (config.getTitle() != null) {
+                    rn.setTitle(config.getTitle());
+                }
+                if (config.getType() != null) {
+                    rn.setType(config.getType());
+                }
+                if (!config.getAliases().isEmpty()) {
+                    rn.setAliases(config.getAliases());
+                }
+                if (!config.getProperties().isEmpty()) {
+                    final List<String> names = new ArrayList<>(config.getProperties().keySet());
+                    Collections.sort(names);
+                    var propList = new ArrayList<Property>(names.size());
+                    for (String propName : names) {
+                        var prop = new Property();
+                        prop.setName(propName);
+                        prop.setValue(config.getProperties().get(propName));
+                        propList.add(prop);
+                    }
+                    rn.setProperties(propList);
+                }
+                c.setReleaseNotes(rn);
+            }
+
             if (productInfo.getId() != null) {
                 var prop = new Property();
                 prop.setName("product-id");

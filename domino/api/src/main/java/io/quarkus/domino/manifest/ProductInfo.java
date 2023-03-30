@@ -22,6 +22,14 @@ public interface ProductInfo {
 
     String getVersion();
 
+    String getPurl();
+
+    String getCpe();
+
+    String getDescription();
+
+    ProductReleaseNotes getReleaseNotes();
+
     default Mutable mutable() {
         return new ProductInfoImpl.Builder(this);
     }
@@ -48,7 +56,15 @@ public interface ProductInfo {
 
         Mutable setVersion(String version);
 
+        Mutable setPurl(String purl);
+
         Mutable setStream(String stream);
+
+        Mutable setCpe(String cpe);
+
+        Mutable setDescription(String description);
+
+        Mutable setReleaseNotes(ProductReleaseNotes notes);
 
         ProductInfo build();
 
