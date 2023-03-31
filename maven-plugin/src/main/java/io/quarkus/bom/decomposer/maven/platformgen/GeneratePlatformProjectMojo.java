@@ -29,6 +29,7 @@ import io.quarkus.bom.platform.RedHatExtensionDependencyCheck;
 import io.quarkus.bom.platform.ReportIndexPageGenerator;
 import io.quarkus.bom.resolver.ArtifactResolver;
 import io.quarkus.bom.resolver.ArtifactResolverProvider;
+import io.quarkus.bom.resolver.EffectiveModelResolver;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
@@ -65,6 +66,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.StringJoiner;
+import java.util.stream.Collectors;
 import javax.xml.transform.Result;
 import javax.xml.transform.Source;
 import javax.xml.transform.Transformer;
@@ -771,21 +773,33 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         quarkusBomImport.setScope("import");
         dm.addDependency(quarkusBomImport);
 
-        final List<org.eclipse.aether.graph.Dependency> originalDeps;
-        try {
-            originalDeps = nonWorkspaceResolver()
-                    .resolveDescriptor(new DefaultArtifact(originalCoords.getGroupId(), originalCoords.getArtifactId(),
-                            ArtifactCoords.TYPE_JAR, originalCoords.getVersion()))
-                    .getDependencies();
-        } catch (Exception e) {
-            throw new MojoExecutionException("Failed to resolve the artifact descriptor of " + originalCoords, e);
+        var build = pom.getBuild();
+        if (build == null) {
+            build = new Build();
+            pom.setBuild(build);
+        }
+        // copy the effective maven-plugin-plugin config and set expected versions
+        final Model originalEffectiveModel = new EffectiveModelResolver(nonWorkspaceResolver())
+                .resolveEffectiveModel(originalCoords);
+        var effectivePlugins = originalEffectiveModel.getBuild().getPlugins().stream()
+                .collect(Collectors.toMap(p -> p.getArtifactId(), p -> p));
+        int i = 0;
+        while (i < build.getPlugins().size()) {
+            var plugin = build.getPlugins().get(i++);
+            var effectivePlugin = effectivePlugins.get(plugin.getArtifactId());
+            if (plugin.getArtifactId().equals("maven-plugin-plugin")) {
+                build.getPlugins().set(i - 1, effectivePlugin);
+            } else {
+                plugin.setVersion(effectivePlugin.getVersion());
+            }
         }
 
+        var originalDeps = originalEffectiveModel.getDependencies();
+
         final Map<ArtifactKey, String> originalDepVersions = new HashMap<>(originalDeps.size());
-        for (org.eclipse.aether.graph.Dependency d : originalDeps) {
-            final Artifact a = d.getArtifact();
-            originalDepVersions.put(ArtifactKey.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension()),
-                    a.getVersion());
+        for (Dependency d : originalDeps) {
+            originalDepVersions.put(ArtifactKey.of(d.getGroupId(), d.getArtifactId(), d.getClassifier(), d.getType()),
+                    d.getVersion());
         }
         final List<Dependency> managedDeps = quarkusCore.generatedBomModel.getDependencyManagement().getDependencies();
         final Map<ArtifactKey, String> managedDepVersions = new HashMap<>(managedDeps.size());
