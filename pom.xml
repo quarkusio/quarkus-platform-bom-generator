@@ -50,7 +50,7 @@
 
     <cyclonedx.version>7.3.2</cyclonedx.version>
     <gradle-tooling.version>7.5.1</gradle-tooling.version>
-    <quarkus.version>2.16.5.Final</quarkus.version>
+    <quarkus.version>2.16.6.Final</quarkus.version>
     <quarkus-jgit.version>2.3.1</quarkus-jgit.version>
     <jgit.version>6.4.0.202211300538-r</jgit.version>
     <junit.jupiter.version>5.7.1</junit.jupiter.version>
