@@ -1,6 +1,5 @@
 package io.quarkus.domino;
 
-import io.quarkus.domino.ProjectDependencyConfig.Mutable;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import java.io.IOException;
@@ -223,39 +222,39 @@ public interface ProjectDependencyConfig {
 
         Mutable setProjectArtifacts(Collection<ArtifactCoords> projectArtifacts);
 
-        Mutable setIncludeArtifacts(Set<ArtifactCoords> artifacts);
+        Mutable setIncludeArtifacts(Collection<ArtifactCoords> artifacts);
 
-        default Mutable setIncludeGroupIds(Set<String> groupIds) {
+        default Mutable setIncludeGroupIds(Collection<String> groupIds) {
             groupIds.forEach(g -> addIncludePattern(
                     ArtifactCoords.of(g, ProjectDependencyConfigImpl.WILDCARD, ProjectDependencyConfigImpl.WILDCARD,
                             ProjectDependencyConfigImpl.WILDCARD, ProjectDependencyConfigImpl.WILDCARD)));
             return this;
         }
 
-        default Mutable setIncludeKeys(Set<ArtifactKey> artifactKeys) {
+        default Mutable setIncludeKeys(Collection<ArtifactKey> artifactKeys) {
             artifactKeys.forEach(k -> addIncludePattern(ArtifactCoords.of(k.getGroupId(), k.getArtifactId(), k.getClassifier(),
                     k.getType(), ProjectDependencyConfigImpl.WILDCARD)));
             return this;
         }
 
-        Mutable setIncludePatterns(Set<ArtifactCoords> artifacts);
+        Mutable setIncludePatterns(Collection<ArtifactCoords> artifacts);
 
         Mutable addIncludePattern(ArtifactCoords patter);
 
-        default Mutable setExcludeGroupIds(Set<String> groupIds) {
+        default Mutable setExcludeGroupIds(Collection<String> groupIds) {
             groupIds.forEach(g -> addExcludePattern(
                     ArtifactCoords.of(g, ProjectDependencyConfigImpl.WILDCARD, ProjectDependencyConfigImpl.WILDCARD,
                             ProjectDependencyConfigImpl.WILDCARD, ProjectDependencyConfigImpl.WILDCARD)));
             return this;
         }
 
-        default Mutable setExcludeKeys(Set<ArtifactKey> artifactKeys) {
+        default Mutable setExcludeKeys(Collection<ArtifactKey> artifactKeys) {
             artifactKeys.forEach(k -> addExcludePattern(ArtifactCoords.of(k.getGroupId(), k.getArtifactId(), k.getClassifier(),
                     k.getType(), ProjectDependencyConfigImpl.WILDCARD)));
             return this;
         }
 
-        Mutable setExcludePatterns(Set<ArtifactCoords> artifacts);
+        Mutable setExcludePatterns(Collection<ArtifactCoords> artifacts);
 
         Mutable addExcludePattern(ArtifactCoords pattern);
 

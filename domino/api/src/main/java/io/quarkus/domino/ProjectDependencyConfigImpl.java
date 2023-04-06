@@ -106,6 +106,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     }
 
     @Override
+    @JsonInclude(value = JsonInclude.Include.CUSTOM, valueFilter = ProjectDependencyConfigExcludeScopesFilter.class)
     public Set<String> getExcludeScopes() {
         return excludeScopes;
     }
@@ -126,6 +127,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     }
 
     @Override
+    @JsonInclude(value = JsonInclude.Include.CUSTOM, valueFilter = ProjectDependencyConfigLevelFilter.class)
     public int getLevel() {
         return level;
     }
@@ -457,13 +459,13 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         }
 
         @Override
-        public Mutable setIncludeArtifacts(Set<ArtifactCoords> artifacts) {
+        public Mutable setIncludeArtifacts(Collection<ArtifactCoords> artifacts) {
             this.includeArtifacts = artifacts;
             return this;
         }
 
         @Override
-        public Mutable setIncludePatterns(Set<ArtifactCoords> artifacts) {
+        public Mutable setIncludePatterns(Collection<ArtifactCoords> artifacts) {
             this.includePatterns = artifacts;
             return this;
         }
@@ -475,7 +477,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         }
 
         @Override
-        public Mutable setExcludePatterns(Set<ArtifactCoords> artifacts) {
+        public Mutable setExcludePatterns(Collection<ArtifactCoords> artifacts) {
             this.excludePatterns = artifacts;
             return this;
         }
