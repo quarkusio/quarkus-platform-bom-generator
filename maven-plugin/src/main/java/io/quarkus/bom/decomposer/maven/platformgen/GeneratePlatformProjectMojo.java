@@ -160,6 +160,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     @Parameter(required = true, defaultValue = "${project.build.directory}/updated-pom.xml")
     File updatedPom;
 
+    @Parameter(property = "recordUpdatedBoms")
+    private boolean recordUpdatedBoms;
+
     Artifact universalBom;
     MavenArtifactResolver nonWorkspaceResolver;
     MavenArtifactResolver mavenResolver;
@@ -177,9 +180,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     private PluginDescriptor pluginDescr;
 
     private List<String> pomLines;
-
-    @Parameter(property = "recordUpdatedBoms")
-    private boolean recordUpdatedBoms;
 
     private Set<ArtifactKey> universalBomDepKeys = new HashSet<>();
 

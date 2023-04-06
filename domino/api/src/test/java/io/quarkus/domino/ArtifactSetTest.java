@@ -1,10 +1,9 @@
-package io.quarkus.bom.decomposer.maven;
+package io.quarkus.domino;
 
-import io.quarkus.domino.ArtifactSet;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-public class GavSetTest {
+public class ArtifactSetTest {
 
     @Test
     public void defaults() {

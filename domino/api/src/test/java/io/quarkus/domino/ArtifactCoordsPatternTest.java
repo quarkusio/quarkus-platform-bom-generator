@@ -1,6 +1,5 @@
-package io.quarkus.bom.decomposer.maven;
+package io.quarkus.domino;
 
-import io.quarkus.domino.ArtifactCoordsPattern;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
