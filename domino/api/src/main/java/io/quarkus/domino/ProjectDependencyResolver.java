@@ -490,7 +490,7 @@ public class ProjectDependencyResolver {
                 if (includeSet.isEmpty()) {
                     collect = d.getGroupId().startsWith(config.getProjectBom().getGroupId()) && !isExcluded(d);
                 } else {
-                    collect = isIncluded(d);
+                    collect = !isExcluded(d) && isIncluded(d);
                 }
                 if (collect) {
                     result.add(d);
