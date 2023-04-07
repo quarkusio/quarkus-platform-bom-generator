@@ -1,6 +1,7 @@
-package io.quarkus.domino.manifest;
+package io.quarkus.domino;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 
 @JsonInclude(JsonInclude.Include.NON_DEFAULT)
 public class ProductInfoImpl implements ProductInfo {
@@ -26,7 +27,12 @@ public class ProductInfoImpl implements ProductInfo {
         stream = other.getStream();
         cpe = other.getCpe();
         description = other.getDescription();
-        releaseNotes = other.getReleaseNotes();
+        var releaseNotes = other.getReleaseNotes();
+        if ((releaseNotes instanceof ProductReleaseNotes.Mutable)) {
+            this.releaseNotes = ((ProductReleaseNotes.Mutable) releaseNotes).build();
+        } else {
+            this.releaseNotes = releaseNotes;
+        }
     }
 
     @Override
@@ -75,6 +81,7 @@ public class ProductInfoImpl implements ProductInfo {
     }
 
     @Override
+    @JsonDeserialize(as = ProductReleaseNotesImpl.Builder.class)
     public ProductReleaseNotes getReleaseNotes() {
         return releaseNotes;
     }
@@ -120,6 +127,11 @@ public class ProductInfoImpl implements ProductInfo {
         }
 
         @Override
+        public String getStream() {
+            return stream;
+        }
+
+        @Override
         public String getGroup() {
             return group;
         }
@@ -145,11 +157,6 @@ public class ProductInfoImpl implements ProductInfo {
         }
 
         @Override
-        public String getStream() {
-            return stream;
-        }
-
-        @Override
         public String getCpe() {
             return cpe;
         }
@@ -160,6 +167,7 @@ public class ProductInfoImpl implements ProductInfo {
         }
 
         @Override
+        @JsonDeserialize(as = ProductReleaseNotesImpl.Builder.class)
         public ProductReleaseNotes getReleaseNotes() {
             return releaseNotes;
         }
@@ -172,6 +180,12 @@ public class ProductInfoImpl implements ProductInfo {
         @Override
         public Mutable setId(String id) {
             this.id = id;
+            return this;
+        }
+
+        @Override
+        public Mutable setStream(String stream) {
+            this.stream = stream;
             return this;
         }
 
@@ -202,12 +216,6 @@ public class ProductInfoImpl implements ProductInfo {
         @Override
         public Mutable setPurl(String purl) {
             this.purl = purl;
-            return this;
-        }
-
-        @Override
-        public Mutable setStream(String stream) {
-            this.stream = stream;
             return this;
         }
 

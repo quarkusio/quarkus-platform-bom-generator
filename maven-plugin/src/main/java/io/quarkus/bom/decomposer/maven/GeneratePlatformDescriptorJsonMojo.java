@@ -22,7 +22,6 @@ import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -376,7 +375,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
                 if (extension == null) {
                     continue;
                 }
-                origins = Arrays.asList(platformJson);
+                origins = List.of(platformJson);
             } else {
                 origins = new ArrayList<>(extension.getOrigins().size() + 1);
                 origins.addAll(extension.getOrigins());

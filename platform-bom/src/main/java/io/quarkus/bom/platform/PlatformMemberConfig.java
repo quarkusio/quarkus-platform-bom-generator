@@ -1,7 +1,5 @@
 package io.quarkus.bom.platform;
 
-import io.quarkus.domino.manifest.ProductInfo;
-import io.quarkus.domino.manifest.ProductInfoImpl;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -35,7 +33,7 @@ public class PlatformMemberConfig {
 
     private ProjectDependencyFilterConfig depsToBuild;
 
-    private ProductInfo productInfo;
+    private SbomConfig sbom;
 
     public void applyOverrides(PlatformMemberConfig overrides) {
         if (overrides.bom != null) {
@@ -169,7 +167,7 @@ public class PlatformMemberConfig {
     }
 
     public boolean isEnabled() {
-        return enabled == null ? true : enabled.booleanValue();
+        return enabled == null || enabled;
     }
 
     /**
@@ -179,7 +177,7 @@ public class PlatformMemberConfig {
      * @return true if the member should not be installed and deployed
      */
     public boolean isHidden() {
-        return hidden == null ? false : hidden.booleanValue();
+        return hidden != null && hidden;
     }
 
     /**
@@ -190,7 +188,7 @@ public class PlatformMemberConfig {
      * @return true if the member should not be installed and deployed
      */
     public boolean isAlignOwnConstraints() {
-        return alignOwnConstraints == null ? false : alignOwnConstraints.booleanValue();
+        return alignOwnConstraints != null && alignOwnConstraints;
     }
 
     /**
@@ -202,8 +200,8 @@ public class PlatformMemberConfig {
      * 
      * @return true if the member chose to keep its exclusions for common dependencies
      */
-    public boolean isKeepThirpartyExclusions() {
-        return keepThirdpartyExclusions == null ? true : keepThirdpartyExclusions.booleanValue();
+    public boolean isKeepThirdpartyExclusions() {
+        return keepThirdpartyExclusions == null || keepThirdpartyExclusions;
     }
 
     public void setMetadataOverrideFiles(List<String> metadataOverrideFiles) {
@@ -287,11 +285,11 @@ public class PlatformMemberConfig {
         this.depsToBuild = depsToBuild;
     }
 
-    public ProductInfo getProductInfo() {
-        return productInfo;
+    public SbomConfig getSbom() {
+        return sbom;
     }
 
-    public void setProductInfo(ProductInfoImpl.Builder productInfo) {
-        this.productInfo = productInfo.build();
+    public void setSbom(SbomConfig sbom) {
+        this.sbom = sbom;
     }
 }

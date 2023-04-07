@@ -2,9 +2,9 @@ package io.quarkus.bom.decomposer.maven;
 
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
+import io.quarkus.domino.ProductInfoImpl;
 import io.quarkus.domino.ProjectDependencyConfig;
 import io.quarkus.domino.ProjectDependencyResolver;
-import io.quarkus.domino.manifest.ProductInfoImpl;
 import io.quarkus.domino.manifest.SbomGeneratingDependencyVisitor;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;

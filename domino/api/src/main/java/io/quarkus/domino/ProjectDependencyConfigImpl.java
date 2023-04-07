@@ -1,6 +1,8 @@
 package io.quarkus.domino;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -13,8 +15,10 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
 
     static final String WILDCARD = "*";
 
+    private final ProductInfo productInfo;
     private final Path projectDir;
     private final ArtifactCoords projectBom;
+    private final List<ArtifactCoords> nonProjectBoms;
     private final Collection<ArtifactCoords> projectArtifacts;
     private final Collection<ArtifactCoords> includeArtifacts;
     private final Collection<ArtifactCoords> includePatterns;
@@ -44,8 +48,15 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     private final String gradleJavaHome;
 
     private ProjectDependencyConfigImpl(ProjectDependencyConfig other) {
-        this.projectDir = other.getProjectDir();
+        var productInfo = other.getProductInfo();
+        if (productInfo instanceof ProductInfo.Mutable) {
+            this.productInfo = ((ProductInfo.Mutable) productInfo).build();
+        } else {
+            this.productInfo = productInfo;
+        }
+        projectDir = other.getProjectDir();
         projectBom = other.getProjectBom();
+        nonProjectBoms = toUnmodifiableList(other.getNonProjectBoms());
         projectArtifacts = toUnmodifiableList(other.getProjectArtifacts());
         includeArtifacts = toUnmodifiableList(other.getIncludeArtifacts());
         includePatterns = toUnmodifiableList(other.getIncludePatterns());
@@ -76,6 +87,12 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     }
 
     @Override
+    @JsonDeserialize(as = ProductInfoImpl.Builder.class)
+    public ProductInfo getProductInfo() {
+        return productInfo;
+    }
+
+    @Override
     public Path getProjectDir() {
         return projectDir;
     }
@@ -86,21 +103,31 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     }
 
     @Override
+    @JsonSerialize(converter = ArtifactCoordsCollectionSorter.class)
+    public List<ArtifactCoords> getNonProjectBoms() {
+        return nonProjectBoms;
+    }
+
+    @Override
+    @JsonSerialize(converter = ArtifactCoordsCollectionSorter.class)
     public Collection<ArtifactCoords> getProjectArtifacts() {
         return projectArtifacts;
     }
 
     @Override
+    @JsonSerialize(converter = ArtifactCoordsCollectionSorter.class)
     public Collection<ArtifactCoords> getIncludeArtifacts() {
         return includeArtifacts;
     }
 
     @Override
+    @JsonSerialize(converter = ArtifactCoordsCollectionSorter.class)
     public Collection<ArtifactCoords> getIncludePatterns() {
         return includePatterns;
     }
 
     @Override
+    @JsonSerialize(converter = ArtifactCoordsCollectionSorter.class)
     public Collection<ArtifactCoords> getExcludePatterns() {
         return excludePatterns;
     }
@@ -112,6 +139,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     }
 
     @Override
+    @JsonInclude(value = JsonInclude.Include.CUSTOM, valueFilter = ProjectDependencyConfigIncludeNonManagedFilter.class)
     public boolean isIncludeNonManaged() {
         return includeNonManaged;
     }
@@ -228,14 +256,16 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
 
     static class Builder implements ProjectDependencyConfig.Mutable {
 
+        private ProductInfo productInfo;
         private Path projectDir;
         private ArtifactCoords projectBom;
+        private List<ArtifactCoords> nonProjectBoms = List.of();
         private Collection<ArtifactCoords> projectArtifacts = new ArrayList<>();
         private Collection<ArtifactCoords> includeArtifacts = new ArrayList<>();
         private Collection<ArtifactCoords> includePatterns = new ArrayList<>();
         private Collection<ArtifactCoords> excludePatterns = new ArrayList<>();
         private Set<String> excludeScopes = Set.of("provided", "test");
-        private boolean includeNonManaged;
+        private boolean includeNonManaged = true;
         private boolean excludeParentPoms;
         private boolean excludeBomImports;
         private int level = -1;
@@ -262,8 +292,10 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         }
 
         Builder(ProjectDependencyConfig other) {
+            productInfo = other.getProductInfo();
             projectDir = other.getProjectDir();
             projectBom = other.getProjectBom();
+            nonProjectBoms = new ArrayList<>(other.getNonProjectBoms());
             projectArtifacts.addAll(other.getProjectArtifacts());
             includeArtifacts.addAll(other.getIncludeArtifacts());
             includePatterns.addAll(other.getIncludePatterns());
@@ -292,6 +324,12 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         }
 
         @Override
+        @JsonDeserialize(as = ProductInfoImpl.Builder.class)
+        public ProductInfo getProductInfo() {
+            return productInfo;
+        }
+
+        @Override
         public Path getProjectDir() {
             return projectDir;
         }
@@ -305,6 +343,11 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         @Override
         public ArtifactCoords getProjectBom() {
             return projectBom;
+        }
+
+        @Override
+        public List<ArtifactCoords> getNonProjectBoms() {
+            return nonProjectBoms;
         }
 
         @Override
@@ -447,14 +490,32 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         }
 
         @Override
+        public Mutable setProductInfo(ProductInfo productInfo) {
+            this.productInfo = productInfo;
+            return this;
+        }
+
+        @Override
         public Mutable setProjectBom(ArtifactCoords bom) {
             this.projectBom = bom;
             return this;
         }
 
         @Override
+        public Mutable setNonProjectBoms(List<ArtifactCoords> nonProjectBoms) {
+            this.nonProjectBoms = nonProjectBoms;
+            return this;
+        }
+
+        @Override
         public Mutable setProjectArtifacts(Collection<ArtifactCoords> projectArtifacts) {
             this.projectArtifacts = projectArtifacts;
+            return this;
+        }
+
+        @Override
+        public Mutable addProjectArtifacts(ArtifactCoords projectArtifact) {
+            projectArtifacts.add(projectArtifact);
             return this;
         }
 

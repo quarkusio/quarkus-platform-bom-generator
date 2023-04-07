@@ -2,6 +2,7 @@ package io.quarkus.domino.manifest;
 
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.domino.DependencyTreeVisitor;
+import io.quarkus.domino.ProductInfo;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
