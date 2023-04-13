@@ -157,6 +157,9 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
     @CommandLine.Option(names = { "--maven-settings", "-s" }, description = "Path to a custom Maven settings file")
     public String mavenSettings;
 
+    @CommandLine.Option(names = { "--config-file" }, description = "Path to a configuration file to use")
+    public File configFile;
+
     private MavenArtifactResolver artifactResolver;
 
     @Override
@@ -183,13 +186,22 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
                 }
             }
         }
+        var log = MessageWriter.info();
+        if (configFile != null) {
+            if (!configFile.exists()) {
+                log.error("Configuration file " + configFile + " does not exist");
+                return CommandLine.ExitCode.USAGE;
+            }
+            var config = ProjectDependencyConfig.mutableFromFile(configFile.toPath());
+            initConfig(config);
+            configs = Map.of("", config);
+        }
         if (configs.isEmpty()) {
             final ProjectDependencyConfig.Mutable config = ProjectDependencyConfig.builder();
             initConfig(config);
             configs = Map.of("", config.build());
         }
 
-        var log = MessageWriter.info();
         for (var configEntry : configs.entrySet()) {
             var config = configEntry.getValue();
             if (exportTo != null) {
