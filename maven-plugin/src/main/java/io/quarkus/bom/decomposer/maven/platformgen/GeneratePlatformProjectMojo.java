@@ -1750,6 +1750,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 } else if (testConfig.getArgLine() != null) {
                     config.addChild(textDomElement("argLine", testConfig.getArgLine()));
                 }
+
+                if (testConfig.getJvmTestPattern() != null) {
+                    config.addChild(textDomElement("test", testConfig.getJvmTestPattern()));
+                } else if (testConfig.getTestPattern() != null) {
+                    config.addChild(textDomElement("test", testConfig.getTestPattern()));
+                }
             }
 
             try {
@@ -2111,6 +2117,18 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             config.addChild(textDomElement("argLine", testConfig.getJvmArgLine()));
         } else if (testConfig.getArgLine() != null) {
             config.addChild(textDomElement("argLine", testConfig.getArgLine()));
+        }
+
+        if (nativeTest) {
+            if (testConfig.getNativeTestPattern() != null) {
+                config.addChild(textDomElement("test", testConfig.getNativeTestPattern()));
+            } else if (testConfig.getTestPattern() != null) {
+                config.addChild(textDomElement("test", testConfig.getTestPattern()));
+            }
+        } else if (testConfig.getJvmTestPattern() != null) {
+            config.addChild(textDomElement("test", testConfig.getJvmTestPattern()));
+        } else if (testConfig.getTestPattern() != null) {
+            config.addChild(textDomElement("test", testConfig.getTestPattern()));
         }
 
         addGroupsConfig(testConfig, config, nativeTest);

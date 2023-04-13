@@ -24,9 +24,14 @@ public class PlatformMemberDefaultTestConfig {
     protected List<String> nativeIncludes = List.of();
     protected List<String> nativeExcludes = List.of();
     protected Boolean packageApplication;
+
     protected String argLine;
     protected String jvmArgLine;
     protected String nativeArgLine;
+
+    protected String testPattern;
+    protected String jvmTestPattern;
+    protected String nativeTestPattern;
 
     public PlatformMemberDefaultTestConfig() {
         super();
@@ -135,6 +140,15 @@ public class PlatformMemberDefaultTestConfig {
         }
         if (overrides.packageApplication != null) {
             packageApplication = overrides.packageApplication;
+        }
+        if (overrides.testPattern != null) {
+            testPattern = overrides.testPattern;
+        }
+        if (overrides.jvmTestPattern != null) {
+            jvmTestPattern = overrides.jvmTestPattern;
+        }
+        if (overrides.nativeTestPattern != null) {
+            nativeTestPattern = overrides.nativeTestPattern;
         }
     }
 
@@ -304,5 +318,25 @@ public class PlatformMemberDefaultTestConfig {
 
     public String getNativeArgLine() {
         return nativeArgLine;
+    }
+
+    public String getTestPattern() {
+        return testPattern;
+    }
+
+    public void setJvmTestPatter(String testPattern) {
+        this.jvmTestPattern = testPattern;
+    }
+
+    public String getJvmTestPattern() {
+        return jvmTestPattern;
+    }
+
+    public void setNativeTestPattern(String testPattern) {
+        this.nativeTestPattern = testPattern;
+    }
+
+    public String getNativeTestPattern() {
+        return nativeTestPattern;
     }
 }
