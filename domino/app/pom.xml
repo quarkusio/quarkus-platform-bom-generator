@@ -18,6 +18,20 @@
     <dependency>
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-arc</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>io.smallrye.reactive</groupId>
+          <artifactId>mutiny</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>io.github.crac</groupId>
+          <artifactId>org-crac</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.eclipse.microprofile.context-propagation</groupId>
+          <artifactId>microprofile-context-propagation-api</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>io.quarkus</groupId>
