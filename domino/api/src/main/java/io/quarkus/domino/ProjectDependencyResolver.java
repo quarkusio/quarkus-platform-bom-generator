@@ -102,6 +102,13 @@ public class ProjectDependencyResolver {
             return this;
         }
 
+        /**
+         * Allows to set a version constraint provider per root artifact, in which case
+         * the project BOM and non-project BOMs would be ignored.
+         * 
+         * @param constraintsProvider version constraint provider
+         * @return this instance of {@link ProjectDependencyResolver.Builder}
+         */
         public Builder setArtifactConstraintsProvider(Function<ArtifactCoords, List<Dependency>> constraintsProvider) {
             artifactConstraintsProvider = constraintsProvider;
             return this;
@@ -117,6 +124,10 @@ public class ProjectDependencyResolver {
             return this;
         }
 
+        public Path getLogOutputFile() {
+            return logOutputFile;
+        }
+
         public Builder setAppendOutput(boolean appendOutput) {
             this.appendOutput = appendOutput;
             return this;
@@ -125,6 +136,10 @@ public class ProjectDependencyResolver {
         public Builder setDependencyConfig(ProjectDependencyConfig depConfig) {
             this.depConfig = depConfig;
             return this;
+        }
+
+        public ProjectDependencyConfig getDependencyConfig() {
+            return depConfig;
         }
 
         public ProjectDependencyResolver build() {
@@ -154,31 +169,6 @@ public class ProjectDependencyResolver {
         }
     }
 
-    private static ArtifactCoordsPattern toPattern(ArtifactCoords c) {
-        final ArtifactCoordsPattern.Builder pattern = ArtifactCoordsPattern.builder();
-        pattern.groupIdPattern(c.getGroupId());
-        pattern.artifactIdPattern(c.getArtifactId());
-        if (c.getClassifier() != null && !c.getClassifier().isEmpty()) {
-            pattern.classifierPattern(c.getClassifier());
-        }
-        if (c.getType() != null && !c.getType().isEmpty()) {
-            pattern.typePattern(c.getType());
-        }
-        pattern.versionPattern(c.getVersion());
-        return pattern.build();
-    }
-
-    private static List<ArtifactCoordsPattern> toPatterns(Collection<ArtifactCoords> coords) {
-        if (coords.isEmpty()) {
-            return List.of();
-        }
-        final List<ArtifactCoordsPattern> result = new ArrayList<>(coords.size());
-        for (ArtifactCoords c : coords) {
-            result.add(toPattern(c));
-        }
-        return result;
-    }
-
     public static Builder builder() {
         return new ProjectDependencyResolver.Builder();
     }
@@ -201,8 +191,7 @@ public class ProjectDependencyResolver {
     private boolean includeTestJars;
 
     private Function<ArtifactCoords, List<Dependency>> artifactConstraintsProvider;
-    private Set<ArtifactCoords> targetBomConstraints;
-    private List<Dependency> targetBomManagedDeps;
+    private Set<ArtifactCoords> projectBomConstraints;
     private final Map<ArtifactCoords, ResolvedDependency> allDepsToBuild = new HashMap<>();
     private final Set<ArtifactCoords> nonManagedVisited = new HashSet<>();
     private final Set<ArtifactCoords> skippedDeps = new HashSet<>();
@@ -225,10 +214,10 @@ public class ProjectDependencyResolver {
         this.logOutputFile = builder.logOutputFile;
         this.appendOutput = builder.appendOutput;
         this.config = Objects.requireNonNull(builder.depConfig);
-        excludeSet = toPatterns(config.getExcludePatterns());
+        excludeSet = ArtifactCoordsPattern.toPatterns(config.getExcludePatterns());
         includeSet = new ArrayList<>(config.getIncludeArtifacts().size() + config.getIncludePatterns().size());
-        config.getIncludePatterns().forEach(p -> includeSet.add(toPattern(p)));
-        config.getIncludeArtifacts().forEach(c -> includeSet.add(toPattern(c)));
+        config.getIncludePatterns().forEach(p -> includeSet.add(ArtifactCoordsPattern.of(p)));
+        config.getIncludeArtifacts().forEach(c -> includeSet.add(ArtifactCoordsPattern.of(c)));
         if (config.isLogTrees() || config.getLogTreesFor() != null) {
             treeVisitors = new ArrayList<>(builder.visitors.size() + 1);
             treeVisitors.addAll(builder.visitors);
@@ -237,6 +226,10 @@ public class ProjectDependencyResolver {
             treeVisitors = builder.visitors;
         }
         releaseIdResolver = newReleaseIdResolver(resolver, log, config);
+    }
+
+    public Path getOutputFile() {
+        return logOutputFile;
     }
 
     public ProjectDependencyConfig getConfig() {
@@ -395,13 +388,16 @@ public class ProjectDependencyResolver {
     }
 
     public void resolveDependencies() {
-        targetBomManagedDeps = getBomConstraints(config.getProjectBom());
-        targetBomConstraints = new HashSet<>(targetBomManagedDeps.size());
-        for (Dependency d : targetBomManagedDeps) {
-            targetBomConstraints.add(toCoords(d.getArtifact()));
+        var enforcedConstraints = getBomConstraints(config.getProjectBom());
+        projectBomConstraints = new HashSet<>(enforcedConstraints.size());
+        for (Dependency d : enforcedConstraints) {
+            projectBomConstraints.add(toCoords(d.getArtifact()));
         }
         if (artifactConstraintsProvider == null) {
-            artifactConstraintsProvider = t -> targetBomManagedDeps;
+            for (var bomCoords : config.getNonProjectBoms()) {
+                enforcedConstraints.addAll(getBomConstraints(bomCoords));
+            }
+            artifactConstraintsProvider = t -> enforcedConstraints;
         }
 
         for (DependencyTreeVisitor v : treeVisitors) {
@@ -414,7 +410,7 @@ public class ProjectDependencyResolver {
             }
         }
 
-        for (ArtifactCoords coords : config.getIncludeArtifacts()) {
+        for (ArtifactCoords coords : toSortedCoords(config.getIncludeArtifacts())) {
             if (isIncluded(coords) || !isExcluded(coords)) {
                 processRootArtifact(coords, artifactConstraintsProvider.apply(coords));
             }
@@ -427,6 +423,15 @@ public class ProjectDependencyResolver {
         for (DependencyTreeVisitor v : treeVisitors) {
             v.afterAllRoots();
         }
+    }
+
+    private static List<ArtifactCoords> toSortedCoords(Collection<ArtifactCoords> col) {
+        if (col.isEmpty()) {
+            return List.of();
+        }
+        var list = new ArrayList<>(col);
+        list.sort(ArtifactCoordsComparator.getInstance());
+        return list;
     }
 
     private void removeProductizedDeps() {
@@ -449,43 +454,31 @@ public class ProjectDependencyResolver {
     }
 
     protected Iterable<ArtifactCoords> getProjectArtifacts() {
-        Collection<ArtifactCoords> result = null;
-        if (config.getProjectDir() != null) {
-            final BuildTool buildTool = BuildTool.forProjectDir(config.getProjectDir());
-            if (BuildTool.MAVEN.equals(buildTool)) {
-                result = MavenProjectReader.resolveModuleDependencies(resolver);
-            } else if (BuildTool.GRADLE.equals(buildTool)) {
-                preResolvedRootArtifacts = GradleProjectReader.resolveModuleDependencies(config.getProjectDir(),
-                        config.isGradleJava8(), config.getGradleJavaHome(), resolver);
-                result = preResolvedRootArtifacts.keySet();
-                try {
-                    final Repository gitRepo = Git.open(config.getProjectDir().toFile()).getRepository();
-                    final String repoUrl = gitRepo.getConfig().getString("remote", "origin", "url");
-                    projectReleaseId = ReleaseIdFactory.forScmAndTag(repoUrl, gitRepo.getBranch());
-                } catch (IOException e) {
-                    log.warn("Failed to determine the Git repository URL: ", e.getLocalizedMessage());
-                    final ArtifactCoords a = result.iterator().next();
-                    projectReleaseId = ReleaseIdFactory.forGav(a.getGroupId(), a.getArtifactId(), a.getVersion());
-                }
-            } else {
-                throw new IllegalStateException("Unrecognized build tool " + buildTool);
-            }
-        }
 
-        if (config.getProjectArtifacts().isEmpty()) {
-            if (result == null) {
-                result = new ArrayList<>();
-            } else {
-                result = new HashSet<>(result);
-            }
-            if (config.getProjectBom() != null) {
-                var bom = config.getProjectBom();
+        List<ArtifactCoords> result = null;
+        if (!config.getProjectArtifacts().isEmpty()) {
+            result = new ArrayList<>(config.getProjectArtifacts());
+            var bom = config.getProjectBom();
+            if (bom != null) {
                 if (!ArtifactCoords.TYPE_POM.equals(bom.getType())) {
                     bom = ArtifactCoords.pom(bom.getGroupId(), bom.getArtifactId(), bom.getVersion());
                 }
-                result.add(bom);
+                if (!result.contains(bom)) {
+                    result.add(bom);
+                }
             }
-            for (ArtifactCoords d : targetBomConstraints) {
+
+            projectGavs = config.getProjectBom() == null ? Set.of()
+                    : Set.of(new GAV(config.getProjectBom().getGroupId(), config.getProjectBom().getArtifactId(),
+                            config.getProjectBom().getVersion()));
+        } else if (config.getProjectBom() != null) {
+            result = new ArrayList<>();
+            var bom = config.getProjectBom();
+            if (!ArtifactCoords.TYPE_POM.equals(bom.getType())) {
+                bom = ArtifactCoords.pom(bom.getGroupId(), bom.getArtifactId(), bom.getVersion());
+            }
+            result.add(bom);
+            for (ArtifactCoords d : projectBomConstraints) {
                 final boolean collect;
                 if (includeSet.isEmpty()) {
                     collect = d.getGroupId().startsWith(config.getProjectBom().getGroupId()) && !isExcluded(d);
@@ -497,23 +490,36 @@ public class ProjectDependencyResolver {
                     log.debug(d.toCompactCoords() + " selected as a top level artifact to build");
                 }
             }
-        } else if (result == null) {
-            result = config.getProjectArtifacts();
-        } else {
-            result = new HashSet<>(result);
-            result.addAll(config.getProjectArtifacts());
-        }
 
-        if (config.getProjectDir() == null) {
-            projectGavs = config.getProjectBom() == null ? Set.of()
-                    : Set.of(new GAV(config.getProjectBom().getGroupId(), config.getProjectBom().getArtifactId(),
-                            config.getProjectBom().getVersion()));
-        } else {
+            projectGavs = Set.of(new GAV(config.getProjectBom().getGroupId(), config.getProjectBom().getArtifactId(),
+                    config.getProjectBom().getVersion()));
+        } else if (config.getProjectDir() != null) {
+            final BuildTool buildTool = BuildTool.forProjectDir(config.getProjectDir());
+            if (BuildTool.MAVEN.equals(buildTool)) {
+                result = MavenProjectReader.resolveModuleDependencies(resolver);
+            } else if (BuildTool.GRADLE.equals(buildTool)) {
+                preResolvedRootArtifacts = GradleProjectReader.resolveModuleDependencies(config.getProjectDir(),
+                        config.isGradleJava8(), config.getGradleJavaHome(), resolver);
+                result = new ArrayList<>(preResolvedRootArtifacts.keySet());
+                try (Git git = Git.open(config.getProjectDir().toFile())) {
+                    final Repository gitRepo = git.getRepository();
+                    final String repoUrl = gitRepo.getConfig().getString("remote", "origin", "url");
+                    projectReleaseId = ReleaseIdFactory.forScmAndTag(repoUrl, gitRepo.getBranch());
+                } catch (IOException e) {
+                    log.warn("Failed to determine the Git repository URL: ", e.getLocalizedMessage());
+                    final ArtifactCoords a = result.iterator().next();
+                    projectReleaseId = ReleaseIdFactory.forGav(a.getGroupId(), a.getArtifactId(), a.getVersion());
+                }
+            } else {
+                throw new IllegalStateException("Unrecognized build tool " + buildTool);
+            }
+
             projectGavs = new HashSet<>(result.size());
             for (ArtifactCoords c : result) {
                 projectGavs.add(toGav(c));
             }
         }
+        result.sort(ArtifactCoordsComparator.getInstance());
         return result;
     }
 
@@ -585,6 +591,10 @@ public class ProjectDependencyResolver {
         return root;
     }
 
+    private boolean isCollectNonManagedVisited() {
+        return config.isLogSummary() && config.isIncludeNonManaged() || config.isLogNonManagedVisitied();
+    }
+
     private static DefaultArtifact toAetherArtifact(ArtifactCoords a) {
         return new DefaultArtifact(a.getGroupId(),
                 a.getArtifactId(), a.getClassifier(),
@@ -651,7 +661,8 @@ public class ProjectDependencyResolver {
             return getLegacyReleaseIdResolver(artifactResolver, log, config.isValidateCodeRepoTags());
         }
 
-        final List<ReleaseIdDetector> releaseDetectors = ServiceLoader.load(ReleaseIdDetector.class).stream().map(p -> p.get())
+        final List<ReleaseIdDetector> releaseDetectors = ServiceLoader.load(ReleaseIdDetector.class).stream()
+                .map(ServiceLoader.Provider::get)
                 .collect(Collectors.toList());
 
         final AtomicReference<ReleaseIdResolver> ref = new AtomicReference<>();
@@ -670,8 +681,8 @@ public class ProjectDependencyResolver {
                         for (ReleaseIdDetector rd : releaseDetectors) {
                             try {
                                 var rid = rd.detectReleaseId(ref.get(), pomArtifact);
-                                if (releaseId != null && releaseId.origin().isUrl()
-                                        && releaseId.origin().toString().contains("git")) {
+                                if (rid != null && rid.origin().isUrl()
+                                        && rid.origin().toString().contains("git")) {
                                     releaseId = rid;
                                     break;
                                 }
@@ -837,7 +848,8 @@ public class ProjectDependencyResolver {
                     }
                 });
         releaseDetectors
-                .addAll(ServiceLoader.load(ReleaseIdDetector.class).stream().map(p -> p.get()).collect(Collectors.toList()));
+                .addAll(ServiceLoader.load(ReleaseIdDetector.class).stream().map(ServiceLoader.Provider::get)
+                        .collect(Collectors.toList()));
 
         return new ReleaseIdResolver(artifactResolver, releaseDetectors, log, validateCodeRepoTags);
     }
@@ -945,8 +957,8 @@ public class ProjectDependencyResolver {
     }
 
     private ResolvedDependency addArtifactToBuild(ArtifactCoords coords, List<RemoteRepository> repos) {
-        final boolean managed = targetBomConstraints.contains(coords);
-        if (!managed) {
+        final boolean managed = projectBomConstraints.contains(coords);
+        if (!managed && isCollectNonManagedVisited()) {
             nonManagedVisited.add(coords);
         }
 

@@ -200,7 +200,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                 if (platformDep == null) {
                     throw new IllegalStateException("Failed to locate " + dep.key() + " in the generated platform BOM");
                 }
-                if (member.config().isKeepThirpartyExclusions()
+                if (member.config().isKeepThirdpartyExclusions()
                         && !dep.dependency().getExclusions().equals(platformDep.dependency().getExclusions())) {
                     platformDep = ProjectDependency.create(platformDep.releaseId(), new Dependency(platformDep.artifact(),
                             dep.dependency().getScope(), dep.dependency().isOptional(), dep.dependency().getExclusions()));

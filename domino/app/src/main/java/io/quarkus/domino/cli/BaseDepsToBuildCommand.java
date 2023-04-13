@@ -3,18 +3,23 @@ package io.quarkus.domino.cli;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.options.BootstrapMavenOptions;
+import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.domino.ProjectDependencyConfig;
 import io.quarkus.domino.ProjectDependencyResolver;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import java.io.File;
-import java.util.ArrayList;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import picocli.CommandLine;
 
 public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
@@ -35,7 +40,7 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
 
     @CommandLine.Option(names = {
             "--level" }, description = "Dependency tree depth level to which the dependencies should be analyzed. If a level is not specified, there is no limit on the level.", defaultValue = "-1")
-    public int level = -1;
+    public Integer level = -1;
 
     @CommandLine.Option(names = {
             "--log-artifacts-to-build" }, description = "Whether to log the coordinates of the artifacts captured down to the depth specified. The default is true.")
@@ -87,11 +92,11 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
 
     @CommandLine.Option(names = {
             "--exclude-bom-imports" }, description = "Whether to exclude BOMs imported in the POMs of artifacts to be built from the list of artifacts to be built from source")
-    public boolean excludeBomImports;
+    public Boolean excludeBomImports;
 
     @CommandLine.Option(names = {
-            "--exclude-group-ids" }, description = "Command-separated list of groupIds of dependencies that should be excluded")
-    public String excludeGroupIds;
+            "--exclude-group-ids" }, description = "Command-separated list of groupIds of dependencies that should be excluded", split = ",")
+    public Set<String> excludeGroupIds;
 
     @CommandLine.Option(names = {
             "--exclude-keys" }, description = "Command-separated list of artifact coordinates excluding the version of dependencies that should be excluded")
@@ -106,15 +111,15 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
     public Set<String> excludeScopes;
 
     @CommandLine.Option(names = {
-            "--recipe-repos" }, description = "Build recipe repository URLs, the default one is https://github.com/redhat-appstudio/jvm-build-data")
-    public String recipeRepos;
+            "--recipe-repos" }, description = "Build recipe repository URLs, the default one is https://github.com/redhat-appstudio/jvm-build-data", split = ",")
+    public List<String> recipeRepos;
 
     @CommandLine.Option(names = {
             "--validate-code-repo-tags" }, description = "Whether to validate the discovered code repo and tags that are included in the report")
-    public boolean validateCodeRepoTags;
+    public Boolean validateCodeRepoTags;
 
     @CommandLine.Option(names = { "--legacy-scm-locator" }, description = "Whether to use the legacy SCM locator")
-    public boolean legacyScmLocator;
+    public Boolean legacyScmLocator;
 
     @CommandLine.Option(names = {
             "--warn-on-resolution-errors" }, description = "Whether to warn about artifact resolution errors instead of failing the process")
@@ -122,11 +127,11 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
 
     @CommandLine.Option(names = {
             "--warn-on-missing-scm" }, description = "Whether to issue a warning in case an SCM location could not be determined or fail with an error (the default behavior).")
-    public boolean warnOnMissingScm;
+    public Boolean warnOnMissingScm;
 
     @CommandLine.Option(names = {
             "--include-already-built" }, description = "Whether to include dependencies that have already been built")
-    public boolean includeAlreadyBuilt;
+    public Boolean includeAlreadyBuilt;
 
     @CommandLine.Option(names = {
             "--export-config-to" }, description = "Export config to a file")
@@ -134,11 +139,11 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
 
     @CommandLine.Option(names = {
             "--include-optional-deps" }, description = "Includes optional dependencies of the root project artifacts")
-    public boolean includeOptionalDeps;
+    public Boolean includeOptionalDeps;
 
     @CommandLine.Option(names = {
             "--gradle-java8" }, description = "Whether to use Java 8 (configured with JAVA8_HOME) to fetch dependency information from a Gradle project")
-    public boolean gradleJava8;
+    public Boolean gradleJava8;
 
     @CommandLine.Option(names = {
             "--gradle-java-home" }, description = "Java home directory to use for fetching dependency information from a Gradle project")
@@ -157,21 +162,67 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
     @Override
     public Integer call() throws Exception {
 
-        final ProjectDependencyConfig.Mutable config = ProjectDependencyConfig.builder();
-        initConfig(config);
+        Map<String, ProjectDependencyConfig> configs = Map.of();
+        var configDir = getConfigDir();
+        if (configDir != null && Files.exists(configDir)) {
+            configs = new HashMap<>();
+            try (Stream<Path> stream = Files.list(configDir)) {
+                var i = stream.iterator();
+                while (i.hasNext()) {
+                    var p = i.next();
+                    var configName = p.getFileName().toString();
+                    if (configName.endsWith(".json") && !Files.isDirectory(p)) {
+                        configName = configName.substring(0, configName.length() - ".json".length());
+                        if (configName.endsWith("-config")) {
+                            configName = configName.substring(0, configName.length() - "config".length() - 1);
+                        }
+                        var config = ProjectDependencyConfig.mutableFromFile(p);
+                        initConfig(config);
+                        configs.put(configName + "-", config);
+                    }
+                }
+            }
+        }
+        if (configs.isEmpty()) {
+            final ProjectDependencyConfig.Mutable config = ProjectDependencyConfig.builder();
+            initConfig(config);
+            configs = Map.of("", config.build());
+        }
 
-        if (exportTo != null) {
-            config.persist(exportTo.toPath());
-        } else {
-            final ProjectDependencyResolver.Builder resolverBuilder = ProjectDependencyResolver.builder()
-                    .setLogOutputFile(outputFile == null ? null : outputFile.toPath())
-                    .setAppendOutput(appendOutput)
-                    .setDependencyConfig(config)
-                    .setArtifactResolver(getArtifactResolver());
-            initResolver(resolverBuilder);
-            return process(resolverBuilder.build());
+        var log = MessageWriter.info();
+        for (var configEntry : configs.entrySet()) {
+            var config = configEntry.getValue();
+            if (exportTo != null) {
+                config.persist(exportTo.toPath());
+            } else {
+                Path targetFile = null;
+                if (outputFile != null) {
+                    targetFile = outputFile.toPath();
+                    if (!configEntry.getKey().isEmpty()) {
+                        var targetFileName = configEntry.getKey() + targetFile.getFileName();
+                        var targetDir = targetFile.getParent();
+                        targetFile = targetDir == null ? Path.of(targetFileName) : targetDir.resolve(targetFileName);
+                        log.info("Generating " + targetFile);
+                    }
+                }
+                final ProjectDependencyResolver.Builder resolverBuilder = ProjectDependencyResolver.builder()
+                        .setLogOutputFile(targetFile)
+                        .setAppendOutput(appendOutput)
+                        .setDependencyConfig(config)
+                        .setArtifactResolver(getArtifactResolver())
+                        .setMessageWriter(log);
+                initResolver(resolverBuilder);
+                var exitCode = process(resolverBuilder.build());
+                if (exitCode != CommandLine.ExitCode.OK) {
+                    return exitCode;
+                }
+            }
         }
         return CommandLine.ExitCode.OK;
+    }
+
+    protected Path getConfigDir() {
+        return null;
     }
 
     protected void initResolver(ProjectDependencyResolver.Builder resolverBuilder) {
@@ -182,30 +233,11 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
             config.setProjectBom(ArtifactCoords.fromString(bom));
         }
 
-        if (warnOnResolutionErrors != null) {
-            config.setWarnOnResolutionErrors(warnOnResolutionErrors);
-        } else if (bom != null) {
-            config.setWarnOnResolutionErrors(true);
-        }
-
         if (projectDir != null) {
             if (!projectDir.isDirectory()) {
                 throw new RuntimeException(projectDir + " is not a directory");
             }
             config.setProjectDir(projectDir.toPath());
-        }
-
-        if (includeNonManaged != null) {
-            config.setIncludeNonManaged(includeNonManaged);
-        } else if (bom == null || projectDir != null) {
-            config.setIncludeNonManaged(true);
-        }
-
-        final Set<String> excludeGroupIds;
-        if (this.excludeGroupIds != null) {
-            excludeGroupIds = Set.of(this.excludeGroupIds.split(","));
-        } else {
-            excludeGroupIds = Set.of();
         }
 
         final Set<ArtifactKey> excludeKeys;
@@ -224,14 +256,7 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
         }
 
         if (recipeRepos != null) {
-            final String[] arr = recipeRepos.split(",");
-            final List<String> list = new ArrayList<>(arr.length);
-            for (String s : arr) {
-                if (!s.isBlank()) {
-                    list.add(s.trim());
-                }
-            }
-            config.setRecipeRepos(list);
+            config.setRecipeRepos(recipeRepos);
         }
 
         if (excludeScopes != null) {
@@ -240,14 +265,46 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
             }
             config.setExcludeScopes(excludeScopes);
         }
-        config.setExcludeBomImports(excludeBomImports)
-                .setExcludeGroupIds(excludeGroupIds) // TODO
+
+        if (warnOnResolutionErrors != null) {
+            config.setWarnOnResolutionErrors(warnOnResolutionErrors);
+        }
+        if (includeNonManaged != null) {
+            config.setIncludeNonManaged(includeNonManaged);
+        }
+        if (excludeBomImports != null) {
+            config.setExcludeBomImports(excludeBomImports);
+        }
+        if (level != null) {
+            config.setLevel(level);
+        }
+        if (validateCodeRepoTags != null) {
+            config.setValidateCodeRepoTags(validateCodeRepoTags);
+        }
+        if (legacyScmLocator != null) {
+            config.setLegacyScmLocator(legacyScmLocator);
+        }
+        if (includeAlreadyBuilt != null) {
+            config.setIncludeAlreadyBuilt(includeAlreadyBuilt);
+        }
+        if (includeOptionalDeps != null) {
+            config.setIncludeOptionalDeps(includeOptionalDeps);
+        }
+        if (gradleJava8 != null) {
+            config.setGradleJava8(gradleJava8);
+        }
+        if (warnOnMissingScm != null) {
+            config.setWarnOnMissingScm(warnOnMissingScm);
+        }
+        if (!rootArtifacts.isEmpty()) {
+            config.setProjectArtifacts(rootArtifacts.stream().map(ArtifactCoords::fromString).collect(Collectors.toList()));
+        }
+
+        config.setExcludeGroupIds(excludeGroupIds == null ? Set.of() : excludeGroupIds)
                 .setExcludeKeys(excludeKeys)
-                .setExcludeParentPoms(excludeParentPoms == null ? false : excludeParentPoms)
-                .setIncludeArtifacts(Set.of()) // TODO
+                .setExcludeParentPoms(excludeParentPoms != null && excludeParentPoms)
                 .setIncludeGroupIds(includeGroupIds == null ? Set.of() : includeGroupIds)
                 .setIncludeKeys(Set.of()) // TODO
-                .setLevel(level)
                 .setLogArtifactsToBuild(logArtifactsToBuild)
                 .setLogTreesFor(logTreesFor)
                 .setLogCodeRepoTree(logCodeRepoGraph)
@@ -257,15 +314,7 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
                 .setLogRemaining(logRemaining)
                 .setLogSummary(logSummary)
                 .setLogTrees(logTrees)
-                .setProjectArtifacts(
-                        rootArtifacts.stream().map(ArtifactCoords::fromString).collect(Collectors.toList()))
-                .setValidateCodeRepoTags(validateCodeRepoTags)
-                .setLegacyScmLocator(legacyScmLocator)
-                .setIncludeAlreadyBuilt(includeAlreadyBuilt)
-                .setIncludeOptionalDeps(includeOptionalDeps)
-                .setGradleJava8(gradleJava8)
-                .setGradleJavaHome(gradleJavaHome)
-                .setWarnOnMissingScm(warnOnMissingScm);
+                .setGradleJavaHome(gradleJavaHome);
     }
 
     protected MavenArtifactResolver getArtifactResolver() {

@@ -4,6 +4,7 @@ import io.quarkus.bom.resolver.EffectiveModelResolver;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.domino.DominoInfo;
+import io.quarkus.domino.ProductInfo;
 import io.quarkus.domino.RhVersionPattern;
 import io.quarkus.domino.manifest.ManifestGenerator.SbomTransformContextImpl;
 import io.quarkus.maven.dependency.ArtifactCoords;

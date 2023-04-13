@@ -1,6 +1,5 @@
-package io.quarkus.domino.manifest;
+package io.quarkus.domino;
 
-import io.quarkus.domino.ProjectDependencyConfigMapper;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Path;
@@ -48,6 +47,8 @@ public interface ProductInfo {
 
         Mutable setId(String id);
 
+        Mutable setStream(String stream);
+
         Mutable setGroup(String group);
 
         Mutable setName(String name);
@@ -57,8 +58,6 @@ public interface ProductInfo {
         Mutable setVersion(String version);
 
         Mutable setPurl(String purl);
-
-        Mutable setStream(String stream);
 
         Mutable setCpe(String cpe);
 

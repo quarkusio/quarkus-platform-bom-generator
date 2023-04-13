@@ -1,5 +1,9 @@
 package io.quarkus.domino;
 
+import io.quarkus.maven.dependency.ArtifactCoords;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 import java.util.StringTokenizer;
 import java.util.regex.Pattern;
 
@@ -18,6 +22,30 @@ import java.util.regex.Pattern;
  * @author <a href="https://github.com/ppalaga">Peter Palaga</a>
  */
 public class ArtifactCoordsPattern {
+
+    public static ArtifactCoordsPattern of(ArtifactCoords c) {
+        final ArtifactCoordsPattern.Builder pattern = ArtifactCoordsPattern.builder();
+        pattern.groupIdPattern(c.getGroupId());
+        pattern.artifactIdPattern(c.getArtifactId());
+        if (c.getClassifier() != null && !c.getClassifier().isEmpty()) {
+            pattern.classifierPattern(c.getClassifier());
+        }
+        if (c.getType() != null && !c.getType().isEmpty()) {
+            pattern.typePattern(c.getType());
+        }
+        return pattern.versionPattern(c.getVersion()).build();
+    }
+
+    public static List<ArtifactCoordsPattern> toPatterns(Collection<ArtifactCoords> coords) {
+        if (coords.isEmpty()) {
+            return List.of();
+        }
+        final List<ArtifactCoordsPattern> result = new ArrayList<>(coords.size());
+        for (ArtifactCoords c : coords) {
+            result.add(of(c));
+        }
+        return result;
+    }
 
     /**
      * A {@link ArtifactCoordsPattern} builder.

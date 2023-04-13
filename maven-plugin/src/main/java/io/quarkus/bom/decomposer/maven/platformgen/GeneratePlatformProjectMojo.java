@@ -15,18 +15,8 @@ import io.quarkus.bom.decomposer.maven.MojoMessageWriter;
 import io.quarkus.bom.decomposer.maven.util.Utils;
 import io.quarkus.bom.diff.BomDiff;
 import io.quarkus.bom.diff.HtmlBomDiffReportGenerator;
-import io.quarkus.bom.platform.ForeignPreferredConstraint;
-import io.quarkus.bom.platform.PlatformBomComposer;
-import io.quarkus.bom.platform.PlatformBomConfig;
-import io.quarkus.bom.platform.PlatformBomUtils;
-import io.quarkus.bom.platform.PlatformCatalogResolver;
-import io.quarkus.bom.platform.PlatformMember;
-import io.quarkus.bom.platform.PlatformMemberConfig;
-import io.quarkus.bom.platform.PlatformMemberTestConfig;
+import io.quarkus.bom.platform.*;
 import io.quarkus.bom.platform.PlatformMemberTestConfig.Copy;
-import io.quarkus.bom.platform.ProjectDependencyFilterConfig;
-import io.quarkus.bom.platform.RedHatExtensionDependencyCheck;
-import io.quarkus.bom.platform.ReportIndexPageGenerator;
 import io.quarkus.bom.resolver.ArtifactResolver;
 import io.quarkus.bom.resolver.ArtifactResolverProvider;
 import io.quarkus.bom.resolver.EffectiveModelResolver;
@@ -35,17 +25,17 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.bootstrap.util.IoUtils;
+import io.quarkus.domino.*;
 import io.quarkus.fs.util.ZipUtils;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
+import io.quarkus.paths.PathTree;
+import io.quarkus.registry.CatalogMergeUtility;
 import io.quarkus.registry.Constants;
 import io.quarkus.registry.catalog.CatalogMapperHelper;
+import io.quarkus.registry.catalog.ExtensionCatalog;
 import io.quarkus.registry.util.PlatformArtifacts;
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -114,11 +104,13 @@ import org.eclipse.aether.repository.RemoteRepository;
 @Mojo(name = "generate-platform-project", defaultPhase = LifecyclePhase.INITIALIZE, requiresDependencyCollection = ResolutionScope.NONE)
 public class GeneratePlatformProjectMojo extends AbstractMojo {
 
+    private static final String POM_XML = "pom.xml";
     private static final String LAST_BOM_UPDATE = "last-bom-update";
     private static final String MEMBER_LAST_BOM_UPDATE_PROP = "member.last-bom-update";
     private static final String PLATFORM_KEY_PROP = "platform.key";
     private static final String PLATFORM_STREAM_PROP = "platform.stream";
     private static final String PLATFORM_RELEASE_PROP = "platform.release";
+    private static final String DEPENDENCIES_TO_BUILD = "dependenciesToBuild";
 
     @Component
     private RepositorySystem repoSystem;
@@ -181,12 +173,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
     private List<String> pomLines;
 
-    private Set<ArtifactKey> universalBomDepKeys = new HashSet<>();
+    private final Set<ArtifactKey> universalBomDepKeys = new HashSet<>();
 
     private TransformerFactory transformerFactory;
 
     // POM property names by values
-    private Map<String, String> pomPropsByValues = new HashMap<>();
+    private final Map<String, String> pomPropsByValues = new HashMap<>();
 
     private Profile generatedBomReleaseProfile;
 
@@ -201,6 +193,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             goals = session.getGoals();
         }
         return goals.contains("clean");
+    }
+
+    private boolean isGenerateDominoCliConfig() {
+        return Boolean.parseBoolean(project.getProperties().getProperty("generate-domino-cli-config"));
     }
 
     @Override
@@ -226,7 +222,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         pom.setPackaging(ArtifactCoords.TYPE_POM);
         pom.setName(artifactIdToName(rootArtifactIdBase) + " - Parent");
 
-        final File pomXml = new File(outputDir, "pom.xml");
+        final File pomXml = new File(outputDir, POM_XML);
         pom.setPomFile(pomXml);
 
         final Parent parent = new Parent();
@@ -319,6 +315,166 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 }
             }
         }
+
+        if (isGenerateDominoCliConfig()) {
+            generateDominoCliConfig();
+        }
+    }
+
+    private void generateDominoCliConfig() throws MojoExecutionException {
+        final Path dominoDir = Path.of(DominoInfo.CONFIG_DIR_NAME).normalize().toAbsolutePath().resolve("manifest");
+        IoUtils.recursiveDelete(dominoDir);
+        try {
+            Files.createDirectories(dominoDir);
+        } catch (IOException e) {
+            throw new MojoExecutionException("Failed to create " + dominoDir, e);
+        }
+        for (PlatformMember member : members.values()) {
+            if (!member.config().isEnabled() || member.config().isHidden()) {
+                continue;
+            }
+            getLog().info("Generating Domino CLI SBOM generator config for " + member.generatedBomCoords().getArtifactId());
+
+            final ProjectDependencyConfig.Mutable dominoConfig = ProjectDependencyConfig.builder()
+                    .setProjectBom(PlatformArtifacts.ensureBomArtifact(member.descriptorCoords()))
+                    .setProductInfo(SbomConfig.ProductConfig.toProductInfo(getProductInfo(member)));
+
+            if (!this.quarkusCore.descriptorCoords().equals(member.descriptorCoords())) {
+                var quarkusBom = quarkusCore.generatedBomCoords();
+                dominoConfig.setNonProjectBoms(List.of(ArtifactCoords.pom(quarkusBom.getGroupId(),
+                        quarkusBom.getArtifactId(), quarkusBom.getVersion())));
+            }
+
+            var sbomConfig = member.config().getSbom();
+            List<ArtifactCoordsPattern> excludePatterns = List.of();
+            if (sbomConfig == null || sbomConfig.isApplyDependenciesToBuildInclusions()) {
+                var depsToBuild = effectiveMemberDepsToBuildConfig(member.config());
+                dominoConfig.setIncludeArtifacts(depsToBuild.getIncludeArtifacts())
+                        .setIncludeGroupIds(depsToBuild.getIncludeGroupIds())
+                        .setIncludeKeys(depsToBuild.getIncludeKeys());
+            } else if (sbomConfig.isApplyCompleteDependenciesToBuildConfig()) {
+                var depsToBuild = effectiveMemberDepsToBuildConfig(member.config());
+                dominoConfig.setIncludeArtifacts(depsToBuild.getIncludeArtifacts())
+                        .setIncludeGroupIds(depsToBuild.getIncludeGroupIds())
+                        .setIncludeKeys(depsToBuild.getIncludeKeys())
+                        .setExcludePatterns(depsToBuild.getExcludeArtifacts())
+                        .setExcludeGroupIds(depsToBuild.getExcludeGroupIds())
+                        .setExcludeKeys(depsToBuild.getExcludeKeys());
+                excludePatterns = ArtifactCoordsPattern.toPatterns(dominoConfig.getExcludePatterns());
+            }
+
+            if (sbomConfig != null && sbomConfig.isSupportedExtensionsOnly()) {
+                List<Path> metadataOverrides = new ArrayList<>();
+                for (String s : member.config().getMetadataOverrideFiles()) {
+                    metadataOverrides.add(Path.of(s));
+                }
+                for (String s : member.config().getMetadataOverrideArtifacts()) {
+                    try {
+                        metadataOverrides
+                                .add(nonWorkspaceResolver().resolve(toAetherArtifact(s)).getArtifact().getFile().toPath());
+                    } catch (BootstrapMavenException e) {
+                        throw new MojoExecutionException("Failed to resolve " + s, e);
+                    }
+                }
+                if (metadataOverrides.isEmpty()) {
+                    throw new IllegalStateException("The SBOM generator for member " + member.config().getName()
+                            + " is configured to include only supported extensions but no support metadata override sources were provided");
+                }
+                final Set<ArtifactKey> selectedKeys = new HashSet<>(metadataOverrides.size());
+                final List<ExtensionCatalog> overrides = new ArrayList<>(metadataOverrides.size());
+                for (Path p : metadataOverrides) {
+                    try {
+                        overrides.add(ExtensionCatalog.fromFile(p));
+                    } catch (IOException e) {
+                        throw new MojoExecutionException("Failed to deserialize " + p, e);
+                    }
+                }
+                var catalog = CatalogMergeUtility.merge(overrides);
+                for (var e : catalog.getExtensions()) {
+                    if (e.getMetadata().containsKey("redhat-support")) {
+                        var key = e.getArtifact().getKey();
+                        selectedKeys.add(key);
+                        selectedKeys.add(ArtifactKey.of(key.getGroupId(), key.getArtifactId() + "-deployment",
+                                key.getClassifier(), key.getType()));
+                    }
+                }
+                for (ProjectRelease r : member.getAlignedDecomposedBom().releases()) {
+                    for (ProjectDependency d : r.dependencies()) {
+                        var a = d.artifact();
+                        if (selectedKeys.contains(d.key())
+                                && isExtensionCandidate(a, member.config().getExtensionGroupIds(), excludePatterns)) {
+                            dominoConfig.addProjectArtifacts(ArtifactCoords.of(a.getGroupId(), a.getArtifactId(),
+                                    a.getClassifier(), a.getExtension(), a.getVersion()));
+                            dominoConfig
+                                    .addProjectArtifacts(ArtifactCoords.of(a.getGroupId(), a.getArtifactId() + "-deployment",
+                                            a.getClassifier(), a.getExtension(), a.getVersion()));
+                        }
+                    }
+                }
+            } else {
+                for (ProjectRelease r : member.getAlignedDecomposedBom().releases()) {
+                    for (ProjectDependency d : r.dependencies()) {
+                        var a = d.artifact();
+                        if (!isExtensionCandidate(a, member.getExtensionGroupIds(), excludePatterns)) {
+                            continue;
+                        }
+                        if (a.getFile() == null) {
+                            try {
+                                a = nonWorkspaceResolver().resolve(a).getArtifact();
+                            } catch (BootstrapMavenException e) {
+                                throw new RuntimeException("Failed to resolve " + a, e);
+                            }
+                        }
+                        var resolvedArtifact = a;
+                        PathTree.ofArchive(a.getFile().toPath()).accept(BootstrapConstants.DESCRIPTOR_PATH, visit -> {
+                            if (visit != null) {
+                                var props = new Properties();
+                                try (BufferedReader reader = Files.newBufferedReader(visit.getPath())) {
+                                    props.load(reader);
+                                } catch (IOException e) {
+                                    throw new UncheckedIOException(e);
+                                }
+                                dominoConfig.addProjectArtifacts(ArtifactCoords.of(resolvedArtifact.getGroupId(),
+                                        resolvedArtifact.getArtifactId(), resolvedArtifact.getClassifier(),
+                                        resolvedArtifact.getExtension(), resolvedArtifact.getVersion()));
+                                var deploymentArtifact = props.getProperty(BootstrapConstants.PROP_DEPLOYMENT_ARTIFACT);
+                                if (deploymentArtifact == null) {
+                                    getLog().warn("Failed to identify the deployment artifact for " + resolvedArtifact + " in "
+                                            + visit.getUrl());
+                                } else {
+                                    dominoConfig.addProjectArtifacts(ArtifactCoords.fromString(deploymentArtifact));
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+
+            try {
+                dominoConfig.build()
+                        .persist(dominoDir.resolve(member.generatedBomCoords().getArtifactId() + "-config.json"));
+            } catch (IOException e) {
+                throw new MojoExecutionException("Failed to persist Domino config", e);
+            }
+        }
+    }
+
+    private static boolean isExtensionCandidate(Artifact a, Collection<String> extensionGroupIds,
+            Collection<ArtifactCoordsPattern> excludePatterns) {
+        if (!a.getExtension().equals("jar")
+                || "javadoc".equals(a.getClassifier())
+                || "tests".equals(a.getClassifier())
+                || "sources".equals(a.getClassifier())
+                || a.getArtifactId().endsWith("-deployment")
+                || !extensionGroupIds.isEmpty() && !extensionGroupIds.contains(a.getGroupId())) {
+            return false;
+        }
+        for (ArtifactCoordsPattern pattern : excludePatterns) {
+            if (pattern.matches(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(), a.getVersion())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void generateDepsToBuildModule(Model parentPom) throws MojoExecutionException {
@@ -331,7 +487,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private void generateDepsToBuildModule(Model parentPom, String artifactId, String profileId, String outputDirName,
-            String outputFileSuffix, boolean includeProductInfo) throws MojoExecutionException {
+            String outputFileSuffix, boolean forSbom) throws MojoExecutionException {
         final Model pom = newModel();
         pom.setArtifactId(artifactId);
         pom.setPackaging(ArtifactCoords.TYPE_POM);
@@ -404,137 +560,179 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             config.addChild(
                     textDomElement("outputFile", prefix + "/" + m.generatedBomCoords().getArtifactId() + outputFileSuffix));
 
-            if (includeProductInfo && m.config().getProductInfo() != null) {
-                var productInfo = m.config().getProductInfo();
-                final Xpp3Dom productInfoDom = newDomSelfAppend("productInfo");
-                config.addChild(productInfoDom);
-                if (productInfo.getId() != null) {
-                    productInfoDom.addChild(textDomElement("id", productInfo.getId()));
-                }
-                if (productInfo.getStream() != null) {
-                    productInfoDom.addChild(textDomElement("stream", productInfo.getStream()));
-                }
-                productInfoDom.addChild(textDomElement("type", productInfo.getType() == null
-                        ? "FRAMEWORK"
-                        : productInfo.getType().toUpperCase()));
-                productInfoDom.addChild(textDomElement("group", productInfo.getGroup() != null
-                        ? productInfo.getGroup()
-                        : m.generatedBomCoords().getGroupId()));
-                productInfoDom.addChild(textDomElement("name", productInfo.getName() != null
-                        ? productInfo.getName()
-                        : m.generatedBomCoords().getArtifactId()));
-                productInfoDom.addChild(textDomElement("version", productInfo.getVersion() != null
-                        ? productInfo.getVersion()
-                        : "${project.version}"));
-                if (productInfo.getPurl() != null) {
-                    productInfoDom.addChild(textDomElement("purl", productInfo.getPurl()));
-                }
-                if (productInfo.getCpe() != null) {
-                    productInfoDom.addChild(textDomElement("cpe", productInfo.getCpe()));
-                }
-                if (productInfo.getDescription() != null) {
-                    productInfoDom.addChild(textDomElement("description", productInfo.getDescription()));
+            final SbomConfig sbomConfig = forSbom ? m.config().getSbom() : null;
+            if (sbomConfig != null) {
+                var productConfig = getProductInfo(m);
+                if (productConfig != null) {
+                    final Xpp3Dom productInfoDom = newDomSelfAppend("productInfo");
+                    config.addChild(productInfoDom);
+                    if (productConfig.getId() != null) {
+                        productInfoDom.addChild(textDomElement("id", productConfig.getId()));
+                    }
+                    if (productConfig.getStream() != null) {
+                        productInfoDom.addChild(textDomElement("stream", productConfig.getStream()));
+                    }
+                    productInfoDom.addChild(textDomElement("type", productConfig.getType().toUpperCase()));
+                    productInfoDom.addChild(textDomElement("group", productConfig.getGroup()));
+                    productInfoDom.addChild(textDomElement("name", productConfig.getName()));
+                    productInfoDom.addChild(textDomElement("version", productConfig.getVersion()));
+                    if (productConfig.getPurl() != null) {
+                        productInfoDom.addChild(textDomElement("purl", productConfig.getPurl()));
+                    }
+                    if (productConfig.getCpe() != null) {
+                        productInfoDom.addChild(textDomElement("cpe", productConfig.getCpe()));
+                    }
+                    if (productConfig.getDescription() != null) {
+                        productInfoDom.addChild(textDomElement("description", productConfig.getDescription()));
+                    }
+
+                    var rn = productConfig.getReleaseNotes();
+                    if (rn != null) {
+                        final Xpp3Dom releaseNotesDom = newDomSelfAppend("releaseNotes");
+                        productInfoDom.addChild(releaseNotesDom);
+                        if (rn.getType() != null) {
+                            releaseNotesDom.addChild(textDomElement("type", rn.getType()));
+                        }
+                        if (rn.getTitle() != null) {
+                            releaseNotesDom.addChild(textDomElement("title", rn.getTitle()));
+                        }
+                        if (!rn.getAliases().isEmpty()) {
+                            final Xpp3Dom aliasesDom = newDomSelfAppend("aliases");
+                            releaseNotesDom.addChild(aliasesDom);
+                            for (String a : rn.getAliases()) {
+                                aliasesDom.addChild(textDomElement("alias", a));
+                            }
+                        }
+                        if (!rn.getProperties().isEmpty()) {
+                            final Xpp3Dom propsDom = newDomSelfAppend("properties");
+                            releaseNotesDom.addChild(propsDom);
+                            final List<String> names = new ArrayList<>(rn.getProperties().keySet());
+                            Collections.sort(names);
+                            for (String name : names) {
+                                propsDom.addChild(textDomElement(name, rn.getProperties().get(name)));
+                            }
+                        }
+                    }
                 }
 
-                var rn = productInfo.getReleaseNotes();
-                if (rn != null) {
-                    final Xpp3Dom releaseNotesDom = newDomSelfAppend("releaseNotes");
-                    productInfoDom.addChild(releaseNotesDom);
-                    if (rn.getType() != null) {
-                        releaseNotesDom.addChild(textDomElement("type", rn.getType()));
-                    }
-                    if (rn.getTitle() != null) {
-                        releaseNotesDom.addChild(textDomElement("title", rn.getTitle()));
-                    }
-                    if (!rn.getAliases().isEmpty()) {
-                        final Xpp3Dom aliasesDom = newDomSelfAppend("aliases");
-                        releaseNotesDom.addChild(aliasesDom);
-                        for (String a : rn.getAliases()) {
-                            aliasesDom.addChild(textDomElement("alias", a));
-                        }
-                    }
-                    if (!rn.getProperties().isEmpty()) {
-                        final Xpp3Dom propsDom = newDomSelfAppend("properties");
-                        releaseNotesDom.addChild(propsDom);
-                        final List<String> names = new ArrayList<>(rn.getProperties().keySet());
-                        Collections.sort(names);
-                        for (String name : names) {
-                            propsDom.addChild(textDomElement(name, rn.getProperties().get(name)));
-                        }
-                    }
+                if (sbomConfig.isSupportedExtensionsOnly()) {
+                    config.addChild(textDomElement("redhatSupported", "true"));
                 }
             }
 
-            final ProjectDependencyFilterConfig depsToBuildConfig = m.config().getDependenciesToBuild();
-            if (depsToBuildConfig != null) {
-                final Xpp3Dom depsToBuildDom = newDomSelfAppend("dependenciesToBuild");
+            if (!forSbom || sbomConfig != null && sbomConfig.isApplyCompleteDependenciesToBuildConfig()) {
+                final ProjectDependencyFilterConfig depsToBuildConfig = m.config().getDependenciesToBuild();
+                if (depsToBuildConfig != null) {
+                    final Xpp3Dom depsToBuildDom = newDomSelfAppend(DEPENDENCIES_TO_BUILD);
+                    config.addChild(depsToBuildDom);
+                    if (!depsToBuildConfig.getExcludeArtifacts().isEmpty()) {
+                        final Xpp3Dom excludeArtifactsDom = newDomChildrenAppend("excludeArtifacts");
+                        depsToBuildDom.addChild(excludeArtifactsDom);
+                        for (String artifact : sortAsString(depsToBuildConfig.getExcludeArtifacts())) {
+                            excludeArtifactsDom.addChild(textDomElement("artifact", artifact));
+                        }
+                    }
+                    if (!depsToBuildConfig.getExcludeGroupIds().isEmpty()) {
+                        final Xpp3Dom excludeGroupIdsDom = newDomChildrenAppend("excludeGroupIds");
+                        depsToBuildDom.addChild(excludeGroupIdsDom);
+                        for (String groupId : sortAsString(depsToBuildConfig.getExcludeGroupIds())) {
+                            excludeGroupIdsDom.addChild(textDomElement("groupId", groupId));
+                        }
+                    }
+                    if (!depsToBuildConfig.getExcludeKeys().isEmpty()) {
+                        final Xpp3Dom excludeKeysDom = newDomChildrenAppend("excludeKeys");
+                        depsToBuildDom.addChild(excludeKeysDom);
+                        for (String key : sortAsString(depsToBuildConfig.getExcludeKeys())) {
+                            final Xpp3Dom keyDom = newDom("key");
+                            excludeKeysDom.addChild(keyDom);
+                            keyDom.setValue(key);
+                        }
+                    }
+
+                    configureInclusions(depsToBuildConfig, depsToBuildDom);
+                }
+            } else if (sbomConfig == null || sbomConfig.isApplyDependenciesToBuildInclusions()) {
+                final Xpp3Dom depsToBuildDom = newDomSelfOverride(DEPENDENCIES_TO_BUILD);
                 config.addChild(depsToBuildDom);
-                if (!depsToBuildConfig.getExcludeArtifacts().isEmpty()) {
-                    final Xpp3Dom excludeArtifactsDom = newDomChildrenAppend("excludeArtifacts");
-                    depsToBuildDom.addChild(excludeArtifactsDom);
-                    for (ArtifactCoords artifact : depsToBuildConfig.getExcludeArtifacts()) {
-                        excludeArtifactsDom.addChild(textDomElement("artifact", artifact.toGACTVString()));
-                    }
-                }
-                if (!depsToBuildConfig.getExcludeGroupIds().isEmpty()) {
-                    final Xpp3Dom excludeGroupIdsDom = newDomChildrenAppend("excludeGroupIds");
-                    depsToBuildDom.addChild(excludeGroupIdsDom);
-                    for (String groupId : depsToBuildConfig.getExcludeGroupIds()) {
-                        excludeGroupIdsDom.addChild(textDomElement("groupId", groupId));
-                    }
-                }
-                if (!depsToBuildConfig.getExcludeKeys().isEmpty()) {
-                    final Xpp3Dom excludeKeysDom = newDomChildrenAppend("excludeKeys");
-                    depsToBuildDom.addChild(excludeKeysDom);
-                    for (ArtifactKey key : depsToBuildConfig.getExcludeKeys()) {
-                        final Xpp3Dom keyDom = newDom("key");
-                        excludeKeysDom.addChild(keyDom);
-                        keyDom.setValue(key.toString());
-                    }
-                }
-
-                final Xpp3Dom includeArtifactsDom = newDomChildrenAppend("includeArtifacts");
-                depsToBuildDom.addChild(includeArtifactsDom);
-                includeGeneratedBomArtifact(m, includeArtifactsDom);
-                if (!depsToBuildConfig.getIncludeArtifacts().isEmpty()) {
-                    for (ArtifactCoords artifact : depsToBuildConfig.getIncludeArtifacts()) {
-                        includeArtifactsDom.addChild(textDomElement("artifact", artifact.toGACTVString()));
-                    }
-                }
-
-                if (!depsToBuildConfig.getIncludeGroupIds().isEmpty()) {
-                    final Xpp3Dom includeGroupIdsDom = newDomChildrenAppend("includeGroupIds");
-                    depsToBuildDom.addChild(includeGroupIdsDom);
-                    for (String groupId : depsToBuildConfig.getIncludeGroupIds()) {
-                        includeGroupIdsDom.addChild(textDomElement("groupId", groupId));
-                    }
-                }
-                if (!depsToBuildConfig.getIncludeKeys().isEmpty()) {
-                    final Xpp3Dom includeKeysDom = newDomChildrenAppend("includeKeys");
-                    depsToBuildDom.addChild(includeKeysDom);
-                    for (ArtifactKey key : depsToBuildConfig.getIncludeKeys()) {
-                        includeKeysDom.addChild(textDomElement("key", key.toString()));
-                    }
-                }
+                ProjectDependencyFilterConfig depsToBuild = effectiveMemberDepsToBuildConfig(m.config());
+                configureInclusions(depsToBuild, depsToBuildDom);
             } else {
-                final Xpp3Dom depsToBuildDom = newDomSelfAppend("dependenciesToBuild");
-                config.addChild(depsToBuildDom);
-                final Xpp3Dom includeArtifactsDom = newDomChildrenAppend("includeArtifacts");
-                depsToBuildDom.addChild(includeArtifactsDom);
-                includeGeneratedBomArtifact(m, includeArtifactsDom);
+                config.addChild(newDomSelfOverride(DEPENDENCIES_TO_BUILD));
             }
         }
 
         persistPom(pom);
     }
 
-    private static void includeGeneratedBomArtifact(PlatformMemberImpl m, final Xpp3Dom includeArtifactsDom) {
-        includeArtifactsDom.addChild(textDomElement("artifact",
-                m.generatedBomCoords().getGroupId() + ":"
-                        + m.generatedBomCoords().getArtifactId() + ":"
-                        + m.generatedBomCoords().getClassifier() + ":"
-                        + m.generatedBomCoords().getExtension() + ":"
-                        + m.generatedBomCoords().getVersion()));
+    private static SbomConfig.ProductConfig getProductInfo(PlatformMember member) {
+        final SbomConfig.ProductConfig productConfig = member.config().getSbom() == null ? null
+                : member.config().getSbom().getProductInfo();
+        if (productConfig == null) {
+            return null;
+        }
+        if (isBlank(productConfig.getType())) {
+            productConfig.setType("FRAMEWORK");
+        }
+        if (isBlank(productConfig.getGroup())) {
+            productConfig.setGroup(member.generatedBomCoords().getGroupId());
+        }
+        if (isBlank(productConfig.getName())) {
+            productConfig.setName(member.generatedBomCoords().getArtifactId());
+        }
+        if (isBlank(productConfig.getVersion())) {
+            productConfig.setVersion(member.generatedBomCoords().getVersion());
+        }
+        return productConfig;
+    }
+
+    private ProjectDependencyFilterConfig effectiveMemberDepsToBuildConfig(PlatformMemberConfig member) {
+        var depsToBuild = new ProjectDependencyFilterConfig();
+        if (dependenciesToBuild != null) {
+            depsToBuild.merge(dependenciesToBuild);
+        }
+        if (member.getDependenciesToBuild() != null) {
+            depsToBuild.merge(member.getDependenciesToBuild());
+        }
+        return depsToBuild;
+    }
+
+    private static void configureInclusions(ProjectDependencyFilterConfig depsToBuildConfig, Xpp3Dom depsToBuildDom) {
+        if (depsToBuildConfig.getIncludeArtifacts().isEmpty()
+                && depsToBuildConfig.getIncludeGroupIds().isEmpty()
+                && depsToBuildConfig.getIncludeKeys().isEmpty()) {
+            return;
+        }
+        final Xpp3Dom includeArtifactsDom = newDom("includeArtifacts");
+        depsToBuildDom.addChild(includeArtifactsDom);
+        if (!depsToBuildConfig.getIncludeArtifacts().isEmpty()) {
+            for (var artifact : sortAsString(depsToBuildConfig.getIncludeArtifacts())) {
+                includeArtifactsDom.addChild(textDomElement("artifact", artifact));
+            }
+        }
+
+        if (!depsToBuildConfig.getIncludeGroupIds().isEmpty()) {
+            final Xpp3Dom includeGroupIdsDom = newDom("includeGroupIds");
+            depsToBuildDom.addChild(includeGroupIdsDom);
+            for (String groupId : sortAsString(depsToBuildConfig.getIncludeGroupIds())) {
+                includeGroupIdsDom.addChild(textDomElement("groupId", groupId));
+            }
+        }
+        if (!depsToBuildConfig.getIncludeKeys().isEmpty()) {
+            final Xpp3Dom includeKeysDom = newDom("includeKeys");
+            depsToBuildDom.addChild(includeKeysDom);
+            for (String key : sortAsString(depsToBuildConfig.getIncludeKeys())) {
+                includeKeysDom.addChild(textDomElement("key", key));
+            }
+        }
+    }
+
+    private static <T> List<String> sortAsString(Collection<T> col) {
+        var list = new ArrayList<String>(col.size());
+        for (Object o : col) {
+            list.add(String.valueOf(o));
+        }
+        Collections.sort(list);
+        return list;
     }
 
     private static void generateReleasesReport(DecomposedBom originalBom, Path outputFile)
@@ -713,8 +911,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             Path metainfDir = resourcesDir.resolve("META-INF");
             final Path mavenDir = metainfDir.resolve("maven");
             IoUtils.copy(
-                    mavenDir.resolve(originalCoords.getGroupId()).resolve(originalCoords.getArtifactId()).resolve("pom.xml"),
-                    baseDir.resolve("pom.xml"));
+                    mavenDir.resolve(originalCoords.getGroupId()).resolve(originalCoords.getArtifactId()).resolve(POM_XML),
+                    baseDir.resolve(POM_XML));
             IoUtils.recursiveDelete(mavenDir);
             IoUtils.recursiveDelete(metainfDir.resolve("INDEX.LIST"));
             IoUtils.recursiveDelete(metainfDir.resolve("MANIFEST.MF"));
@@ -917,6 +1115,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         return dom;
     }
 
+    private static Xpp3Dom newDomSelfOverride(String name) {
+        final Xpp3Dom dom = newDom(name);
+        dom.setAttribute("combine.self", "override");
+        return dom;
+    }
+
     private static Xpp3Dom newDom(String name) {
         return new Xpp3Dom(name);
     }
@@ -926,7 +1130,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private static File getPomFile(Model parentPom, final String moduleName) {
-        return new File(new File(parentPom.getProjectDirectory(), moduleName), "pom.xml");
+        return new File(new File(parentPom.getProjectDirectory(), moduleName), POM_XML);
     }
 
     private void republishOriginalPluginBinary(Model parentPom, final String moduleName,
@@ -1188,7 +1392,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         final String moduleName = "bom";
         member.baseModel.addModule(moduleName);
-        final Path platformBomXml = member.baseModel.getProjectDirectory().toPath().resolve(moduleName).resolve("pom.xml");
+        final Path platformBomXml = member.baseModel.getProjectDirectory().toPath().resolve(moduleName).resolve(POM_XML);
         member.generatedBomModel = PlatformBomUtils.toPlatformModel(member.generatedBom, baseModel, catalogResolver());
         addReleaseProfile(member.generatedBomModel);
 
@@ -2133,14 +2337,14 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             final List<String> overrideArtifacts = new ArrayList<>(0);
             for (PlatformMember m : members.values()) {
                 for (String s : m.config().getMetadataOverrideFiles()) {
-                    addMetadataOverrideFile(metadataOverrideFiles, moduleDir, Paths.get(s));
+                    addMetadataOverrideFile(metadataOverrideFiles, moduleDir, Path.of(s));
                 }
                 overrideArtifacts.addAll(m.config().getMetadataOverrideArtifacts());
             }
             addMetadataOverrideArtifacts(config, overrideArtifacts);
         } else {
             for (String s : member.config().getMetadataOverrideFiles()) {
-                addMetadataOverrideFile(metadataOverrideFiles, moduleDir, Paths.get(s));
+                addMetadataOverrideFile(metadataOverrideFiles, moduleDir, Path.of(s));
             }
             addMetadataOverrideArtifacts(config, member.config().getMetadataOverrideArtifacts());
         }
@@ -2172,7 +2376,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         configureFlattenPluginForMetadataArtifacts(pom);
 
-        final Path pomXml = moduleDir.resolve("pom.xml");
+        final Path pomXml = moduleDir.resolve(POM_XML);
         pom.setPomFile(pomXml.toFile());
         persistPom(pom);
     }
@@ -2359,7 +2563,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         configureFlattenPluginForMetadataArtifacts(pom);
 
-        final Path pomXml = moduleDir.resolve("pom.xml");
+        final Path pomXml = moduleDir.resolve(POM_XML);
         pom.setPomFile(pomXml.toFile());
         persistPom(pom);
 
@@ -2478,7 +2682,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         final String moduleName = "bom";
         parentPom.addModule(moduleName);
-        universalPlatformBomXml = parentPom.getProjectDirectory().toPath().resolve(moduleName).resolve("pom.xml");
+        universalPlatformBomXml = parentPom.getProjectDirectory().toPath().resolve(moduleName).resolve(POM_XML);
 
         final Model pom = PlatformBomUtils.toPlatformModel(universalGeneratedBom, baseModel, catalogResolver());
 
@@ -2569,7 +2773,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                     .setRepositorySystemSession(repoSession)
                     .setRemoteRepositories(repos)
                     .setRemoteRepositoryManager(remoteRepoManager)
-                    .setCurrentProject(new File(outputDir, "pom.xml").toString())
+                    .setCurrentProject(new File(outputDir, POM_XML).toString())
                     .build();
         } catch (BootstrapMavenException e) {
             throw new MojoExecutionException("Failed to initialize Maven artifact resolver", e);
@@ -2813,5 +3017,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             buf.append(' ').append(Character.toUpperCase(part.charAt(0))).append(part, 1, part.length());
         }
         return buf.toString();
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isBlank();
     }
 }

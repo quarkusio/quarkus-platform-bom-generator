@@ -12,6 +12,14 @@ import java.util.Set;
 public interface ProjectDependencyConfig {
 
     /**
+     * Information about the product whose dependencies are to be analyzed.
+     * Used primarily when generating SBOMs.
+     *
+     * @return information about the product whose dependencies are to be analyzed
+     */
+    ProductInfo getProductInfo();
+
+    /**
      * Project directory
      * 
      * @return project directory
@@ -25,12 +33,37 @@ public interface ProjectDependencyConfig {
      */
     ArtifactCoords getProjectBom();
 
+    /**
+     * BOMs that should be enforced when resolving dependencies
+     * but should not be added as project artifacts.
+     * 
+     * @return BOMs that should be enforced when resolving dependencies
+     *         but should not be added as project artifacts
+     */
+    List<ArtifactCoords> getNonProjectBoms();
+
+    /**
+     * Artifacts that should be used as roots of dependency trees during analysis.
+     *
+     * @return artifacts that should be used as roots of dependency trees during analysis
+     */
     Collection<ArtifactCoords> getProjectArtifacts();
 
     Collection<ArtifactCoords> getIncludeArtifacts();
 
+    /**
+     * Artifact coordinates patterns that should be included when walking dependency trees.
+     *
+     * @return artifact coordinates patterns that should be included when walking dependency trees
+     */
     Collection<ArtifactCoords> getIncludePatterns();
 
+    /**
+     * Artifact coordinates patterns that should be skipped along with their dependencies when walking
+     * dependency trees.
+     *
+     * @return artifact coordinates patterns that should be skipped along with their dependencies when walking dependency trees
+     */
     Collection<ArtifactCoords> getExcludePatterns();
 
     /**
@@ -216,11 +249,17 @@ public interface ProjectDependencyConfig {
 
     interface Mutable extends ProjectDependencyConfig {
 
+        Mutable setProductInfo(ProductInfo productInfo);
+
         Mutable setProjectDir(Path projectDir);
 
         Mutable setProjectBom(ArtifactCoords bom);
 
+        Mutable setNonProjectBoms(List<ArtifactCoords> nonProjectBoms);
+
         Mutable setProjectArtifacts(Collection<ArtifactCoords> projectArtifacts);
+
+        Mutable addProjectArtifacts(ArtifactCoords projectArtifact);
 
         Mutable setIncludeArtifacts(Collection<ArtifactCoords> artifacts);
 

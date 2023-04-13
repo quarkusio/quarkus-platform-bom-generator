@@ -52,7 +52,8 @@ public class PncBuildInfoProvider {
             final URLConnection connection = url.openConnection();
             buildInfo = PncArtifactBuildInfo.deserialize(connection.getInputStream());
         } catch (IOException e) {
-            throw new UncheckedIOException("Failed to connect to " + url, e);
+            log.warn("Failed to connect to " + url + ": " + e.getLocalizedMessage());
+            return null;
         }
 
         try {

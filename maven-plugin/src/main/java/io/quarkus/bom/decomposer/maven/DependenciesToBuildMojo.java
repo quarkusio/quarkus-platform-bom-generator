@@ -2,13 +2,13 @@ package io.quarkus.bom.decomposer.maven;
 
 import io.quarkus.bom.decomposer.maven.platformgen.PlatformConfig;
 import io.quarkus.bom.platform.ProjectDependencyFilterConfig;
+import io.quarkus.bom.platform.SbomConfig;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.domino.ProjectDependencyConfig;
 import io.quarkus.domino.ProjectDependencyResolver;
 import io.quarkus.domino.manifest.ManifestGenerator;
-import io.quarkus.domino.manifest.ProductInfoImpl;
 import io.quarkus.domino.manifest.SbomGeneratingDependencyVisitor;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.paths.PathTree;
@@ -201,7 +201,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     boolean redhatSupported;
 
     @Parameter(required = false)
-    ProductInfoImpl.Builder productInfo;
+    SbomConfig.ProductConfig productInfo;
 
     private Set<ArtifactCoords> targetBomConstraints;
     private Map<ArtifactCoords, List<Dependency>> enforcedConstraintsForBom = new HashMap<>();
@@ -247,24 +247,9 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         ExtensionCatalog catalog = resolveCatalog(catalogCoords);
 
         final Collection<ArtifactCoords> otherDescriptorCoords = getOtherMemberDescriptorCoords(catalog);
+        List<ArtifactCoords> nonProjectBoms = List.of();
         if (!otherDescriptorCoords.isEmpty()) {
-            ArtifactCoords generatedCoreBomCoords = null;
             if (targetBomCoords.getArtifactId().equals("quarkus-bom")) {
-                generatedCoreBomCoords = targetBomCoords;
-            } else {
-                final String coreDescriptorArtifactId = "quarkus-bom"
-                        + BootstrapConstants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX;
-                for (ArtifactCoords c : otherDescriptorCoords) {
-                    if (c.getArtifactId().equals(coreDescriptorArtifactId)) {
-                        generatedCoreBomCoords = PlatformArtifacts.ensureBomArtifact(c);
-                        break;
-                    }
-                }
-                if (generatedCoreBomCoords == null) {
-                    throw new MojoExecutionException("Failed to locate quarkus-bom among " + otherDescriptorCoords);
-                }
-            }
-            if (targetBomCoords.equals(generatedCoreBomCoords)) {
 
                 enforcedConstraintsForBom.put(targetBomCoords, targetBomManagedDeps);
 
@@ -286,9 +271,21 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 }
                 catalog = CatalogMergeUtility.merge(catalogs);
             } else {
+                ArtifactCoords generatedCoreBomCoords = null;
+                final String coreDescriptorArtifactId = PlatformArtifacts.ensureCatalogArtifactId("quarkus-bom");
+                for (ArtifactCoords c : otherDescriptorCoords) {
+                    if (c.getArtifactId().equals(coreDescriptorArtifactId)) {
+                        generatedCoreBomCoords = PlatformArtifacts.ensureBomArtifact(c);
+                        break;
+                    }
+                }
+                if (generatedCoreBomCoords == null) {
+                    throw new MojoExecutionException("Failed to locate quarkus-bom among " + otherDescriptorCoords);
+                }
                 final List<Dependency> bomConstraints = getBomConstraints(generatedCoreBomCoords);
                 bomConstraints.addAll(targetBomManagedDeps);
                 enforcedConstraintsForBom.put(targetBomCoords, bomConstraints);
+                nonProjectBoms = List.of(generatedCoreBomCoords);
             }
         } else {
             enforcedConstraintsForBom.put(targetBomCoords, targetBomManagedDeps);
@@ -297,10 +294,8 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         final Map<ArtifactCoords, Extension> supported = new HashMap<>();
         for (Extension ext : catalog.getExtensions()) {
             ArtifactCoords rtArtifact = ext.getArtifact();
-            if (isExcluded(rtArtifact)) {
-                continue;
-            }
-            if (redhatSupported && !ext.getMetadata().containsKey(("redhat-support"))) {
+            if (isExcluded(rtArtifact)
+                    || redhatSupported && !ext.getMetadata().containsKey(("redhat-support"))) {
                 continue;
             }
             supported.put(ext.getArtifact(), ext);
@@ -335,6 +330,36 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             supported.put(deploymentCoords, ext);
         }
 
+        var dominoConfig = ProjectDependencyConfig.builder()
+                .setProjectBom(targetBomCoords)
+                .setNonProjectBoms(nonProjectBoms)
+                .setProjectArtifacts(supported.keySet())
+                .setIncludeGroupIds(dependenciesToBuild.getIncludeGroupIds())
+                .setIncludeKeys(dependenciesToBuild.getIncludeKeys())
+                .setIncludeArtifacts(dependenciesToBuild.getIncludeArtifacts())
+                .setExcludePatterns(dependenciesToBuild.getExcludeArtifacts())
+                .setExcludeGroupIds(dependenciesToBuild.getExcludeGroupIds())
+                .setExcludeKeys(dependenciesToBuild.getExcludeKeys())
+                .setExcludeBomImports(excludeBomImports)
+                .setExcludeParentPoms(excludeParentPoms)
+                .setLevel(level)
+                .setLogArtifactsToBuild(logArtifactsToBuild)
+                .setLogCodeRepoTree(logCodeRepoGraph)
+                .setLogCodeRepos(logCodeRepos)
+                .setLogModulesToBuild(logModulesToBuild)
+                .setLogNonManagedVisited(logNonManagedVisited)
+                .setLogRemaining(logRemaining)
+                .setLogSummary(logSummary)
+                .setLogTrees(logTrees)
+                .setLogTreesFor(logTreesFor)
+                .setIncludeAlreadyBuilt(includeAlreadyBuilt)
+                .setValidateCodeRepoTags(validateCodeRepoTags)
+                .setLegacyScmLocator(legacyScmLocator)
+                .setRecipeRepos(recipeRepos)
+                .setWarnOnMissingScm(warnOnMissingScm);
+        if (includeNonManaged != null) {
+            dominoConfig.setIncludeNonManaged(includeNonManaged);
+        }
         final ProjectDependencyResolver.Builder depsResolver = ProjectDependencyResolver.builder()
                 .setArtifactConstraintsProvider(coords -> {
                     final Extension ext = supported.get(coords);
@@ -344,37 +369,13 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 .setMessageWriter(new MojoMessageWriter(getLog()))
                 .setLogOutputFile(isManifestMode() ? null : (outputFile == null ? null : outputFile.toPath()))
                 .setAppendOutput(appendOutput)
-                .setDependencyConfig(ProjectDependencyConfig.builder()
-                        .setProjectBom(targetBomCoords)
-                        .setProjectArtifacts(supported.keySet())
-                        .setIncludeGroupIds(dependenciesToBuild.getIncludeGroupIds())
-                        .setIncludeKeys(dependenciesToBuild.getIncludeKeys())
-                        .setIncludeArtifacts(dependenciesToBuild.getIncludeArtifacts())
-                        .setExcludePatterns(dependenciesToBuild.getExcludeArtifacts())
-                        .setExcludeGroupIds(dependenciesToBuild.getExcludeGroupIds())
-                        .setExcludeKeys(dependenciesToBuild.getExcludeKeys())
-                        .setExcludeBomImports(excludeBomImports)
-                        .setExcludeParentPoms(excludeParentPoms)
-                        .setIncludeNonManaged(includeNonManaged == null ? isManifestMode() : includeNonManaged)
-                        .setLevel(level)
-                        .setLogArtifactsToBuild(logArtifactsToBuild)
-                        .setLogCodeRepoTree(logCodeRepoGraph)
-                        .setLogCodeRepos(logCodeRepos)
-                        .setLogModulesToBuild(logModulesToBuild)
-                        .setLogNonManagedVisited(logNonManagedVisited)
-                        .setLogRemaining(logRemaining)
-                        .setLogSummary(logSummary)
-                        .setLogTrees(logTrees)
-                        .setLogTreesFor(logTreesFor)
-                        .setIncludeAlreadyBuilt(includeAlreadyBuilt)
-                        .setValidateCodeRepoTags(validateCodeRepoTags)
-                        .setLegacyScmLocator(legacyScmLocator)
-                        .setRecipeRepos(recipeRepos)
-                        .setWarnOnMissingScm(warnOnMissingScm));
+                .setDependencyConfig(dominoConfig.build());
 
         if (manifest) {
             depsResolver.addDependencyTreeVisitor(
-                    new SbomGeneratingDependencyVisitor(resolver, outputFile == null ? null : outputFile.toPath(), productInfo,
+                    new SbomGeneratingDependencyVisitor(resolver,
+                            outputFile == null ? null : outputFile.toPath(),
+                            SbomConfig.ProductConfig.toProductInfo(productInfo),
                             true))
                     .build().resolveDependencies();
         } else if (flatManifest) {
@@ -495,11 +496,11 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             return List.of();
         }
         Object o = map.get("platform-release");
-        if (o == null || !(o instanceof Map)) {
+        if (!(o instanceof Map)) {
             return List.of();
         }
         o = ((Map<?, ?>) o).get("members");
-        if (o == null || !(o instanceof List)) {
+        if (!(o instanceof List)) {
             return List.of();
         }
         final List<?> list = (List<?>) o;
