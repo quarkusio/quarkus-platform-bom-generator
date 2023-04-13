@@ -24,6 +24,9 @@ public class PlatformMemberDefaultTestConfig {
     protected List<String> nativeIncludes = List.of();
     protected List<String> nativeExcludes = List.of();
     protected Boolean packageApplication;
+    protected String argLine;
+    protected String jvmArgLine;
+    protected String nativeArgLine;
 
     public PlatformMemberDefaultTestConfig() {
         super();
@@ -44,6 +47,15 @@ public class PlatformMemberDefaultTestConfig {
         }
         if (overrides.transformWith != null) {
             transformWith = overrides.transformWith;
+        }
+        if (overrides.argLine != null) {
+            argLine = overrides.argLine;
+        }
+        if (overrides.jvmArgLine != null) {
+            jvmArgLine = overrides.jvmArgLine;
+        }
+        if (overrides.nativeArgLine != null) {
+            nativeArgLine = overrides.nativeArgLine;
         }
         if (!overrides.systemProperties.isEmpty()) {
             if (systemProperties.isEmpty()) {
@@ -268,5 +280,29 @@ public class PlatformMemberDefaultTestConfig {
 
     public boolean isPackageApplication() {
         return packageApplication == null ? false : packageApplication;
+    }
+
+    public void setArgLine(String argLine) {
+        this.argLine = argLine;
+    }
+
+    public String getArgLine() {
+        return argLine;
+    }
+
+    public void setJvmArgLine(String argLine) {
+        this.jvmArgLine = argLine;
+    }
+
+    public String getJvmArgLine() {
+        return jvmArgLine;
+    }
+
+    public void setNativeArgLine(String argLine) {
+        this.nativeArgLine = argLine;
+    }
+
+    public String getNativeArgLine() {
+        return nativeArgLine;
     }
 }

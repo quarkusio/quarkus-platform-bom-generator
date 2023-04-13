@@ -1745,6 +1745,11 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
                 addGroupsConfig(testConfig, config, false);
                 addIncludesExcludesConfig(testConfig, config, false);
+                if (testConfig.getJvmArgLine() != null) {
+                    config.addChild(textDomElement("argLine", testConfig.getJvmArgLine()));
+                } else if (testConfig.getArgLine() != null) {
+                    config.addChild(textDomElement("argLine", testConfig.getArgLine()));
+                }
             }
 
             try {
@@ -2094,6 +2099,18 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
         } else if (!testConfig.getJvmSystemProperties().isEmpty()) {
             addSystemProperties(getOrCreateChild(config, "systemProperties"), testConfig.getJvmSystemProperties());
+        }
+
+        if (nativeTest) {
+            if (testConfig.getNativeArgLine() != null) {
+                config.addChild(textDomElement("argLine", testConfig.getNativeArgLine()));
+            } else if (testConfig.getArgLine() != null) {
+                config.addChild(textDomElement("argLine", testConfig.getArgLine()));
+            }
+        } else if (testConfig.getJvmArgLine() != null) {
+            config.addChild(textDomElement("argLine", testConfig.getJvmArgLine()));
+        } else if (testConfig.getArgLine() != null) {
+            config.addChild(textDomElement("argLine", testConfig.getArgLine()));
         }
 
         addGroupsConfig(testConfig, config, nativeTest);
