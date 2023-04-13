@@ -153,6 +153,26 @@ public class PlatformMemberTestConfig extends PlatformMemberDefaultTestConfig {
         if (packageApplication == null) {
             packageApplication = defaults.packageApplication;
         }
+
+        if (argLine == null) {
+            argLine = defaults.argLine;
+        }
+        if (jvmArgLine == null) {
+            jvmArgLine = defaults.jvmArgLine;
+        }
+        if (nativeArgLine == null) {
+            nativeArgLine = defaults.nativeArgLine;
+        }
+
+        if (testPattern == null) {
+            testPattern = defaults.testPattern;
+        }
+        if (jvmTestPattern == null) {
+            jvmTestPattern = defaults.jvmTestPattern;
+        }
+        if (nativeTestPattern == null) {
+            nativeTestPattern = defaults.nativeTestPattern;
+        }
     }
 
     public static class Copy {
