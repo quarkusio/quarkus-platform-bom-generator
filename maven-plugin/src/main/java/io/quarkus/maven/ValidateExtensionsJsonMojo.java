@@ -41,7 +41,7 @@ import org.eclipse.aether.repository.RemoteRepository;
  * in the catalog are also present in the BOM the descriptor is referencing.
  *
  */
-@Mojo(name = "validate-extension-catalog")
+@Mojo(name = "validate-extension-catalog", threadSafe = true)
 public class ValidateExtensionsJsonMojo extends AbstractMojo {
 
     @Parameter(property = "jsonGroupId", required = true)
