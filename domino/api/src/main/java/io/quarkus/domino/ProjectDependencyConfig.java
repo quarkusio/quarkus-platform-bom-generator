@@ -7,7 +7,6 @@ import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.List;
-import java.util.Set;
 
 public interface ProjectDependencyConfig {
 
@@ -72,7 +71,7 @@ public interface ProjectDependencyConfig {
      * 
      * @return dependency scopes that should be excluded resolving dependencies of root artifact
      */
-    Set<String> getExcludeScopes();
+    Collection<String> getExcludeScopes();
 
     /**
      * Whether to exclude dependencies (and their transitive dependencies) that aren't managed in the BOM. The default is true.
@@ -297,7 +296,7 @@ public interface ProjectDependencyConfig {
 
         Mutable addExcludePattern(ArtifactCoords pattern);
 
-        Mutable setExcludeScopes(Set<String> excludeScopes);
+        Mutable setExcludeScopes(Collection<String> excludeScopes);
 
         Mutable setIncludeNonManaged(boolean includeNonManaged);
 

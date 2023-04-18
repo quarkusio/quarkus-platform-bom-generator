@@ -196,6 +196,7 @@ public class ProjectDependencyResolver {
     private final Set<ArtifactCoords> nonManagedVisited = new HashSet<>();
     private final Set<ArtifactCoords> skippedDeps = new HashSet<>();
     private final Set<ArtifactCoords> remainingDeps = new HashSet<>();
+    private final Set<String> excludeScopes;
 
     private final Map<ArtifactCoords, ArtifactDependency> artifactDeps = new HashMap<>();
     private final Map<ReleaseId, ReleaseRepo> releaseRepos = new HashMap<>();
@@ -214,6 +215,7 @@ public class ProjectDependencyResolver {
         this.logOutputFile = builder.logOutputFile;
         this.appendOutput = builder.appendOutput;
         this.config = Objects.requireNonNull(builder.depConfig);
+        excludeScopes = Set.copyOf(config.getExcludeScopes());
         excludeSet = ArtifactCoordsPattern.toPatterns(config.getExcludePatterns());
         includeSet = new ArrayList<>(config.getIncludeArtifacts().size() + config.getIncludePatterns().size());
         config.getIncludePatterns().forEach(p -> includeSet.add(ArtifactCoordsPattern.of(p)));
@@ -574,7 +576,7 @@ public class ProjectDependencyResolver {
             final Artifact a = toAetherArtifact(coords);
             root = resolver.getSystem().collectDependencies(resolver.getSession(),
                     resolver.newCollectManagedRequest(a, List.of(), managedDeps, List.of(), List.of(),
-                            config.getExcludeScopes()))
+                            excludeScopes))
                     .getRoot();
             // if the dependencies are not found, make sure the artifact actually exists
             if (root.getChildren().isEmpty()) {

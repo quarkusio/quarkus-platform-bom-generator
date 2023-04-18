@@ -8,7 +8,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Set;
 
 @JsonInclude(JsonInclude.Include.NON_DEFAULT)
 public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
@@ -23,7 +22,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     private final Collection<ArtifactCoords> includeArtifacts;
     private final Collection<ArtifactCoords> includePatterns;
     private final Collection<ArtifactCoords> excludePatterns;
-    private final Set<String> excludeScopes;
+    private final Collection<String> excludeScopes;
     private final boolean includeNonManaged;
     private final boolean excludeParentPoms;
     private final boolean excludeBomImports;
@@ -61,7 +60,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         includeArtifacts = toUnmodifiableList(other.getIncludeArtifacts());
         includePatterns = toUnmodifiableList(other.getIncludePatterns());
         excludePatterns = toUnmodifiableList(other.getExcludePatterns());
-        excludeScopes = toUnmodifiableSet(other.getExcludeScopes());
+        excludeScopes = toUnmodifiableList(other.getExcludeScopes());
         includeNonManaged = other.isIncludeNonManaged();
         excludeParentPoms = other.isExcludeParentPoms();
         excludeBomImports = other.isExcludeBomImports();
@@ -134,7 +133,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
 
     @Override
     @JsonInclude(value = JsonInclude.Include.CUSTOM, valueFilter = ProjectDependencyConfigExcludeScopesFilter.class)
-    public Set<String> getExcludeScopes() {
+    public Collection<String> getExcludeScopes() {
         return excludeScopes;
     }
 
@@ -264,7 +263,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         private Collection<ArtifactCoords> includeArtifacts = new ArrayList<>();
         private Collection<ArtifactCoords> includePatterns = new ArrayList<>();
         private Collection<ArtifactCoords> excludePatterns = new ArrayList<>();
-        private Set<String> excludeScopes = Set.of("provided", "test");
+        private Collection<String> excludeScopes = List.of("provided", "test");
         private boolean includeNonManaged = true;
         private boolean excludeParentPoms;
         private boolean excludeBomImports;
@@ -371,7 +370,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         }
 
         @Override
-        public Set<String> getExcludeScopes() {
+        public Collection<String> getExcludeScopes() {
             return excludeScopes;
         }
 
@@ -544,7 +543,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         }
 
         @Override
-        public Mutable setExcludeScopes(Set<String> excludeScopes) {
+        public Mutable setExcludeScopes(Collection<String> excludeScopes) {
             this.excludeScopes = excludeScopes;
             return this;
         }
@@ -705,12 +704,5 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
             return List.of();
         }
         return List.copyOf(o);
-    }
-
-    static <T> Set<T> toUnmodifiableSet(Collection<T> o) {
-        if (o == null || o.isEmpty()) {
-            return Set.of();
-        }
-        return Set.copyOf(o);
     }
 }
