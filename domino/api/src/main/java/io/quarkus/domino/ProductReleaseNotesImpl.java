@@ -1,8 +1,10 @@
 package io.quarkus.domino;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 @JsonInclude(JsonInclude.Include.NON_DEFAULT)
 public class ProductReleaseNotesImpl implements ProductReleaseNotes {
@@ -16,7 +18,7 @@ public class ProductReleaseNotesImpl implements ProductReleaseNotes {
         this.type = other.getType();
         this.title = other.getTitle();
         this.aliases = List.copyOf(other.getAliases());
-        this.properties = Map.copyOf(other.getProperties());
+        this.properties = toSortedUnmodifiableMap(other.getProperties());
     }
 
     @Override
@@ -107,5 +109,15 @@ public class ProductReleaseNotesImpl implements ProductReleaseNotes {
         public ProductReleaseNotes build() {
             return new ProductReleaseNotesImpl(this);
         }
+    }
+
+    private static <K extends Comparable<K>, V> Map<K, V> toSortedUnmodifiableMap(Map<K, V> map) {
+        if (map.isEmpty()) {
+            return Map.of();
+        }
+        if (map.size() == 1) {
+            return Map.copyOf(map);
+        }
+        return Collections.unmodifiableMap(new TreeMap<>(map));
     }
 }
