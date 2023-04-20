@@ -520,6 +520,9 @@ public class ProjectDependencyResolver {
             for (ArtifactCoords c : result) {
                 projectGavs.add(toGav(c));
             }
+        } else {
+            throw new IllegalArgumentException(
+                    "Failed to determine project artifacts for the analysis: expected at least one of projectArtifacts, projectBom or projectDir to be configured");
         }
         result.sort(ArtifactCoordsComparator.getInstance());
         return result;
