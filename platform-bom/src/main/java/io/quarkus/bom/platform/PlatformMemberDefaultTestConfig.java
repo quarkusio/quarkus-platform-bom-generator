@@ -14,6 +14,9 @@ public class PlatformMemberDefaultTestConfig {
     protected Map<String, String> systemProperties = Map.of();
     protected Map<String, String> jvmSystemProperties = Map.of();
     protected Map<String, String> nativeSystemProperties = Map.of();
+    protected Map<String, String> envVariables = Map.of();
+    protected Map<String, String> jvmEnvVariables = Map.of();
+    protected Map<String, String> nativeEnvVariables = Map.of();
     protected Properties pomProperties;
     protected String groups;
     protected String nativeGroups;
@@ -81,6 +84,27 @@ public class PlatformMemberDefaultTestConfig {
                 nativeSystemProperties = overrides.nativeSystemProperties;
             } else {
                 nativeSystemProperties.putAll(overrides.nativeSystemProperties);
+            }
+        }
+        if (!overrides.envVariables.isEmpty()) {
+            if (envVariables.isEmpty()) {
+                envVariables = overrides.envVariables;
+            } else {
+                envVariables.putAll(overrides.envVariables);
+            }
+        }
+        if (!overrides.jvmEnvVariables.isEmpty()) {
+            if (jvmEnvVariables.isEmpty()) {
+                jvmEnvVariables = overrides.jvmEnvVariables;
+            } else {
+                jvmEnvVariables.putAll(overrides.jvmEnvVariables);
+            }
+        }
+        if (!overrides.nativeEnvVariables.isEmpty()) {
+            if (nativeEnvVariables.isEmpty()) {
+                nativeEnvVariables = overrides.nativeEnvVariables;
+            } else {
+                nativeEnvVariables.putAll(overrides.nativeEnvVariables);
             }
         }
         if (overrides.pomProperties != null && !overrides.pomProperties.isEmpty()) {
@@ -157,7 +181,7 @@ public class PlatformMemberDefaultTestConfig {
     }
 
     public boolean isSkip() {
-        return skip == null ? false : skip;
+        return skip != null && skip;
     }
 
     public void setSkipNative(boolean skip) {
@@ -165,7 +189,7 @@ public class PlatformMemberDefaultTestConfig {
     }
 
     public boolean isSkipNative() {
-        return skipNative == null ? false : skipNative;
+        return skipNative != null && skipNative;
     }
 
     public void setSkipJvm(boolean skip) {
@@ -173,7 +197,7 @@ public class PlatformMemberDefaultTestConfig {
     }
 
     public boolean isSkipJvm() {
-        return skipJvm == null ? false : skipJvm;
+        return skipJvm != null && skipJvm;
     }
 
     public void setMavenFailsafePlugin(boolean failsafeMavenPlugin) {
@@ -181,7 +205,7 @@ public class PlatformMemberDefaultTestConfig {
     }
 
     public boolean isMavenFailsafePlugin() {
-        return failsafeMavenPlugin == null ? false : failsafeMavenPlugin;
+        return failsafeMavenPlugin != null && failsafeMavenPlugin;
     }
 
     public void setTransformWith(String transformWith) {
@@ -214,6 +238,30 @@ public class PlatformMemberDefaultTestConfig {
 
     public Map<String, String> getNativeSystemProperties() {
         return nativeSystemProperties;
+    }
+
+    public void setEnvironmentVariables(Map<String, String> envVariables) {
+        this.envVariables = envVariables;
+    }
+
+    public Map<String, String> getEnvironmentVariables() {
+        return envVariables;
+    }
+
+    public void setJvmEnvironmentVariables(Map<String, String> envVariables) {
+        this.jvmEnvVariables = envVariables;
+    }
+
+    public Map<String, String> getJvmEnvironmentVariables() {
+        return jvmEnvVariables;
+    }
+
+    public void setNativeEnvironmentVariables(Map<String, String> envVariables) {
+        this.nativeEnvVariables = envVariables;
+    }
+
+    public Map<String, String> getNativeEnvironmentVariables() {
+        return nativeEnvVariables;
     }
 
     public void setPomProperties(Properties pomProperties) {
@@ -293,7 +341,7 @@ public class PlatformMemberDefaultTestConfig {
     }
 
     public boolean isPackageApplication() {
-        return packageApplication == null ? false : packageApplication;
+        return packageApplication != null && packageApplication;
     }
 
     public void setArgLine(String argLine) {
