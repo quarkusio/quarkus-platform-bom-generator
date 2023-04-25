@@ -1587,7 +1587,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
 
             final Document testCatalogDoc;
-            try (BufferedReader reader = new BufferedReader(new FileReader(testCatalogFile))) {
+            try (BufferedReader reader = Files.newBufferedReader(testCatalogFile.toPath())) {
                 final Builder parser = new Builder();
                 testCatalogDoc = parser.build(reader);
             } catch (Exception ex) {
@@ -1729,18 +1729,18 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 plugin.setConfiguration(config);
                 config.addChild(depsToScan);
 
-                Xpp3Dom systemProps = null;
                 if (!testConfig.getSystemProperties().isEmpty()) {
-                    systemProps = new Xpp3Dom("systemPropertyVariables");
-                    config.addChild(systemProps);
-                    addSystemProperties(systemProps, testConfig.getSystemProperties());
+                    addMapConfig(getOrCreateChild(config, "systemPropertyVariables"), testConfig.getSystemProperties());
                 }
                 if (!testConfig.getJvmSystemProperties().isEmpty()) {
-                    if (systemProps == null) {
-                        systemProps = new Xpp3Dom("systemPropertyVariables");
-                        config.addChild(systemProps);
-                    }
-                    addSystemProperties(systemProps, testConfig.getJvmSystemProperties());
+                    addMapConfig(getOrCreateChild(config, "systemPropertyVariables"), testConfig.getJvmSystemProperties());
+                }
+
+                if (!testConfig.getEnvironmentVariables().isEmpty()) {
+                    addMapConfig(getOrCreateChild(config, "environmentVariables"), testConfig.getEnvironmentVariables());
+                }
+                if (!testConfig.getJvmEnvironmentVariables().isEmpty()) {
+                    addMapConfig(getOrCreateChild(config, "environmentVariables"), testConfig.getJvmEnvironmentVariables());
                 }
 
                 addGroupsConfig(testConfig, config, false);
@@ -2096,15 +2096,26 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             nativeImagePath.setValue("${project.build.directory}/${project.build.finalName}-runner");
         }
         if (!testConfig.getSystemProperties().isEmpty()) {
-            addSystemProperties(getOrCreateChild(config, "systemProperties"), testConfig.getSystemProperties());
+            addMapConfig(getOrCreateChild(config, "systemProperties"), testConfig.getSystemProperties());
+        }
+        if (!testConfig.getEnvironmentVariables().isEmpty()) {
+            addMapConfig(getOrCreateChild(config, "environmentVariables"), testConfig.getEnvironmentVariables());
         }
 
         if (nativeTest) {
             if (!testConfig.getNativeSystemProperties().isEmpty()) {
-                addSystemProperties(getOrCreateChild(config, "systemProperties"), testConfig.getNativeSystemProperties());
+                addMapConfig(getOrCreateChild(config, "systemProperties"), testConfig.getNativeSystemProperties());
             }
         } else if (!testConfig.getJvmSystemProperties().isEmpty()) {
-            addSystemProperties(getOrCreateChild(config, "systemProperties"), testConfig.getJvmSystemProperties());
+            addMapConfig(getOrCreateChild(config, "systemProperties"), testConfig.getJvmSystemProperties());
+        }
+
+        if (nativeTest) {
+            if (!testConfig.getNativeEnvironmentVariables().isEmpty()) {
+                addMapConfig(getOrCreateChild(config, "environmentVariables"), testConfig.getNativeEnvironmentVariables());
+            }
+        } else if (!testConfig.getJvmEnvironmentVariables().isEmpty()) {
+            addMapConfig(getOrCreateChild(config, "environmentVariables"), testConfig.getJvmEnvironmentVariables());
         }
 
         if (nativeTest) {
@@ -2145,7 +2156,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         return e;
     }
 
-    private void addSystemProperties(Xpp3Dom sysProps, Map<String, String> props) {
+    private void addMapConfig(Xpp3Dom sysProps, Map<String, String> props) {
         for (Map.Entry<String, String> entry : props.entrySet()) {
             sysProps.addChild(textDomElement(entry.getKey(), entry.getValue()));
         }
