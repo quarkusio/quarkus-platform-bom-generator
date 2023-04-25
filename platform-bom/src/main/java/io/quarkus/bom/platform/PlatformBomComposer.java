@@ -819,6 +819,10 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                 final Map<ArtifactKey, Dependency> bomConstraints = new HashMap<>(allDeps.size());
                 for (Dependency dep : allDeps) {
                     final Artifact artifact = dep.getArtifact();
+                    // unless it's test-jars ignore test scoped constraints
+                    if ("test".equals(dep.getScope()) && !"tests".equals(artifact.getClassifier())) {
+                        continue;
+                    }
                     if (filtered && PlatformArtifacts.isCatalogArtifactId(artifact.getArtifactId())) {
                         importedPlatformBoms.add(new DefaultArtifact(artifact.getGroupId(),
                                 PlatformArtifacts.ensureBomArtifactId(artifact.getArtifactId()),
