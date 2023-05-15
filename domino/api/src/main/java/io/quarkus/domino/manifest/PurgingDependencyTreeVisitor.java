@@ -251,23 +251,7 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
 
         @Override
         public PackageURL getPurl() {
-            if (purl == null) {
-                final TreeMap<String, String> qualifiers = new TreeMap<>();
-                qualifiers.put("type", coords.getType());
-                if (!coords.getClassifier().isEmpty()) {
-                    qualifiers.put("classifier", coords.getClassifier());
-                }
-                try {
-                    purl = new PackageURL(PackageURL.StandardTypes.MAVEN,
-                            coords.getGroupId(),
-                            coords.getArtifactId(),
-                            coords.getVersion(),
-                            qualifiers, null);
-                } catch (MalformedPackageURLException e) {
-                    throw new RuntimeException("Failed to generate Purl for " + coords.toCompactCoords(), e);
-                }
-            }
-            return purl;
+            return purl == null ? purl = PurgingDependencyTreeVisitor.getPurl(coords) : purl;
         }
 
         @Override
@@ -299,6 +283,23 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
             }
             sb.append(coords.getVersion()).append('#').append(processedVariations);
             bomRef = sb.toString();
+        }
+    }
+
+    static PackageURL getPurl(ArtifactCoords coords) {
+        final TreeMap<String, String> qualifiers = new TreeMap<>();
+        qualifiers.put("type", coords.getType());
+        if (!coords.getClassifier().isEmpty()) {
+            qualifiers.put("classifier", coords.getClassifier());
+        }
+        try {
+            return new PackageURL(PackageURL.StandardTypes.MAVEN,
+                    coords.getGroupId(),
+                    coords.getArtifactId(),
+                    coords.getVersion(),
+                    qualifiers, null);
+        } catch (MalformedPackageURLException e) {
+            throw new RuntimeException("Failed to generate Purl for " + coords.toCompactCoords(), e);
         }
     }
 }
