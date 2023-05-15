@@ -57,6 +57,10 @@ public class SbomGenerator {
             return this;
         }
 
+        public MavenArtifactResolver getArtifactResolver() {
+            return SbomGenerator.this.resolver;
+        }
+
         public Builder setOutputFile(Path outputFile) {
             ensureNotBuilt();
             SbomGenerator.this.outputFile = outputFile;
@@ -67,6 +71,10 @@ public class SbomGenerator {
             ensureNotBuilt();
             SbomGenerator.this.productInfo = productInfo;
             return this;
+        }
+
+        public ProductInfo getProductInfo() {
+            return SbomGenerator.this.productInfo;
         }
 
         public Builder setEnableTransformers(boolean enableTransformers) {
