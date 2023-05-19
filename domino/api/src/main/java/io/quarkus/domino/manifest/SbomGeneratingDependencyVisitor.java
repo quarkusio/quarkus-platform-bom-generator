@@ -64,7 +64,7 @@ public class SbomGeneratingDependencyVisitor implements DependencyTreeVisitor {
             VisitedComponent mainComponent = null;
             if (rootComponents.size() == 1) {
                 mainComponent = rootComponents.get(0);
-            } else if (config.getProjectBom() != null) {
+            } else if (config != null && config.getProjectBom() != null) {
                 for (VisitedComponent c : rootComponents) {
                     if (c.getArtifactCoords().equals(config.getProjectBom())) {
                         mainComponent = c;
