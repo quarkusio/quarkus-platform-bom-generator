@@ -330,7 +330,8 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             supported.put(deploymentCoords, ext);
         }
 
-        var dominoConfig = ProjectDependencyConfig.builder()
+        var depsConfigBuilder = ProjectDependencyConfig.builder()
+                .setProductInfo(SbomConfig.ProductConfig.toProductInfo(productInfo))
                 .setProjectBom(targetBomCoords)
                 .setNonProjectBoms(nonProjectBoms)
                 .setProjectArtifacts(supported.keySet())
@@ -358,8 +359,9 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 .setRecipeRepos(recipeRepos)
                 .setWarnOnMissingScm(warnOnMissingScm);
         if (includeNonManaged != null) {
-            dominoConfig.setIncludeNonManaged(includeNonManaged);
+            depsConfigBuilder.setIncludeNonManaged(includeNonManaged);
         }
+        final ProjectDependencyConfig dependencyConfig = depsConfigBuilder.build();
         final ProjectDependencyResolver.Builder depsResolver = ProjectDependencyResolver.builder()
                 .setArtifactConstraintsProvider(coords -> {
                     final Extension ext = supported.get(coords);
@@ -369,15 +371,14 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 .setMessageWriter(new MojoMessageWriter(getLog()))
                 .setLogOutputFile(isManifestMode() ? null : (outputFile == null ? null : outputFile.toPath()))
                 .setAppendOutput(appendOutput)
-                .setDependencyConfig(dominoConfig.build());
+                .setDependencyConfig(dependencyConfig);
 
         if (manifest) {
-            depsResolver.addDependencyTreeVisitor(
-                    new SbomGeneratingDependencyVisitor(resolver,
-                            outputFile == null ? null : outputFile.toPath(),
-                            SbomConfig.ProductConfig.toProductInfo(productInfo),
-                            true))
-                    .build().resolveDependencies();
+            var sbomGenerator = new SbomGeneratingDependencyVisitor(resolver,
+                    outputFile == null ? null : outputFile.toPath(),
+                    dependencyConfig,
+                    true);
+            depsResolver.addDependencyTreeVisitor(sbomGenerator).build().resolveDependencies();
         } else if (flatManifest) {
             depsResolver.build().consumeSorted(ManifestGenerator.builder()
                     .setArtifactResolver(resolver)
