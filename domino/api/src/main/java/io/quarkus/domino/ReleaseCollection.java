@@ -8,6 +8,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
 
 public class ReleaseCollection implements Iterable<ReleaseRepo> {
@@ -101,6 +102,43 @@ public class ReleaseCollection implements Iterable<ReleaseRepo> {
 
     public int size() {
         return releases.size();
+    }
+
+    public Iterable<ReleaseRepo> getRootReleaseRepos() {
+        return new Iterable<ReleaseRepo>() {
+            @Override
+            public Iterator<ReleaseRepo> iterator() {
+                return new Iterator<ReleaseRepo>() {
+
+                    final Iterator<ReleaseRepo> i = releases.iterator();
+                    ReleaseRepo next;
+
+                    @Override
+                    public boolean hasNext() {
+                        if (next == null) {
+                            while (i.hasNext()) {
+                                var n = i.next();
+                                if (n.isRoot()) {
+                                    next = n;
+                                    break;
+                                }
+                            }
+                        }
+                        return next != null;
+                    }
+
+                    @Override
+                    public ReleaseRepo next() {
+                        if (!hasNext()) {
+                            throw new NoSuchElementException();
+                        }
+                        var n = next;
+                        next = null;
+                        return n;
+                    }
+                };
+            }
+        };
     }
 
     Collection<ReleaseRepo> getReleases() {
