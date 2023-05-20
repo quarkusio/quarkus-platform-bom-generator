@@ -6,9 +6,9 @@
     <artifactId>acme-parent</artifactId>
     <version>1.0</version>
   </parent>
-  <artifactId>acme-library</artifactId>
-  <name>Acme Library</name>
-  <description>Description of acme-library</description>
+  <artifactId>acme-api</artifactId>
+  <name>Acme API</name>
+  <description>Description of acme-api</description>
   <dependencyManagement>
     <dependencies>
       <dependency>

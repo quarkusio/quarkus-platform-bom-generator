@@ -95,6 +95,14 @@ public class ReleaseCollection implements Iterable<ReleaseRepo> {
         return releases.iterator();
     }
 
+    public boolean isEmpty() {
+        return releases.isEmpty();
+    }
+
+    public int size() {
+        return releases.size();
+    }
+
     Collection<ReleaseRepo> getReleases() {
         return releases;
     }

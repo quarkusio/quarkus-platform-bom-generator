@@ -20,4 +20,10 @@
       </dependency>
     </dependencies>
   </dependencyManagement>
+  <dependencies>
+    <dependency>
+      <groupId>org.acme</groupId>
+      <artifactId>acme-api</artifactId>
+    </dependency>
+  </dependencies>
 </project>

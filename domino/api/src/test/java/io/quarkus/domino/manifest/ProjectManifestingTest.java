@@ -6,11 +6,10 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.domino.ProjectDependencyConfig;
 import io.quarkus.domino.ProjectDependencyResolver;
+import io.quarkus.domino.TestUtils;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.net.URISyntaxException;
-import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.function.Function;
@@ -44,7 +43,7 @@ public class ProjectManifestingTest {
 
     private static void assertSbomMainComponent(String projectDirName, ArtifactCoords expectedCoords,
             Function<ProjectDependencyConfig.Mutable, ProjectDependencyConfig.Mutable> configurator) {
-        var projectDir = getResource(projectDirName);
+        var projectDir = TestUtils.getResource(projectDirName);
         var mainComponent = getMainComponent(getSbomForProjectDir(projectDir, configurator));
 
         assertThat(mainComponent).isNotNull();
@@ -104,19 +103,5 @@ public class ProjectManifestingTest {
             return null;
         }
         return metadata.getComponent();
-    }
-
-    private static Path getResource(String resourceName) {
-        var url = Thread.currentThread().getContextClassLoader().getResource(resourceName);
-        assertThat(url).isNotNull();
-        return toLocalPath(url);
-    }
-
-    private static Path toLocalPath(final URL url) {
-        try {
-            return Path.of(url.toURI());
-        } catch (URISyntaxException var2) {
-            throw new IllegalArgumentException("Failed to translate " + url + " to local path", var2);
-        }
     }
 }

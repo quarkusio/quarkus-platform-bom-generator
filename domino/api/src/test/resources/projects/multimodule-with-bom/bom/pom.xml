@@ -6,17 +6,21 @@
     <artifactId>acme-parent</artifactId>
     <version>1.0</version>
   </parent>
-  <artifactId>acme-library</artifactId>
-  <name>Acme Library</name>
-  <description>Description of acme-library</description>
+  <artifactId>acme-bom</artifactId>
+  <name>Acme BOM</name>
+  <description>Description of acme-bom</description>
+  <packaging>pom</packaging>
   <dependencyManagement>
     <dependencies>
       <dependency>
-        <groupId>org.acme</groupId>
-        <artifactId>acme-bom</artifactId>
+        <groupId>${project.groupId}</groupId>
+        <artifactId>acme-api</artifactId>
         <version>${project.version}</version>
-        <type>pom</type>
-        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>${project.groupId}</groupId>
+        <artifactId>acme-library</artifactId>
+        <version>${project.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
