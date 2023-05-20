@@ -6,7 +6,6 @@ import io.quarkus.domino.test.repo.TestArtifactRepo;
 import io.quarkus.domino.test.repo.TestProject;
 import java.nio.file.Path;
 import java.util.List;
-
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.junit.jupiter.api.Test;

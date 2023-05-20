@@ -117,6 +117,10 @@ public class TestModule {
         return module;
     }
 
+    public TestModule addBomModule(String artifactId) {
+        return addModule(artifactId).setPackaging(ArtifactCoords.TYPE_POM);
+    }
+
     public TestModule addDependency(String artifactId) {
         return addDependency(ArtifactCoords.jar(getGroupId(), artifactId, getVersion()), JavaScopes.COMPILE);
     }
@@ -138,7 +142,7 @@ public class TestModule {
     }
 
     public TestModule addVersionConstraint(String groupId, String artifactId, String version) {
-        return addDependency(ArtifactCoords.jar(groupId, artifactId, version), JavaScopes.COMPILE);
+        return addVersionConstraint(ArtifactCoords.jar(groupId, artifactId, version), JavaScopes.COMPILE);
     }
 
     public TestModule addVersionConstraint(ArtifactCoords coords, String scope) {
@@ -191,7 +195,7 @@ public class TestModule {
 
         if (root && project.getRepoUrl() != null) {
             var scm = new Scm();
-            scm.setUrl(project.getRepoUrl());
+            scm.setConnection(project.getRepoUrl());
             scm.setTag(project.getTag());
             model.setScm(scm);
         }

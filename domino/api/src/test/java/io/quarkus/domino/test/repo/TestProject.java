@@ -32,16 +32,18 @@ public class TestProject {
         return repoUrl;
     }
 
-    public void setRepoUrl(String repoUrl) {
+    public TestProject setRepoUrl(String repoUrl) {
         this.repoUrl = repoUrl;
+        return this;
     }
 
     public String getTag() {
         return tag;
     }
 
-    public void setTag(String tag) {
+    public TestProject setTag(String tag) {
         this.tag = tag;
+        return this;
     }
 
     public TestModule getMainModule() {
