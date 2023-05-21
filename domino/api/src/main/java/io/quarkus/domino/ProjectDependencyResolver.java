@@ -391,15 +391,15 @@ public class ProjectDependencyResolver {
 
     public void resolveDependencies() {
         var enforcedConstraints = getBomConstraints(config.getProjectBom());
-        projectBomConstraints = new HashSet<>(enforcedConstraints.size());
-        for (Dependency d : enforcedConstraints) {
-            projectBomConstraints.add(toCoords(d.getArtifact()));
-        }
         if (artifactConstraintsProvider == null) {
             for (var bomCoords : config.getNonProjectBoms()) {
                 enforcedConstraints.addAll(getBomConstraints(bomCoords));
             }
             artifactConstraintsProvider = t -> enforcedConstraints;
+        }
+        projectBomConstraints = new HashSet<>(enforcedConstraints.size());
+        for (Dependency d : enforcedConstraints) {
+            projectBomConstraints.add(toCoords(d.getArtifact()));
         }
 
         for (DependencyTreeVisitor v : treeVisitors) {
@@ -408,13 +408,13 @@ public class ProjectDependencyResolver {
 
         for (ArtifactCoords coords : getProjectArtifacts()) {
             if (isIncluded(coords) || !isExcluded(coords)) {
-                processRootArtifact(coords, artifactConstraintsProvider.apply(coords));
+                processRootArtifact(coords);
             }
         }
 
         for (ArtifactCoords coords : toSortedCoords(config.getIncludeArtifacts())) {
             if (isIncluded(coords) || !isExcluded(coords)) {
-                processRootArtifact(coords, artifactConstraintsProvider.apply(coords));
+                processRootArtifact(coords);
             }
         }
 
@@ -528,8 +528,9 @@ public class ProjectDependencyResolver {
         return result;
     }
 
-    private void processRootArtifact(ArtifactCoords rootArtifact, List<Dependency> managedDeps) {
+    private void processRootArtifact(ArtifactCoords rootArtifact) {
 
+        final List<Dependency> managedDeps = artifactConstraintsProvider.apply(rootArtifact);
         final DependencyNode root = collectDependencies(rootArtifact, managedDeps);
         if (root == null) {
             // couldn't be resolved

@@ -117,12 +117,17 @@ public class TestModule {
         return module;
     }
 
-    public TestModule addBomModule(String artifactId) {
+    public TestModule addPomModule(String artifactId) {
         return addModule(artifactId).setPackaging(ArtifactCoords.TYPE_POM);
     }
 
     public TestModule addDependency(String artifactId) {
         return addDependency(ArtifactCoords.jar(getGroupId(), artifactId, getVersion()), JavaScopes.COMPILE);
+    }
+
+    public TestModule addDependency(TestModule module) {
+        return addDependency(ArtifactCoords.jar(module.getGroupId(), module.getArtifactId(), module.getVersion()),
+                JavaScopes.COMPILE);
     }
 
     public TestModule addDependency(String groupId, String artifactId, String version) {
@@ -137,8 +142,17 @@ public class TestModule {
         return this;
     }
 
+    public TestModule addManagedDependency(TestModule module) {
+        return addDependency(ArtifactCoords.jar(module.getGroupId(), module.getArtifactId(), null), JavaScopes.COMPILE);
+    }
+
     public TestModule addVersionConstraint(String artifactId) {
         return addVersionConstraint(ArtifactCoords.jar(getGroupId(), artifactId, getVersion()), JavaScopes.COMPILE);
+    }
+
+    public TestModule addVersionConstraint(TestModule module) {
+        return addVersionConstraint(ArtifactCoords.jar(module.getGroupId(), module.getArtifactId(), module.getVersion()),
+                JavaScopes.COMPILE);
     }
 
     public TestModule addVersionConstraint(String groupId, String artifactId, String version) {
@@ -151,6 +165,10 @@ public class TestModule {
         }
         constraintsByScope.computeIfAbsent(scope, k -> new ArrayList<>()).add(coords);
         return this;
+    }
+
+    public TestModule importBom(TestModule module) {
+        return importBom(module.getGroupId(), module.getArtifactId(), module.getVersion());
     }
 
     public TestModule importBom(String artifactId) {
