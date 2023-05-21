@@ -44,7 +44,7 @@ public class BasicBomBasedProjectDependencyTest {
                 .setRepoUrl("https://acme.org/lib")
                 .setTag("1.0");
         var acmeParent = acmeProject.createParentPom("acme-parent");
-        acmeParent.addBomModule("acme-bom")
+        acmeParent.addPomModule("acme-bom")
                 .addVersionConstraint("acme-common")
                 .addVersionConstraint("acme-lib")
                 .addVersionConstraint("org.bar", "bar-lib", "1.0");
