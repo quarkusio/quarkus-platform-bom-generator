@@ -15,7 +15,6 @@ import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.maven.dependency.ArtifactCoords;
-import io.quarkus.maven.dependency.ArtifactKey;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
@@ -391,10 +390,10 @@ public class ProjectDependencyResolver {
 
     public void resolveDependencies() {
         var enforcedConstraints = getBomConstraints(config.getProjectBom());
+        for (var bomCoords : config.getNonProjectBoms()) {
+            enforcedConstraints.addAll(getBomConstraints(bomCoords));
+        }
         if (artifactConstraintsProvider == null) {
-            for (var bomCoords : config.getNonProjectBoms()) {
-                enforcedConstraints.addAll(getBomConstraints(bomCoords));
-            }
             artifactConstraintsProvider = t -> enforcedConstraints;
         }
         projectBomConstraints = new HashSet<>(enforcedConstraints.size());
@@ -437,19 +436,32 @@ public class ProjectDependencyResolver {
     }
 
     private void removeProductizedDeps() {
-        final Set<ArtifactKey> alreadyBuiltKeys = allDepsToBuild.keySet().stream()
-                .filter(c -> RhVersionPattern.isRhVersion(c.getVersion()))
-                .map(ArtifactCoords::getKey).collect(Collectors.toSet());
-        if (!alreadyBuiltKeys.isEmpty()) {
-            final Iterator<ArtifactCoords> i = allDepsToBuild.keySet().iterator();
-            while (i.hasNext()) {
-                final ArtifactCoords coords = i.next();
-                if (alreadyBuiltKeys.contains(coords.getKey())) {
-                    i.remove();
-                    artifactDeps.remove(coords);
-                    artifactDeps.values().forEach(d -> {
-                        d.removeDependency(coords);
-                    });
+        var i = allDepsToBuild.keySet().iterator();
+        while (i.hasNext()) {
+            final ArtifactCoords coords = i.next();
+            if (RhVersionPattern.isRhVersion(coords.getVersion())) {
+                i.remove();
+                artifactDeps.remove(coords);
+                artifactDeps.values().forEach(d -> {
+                    d.removeDependency(coords);
+                });
+            }
+        }
+
+        var ri = releaseRepos.entrySet().iterator();
+        while (ri.hasNext()) {
+            var releaseEntry = ri.next();
+            var artifactI = releaseEntry.getValue().artifacts.entrySet().iterator();
+            while (artifactI.hasNext()) {
+                if (RhVersionPattern.isRhVersion(artifactI.next().getKey().getVersion())) {
+                    artifactI.remove();
+                }
+            }
+            if (releaseEntry.getValue().getArtifacts().isEmpty()) {
+                ri.remove();
+                for (ReleaseRepo r : releaseRepos.values()) {
+                    r.dependencies.remove(releaseEntry.getKey());
+                    r.dependants.remove(releaseEntry.getKey());
                 }
             }
         }
@@ -963,6 +975,7 @@ public class ProjectDependencyResolver {
     }
 
     private ResolvedDependency addArtifactToBuild(ArtifactCoords coords, List<RemoteRepository> repos) {
+
         final boolean managed = projectBomConstraints.contains(coords);
         if (!managed && isCollectNonManagedVisited()) {
             nonManagedVisited.add(coords);
