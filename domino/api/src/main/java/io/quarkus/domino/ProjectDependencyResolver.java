@@ -25,6 +25,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -35,11 +36,13 @@ import java.util.Objects;
 import java.util.Properties;
 import java.util.ServiceLoader;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.apache.maven.model.DependencyManagement;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Parent;
@@ -739,9 +742,41 @@ public class ProjectDependencyResolver {
                 .map(ServiceLoader.Provider::get)
                 .collect(Collectors.toList());
 
+        final Path cloneBaseDir;
+        try {
+            cloneBaseDir = Files.createTempDirectory("domino");
+            Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    log.debug("Removing %s", cloneBaseDir);
+                    var map = new TreeMap<Integer, List<Path>>(Comparator.<Integer> naturalOrder().reversed());
+                    try (Stream<Path> files = Files.walk(cloneBaseDir)) {
+                        final Iterator<Path> i = files.iterator();
+                        while (i.hasNext()) {
+                            var p = i.next();
+                            if (Files.isDirectory(p)) {
+                                map.computeIfAbsent(p.getNameCount(), k -> new ArrayList<>()).add(p);
+                            } else {
+                                Files.delete(p);
+                            }
+                        }
+                        for (List<Path> paths : map.values()) {
+                            for (Path p : paths) {
+                                Files.delete(p);
+                            }
+                        }
+                    } catch (IOException e) {
+                        log.warn("Failed to delete " + cloneBaseDir + ": " + e.getLocalizedMessage());
+                    }
+                }
+            }));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
         final AtomicReference<ReleaseIdResolver> ref = new AtomicReference<>();
         final ScmLocator scmLocator = GitScmLocator.builder()
                 .setRecipeRepos(config.getRecipeRepos())
+                .setGitCloneBaseDir(cloneBaseDir)
                 .setCacheRepoTags(true)
                 .setCloneLocalRecipeRepos(false)
                 .setFallback(new ScmLocator() {
