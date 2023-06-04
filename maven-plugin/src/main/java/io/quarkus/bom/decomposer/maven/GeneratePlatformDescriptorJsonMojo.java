@@ -23,7 +23,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -84,7 +83,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
      * from the Maven artifacts will be applied before the local ones configured with {@link #overridesFile}.
      */
     @Parameter
-    private List<String> metadataOverrideArtifacts = Collections.emptyList();
+    private List<String> metadataOverrideArtifacts = List.of();
 
     /** file used for overrides - overridesFiles takes precedence over this file. **/
     @Parameter(property = "overridesFile", defaultValue = "${project.basedir}/src/main/resources/extensions-overrides.json")
@@ -94,21 +93,21 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
     private File outputFile;
 
     @Component
-    private RepositorySystem repoSystem;
+    RepositorySystem repoSystem;
 
     @Component
     RemoteRepositoryManager remoteRepoManager;
 
     @Parameter(defaultValue = "${repositorySystemSession}", readonly = true)
-    private RepositorySystemSession repoSession;
+    RepositorySystemSession repoSession;
 
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
-    private List<RemoteRepository> repos;
+    List<RemoteRepository> repos;
 
     @Parameter(defaultValue = "${project}", readonly = true)
-    private MavenProject project;
+    MavenProject project;
     @Component
-    private MavenProjectHelper projectHelper;
+    MavenProjectHelper projectHelper;
 
     /**
      * Platform stack info
@@ -249,7 +248,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
                         d.getArtifact().getClassifier(), d.getArtifact().getExtension(), d.getArtifact().getVersion()))
                 .collect(Collectors.toList());
 
-        Map<ArtifactKey, Extension> inheritedExtensions = Collections.emptyMap();
+        Map<ArtifactKey, Extension> inheritedExtensions = Map.of();
         if (!importedDescriptors.isEmpty()) {
             final MavenArtifactResolver mvnResolver = getResolver();
             final List<ExtensionCatalog> importedCatalogs = new ArrayList<>(importedDescriptors.size());
@@ -284,8 +283,8 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
             platformJson.setMetadata(baseCatalog.getMetadata());
         }
 
-        Set<ArtifactKey> ignoredKeys = Collections.emptySet();
-        List<Pattern> ignoredPatterns = Collections.emptyList();
+        Set<ArtifactKey> ignoredKeys = Set.of();
+        List<Pattern> ignoredPatterns = List.of();
         if (!ignoredArtifacts.isEmpty()) {
             for (String coordsStr : ignoredArtifacts) {
                 if (coordsStr.contains("*")) {
@@ -603,11 +602,11 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
         }
 
         if (bomModel.getDependencyManagement() == null) {
-            return Collections.emptyList();
+            return List.of();
         }
         final List<org.apache.maven.model.Dependency> modelDeps = bomModel.getDependencyManagement().getDependencies();
         if (modelDeps.isEmpty()) {
-            return Collections.emptyList();
+            return List.of();
         }
 
         final List<Dependency> deps = new ArrayList<>(modelDeps.size());
@@ -615,7 +614,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
             final Artifact artifact = new DefaultArtifact(modelDep.getGroupId(), modelDep.getArtifactId(),
                     modelDep.getClassifier(), modelDep.getType(), modelDep.getVersion());
             // exclusions aren't relevant in this context
-            deps.add(new Dependency(artifact, modelDep.getScope(), modelDep.isOptional(), Collections.emptyList()));
+            deps.add(new Dependency(artifact, modelDep.getScope(), modelDep.isOptional(), List.of()));
         }
         return deps;
     }
