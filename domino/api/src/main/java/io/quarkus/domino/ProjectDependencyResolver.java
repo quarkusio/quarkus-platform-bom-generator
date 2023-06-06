@@ -740,7 +740,10 @@ public class ProjectDependencyResolver {
             @Override
             public ReleaseId detectReleaseId(ReleaseIdResolver releaseResolver, Artifact artifact)
                     throws BomDecomposerException {
-                final GAV gav = new GAV(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion());
+                // there is the PNC build info-based SCM locator in front,
+                // if it failed, make sure the redhat qualifier is removed
+                final String version = RhVersionPattern.ensureNoRhQualifier(artifact.getVersion());
+                final GAV gav = new GAV(artifact.getGroupId(), artifact.getArtifactId(), version);
                 ++total;
                 Exception error = null;
                 try {
@@ -757,7 +760,10 @@ public class ProjectDependencyResolver {
                     }
                 }
                 var sb = new StringBuilder();
-                sb.append("Failed to determine SCM for ").append(artifact);
+                sb.append("Failed to determine the SCM for ").append(artifact);
+                if (!version.equals(artifact.getVersion())) {
+                    sb.append(" using its upstream version ").append(version);
+                }
                 if (config.isWarnOnMissingScm()) {
                     if (error != null) {
                         sb.append(": ").append(error.getLocalizedMessage());

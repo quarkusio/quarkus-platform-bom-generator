@@ -750,7 +750,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         // while in the upstream equivalent, for example, a the micro part could be missing
         if (RhVersionPattern.isRhVersion(preferredVersion)) {
             final ArtifactVersion preferredAv = new DefaultArtifactVersion(
-                    RhVersionPattern.ensureNoRhSuffix(preferredVersion));
+                    RhVersionPattern.ensureNoRhQualifier(preferredVersion));
             final ArtifactVersion currentAv = new DefaultArtifactVersion(currentVersion);
             // qualifiers aren't parsed correctly when the micro version isn't present,
             // so we can't use equals reliably to compare them
