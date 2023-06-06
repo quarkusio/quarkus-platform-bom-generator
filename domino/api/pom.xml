@@ -3,7 +3,7 @@
   <parent>
     <groupId>io.quarkus</groupId>
     <artifactId>quarkus-domino-parent</artifactId>
-    <version>0.0.90</version>
+    <version>0.0.91-SNAPSHOT</version>
   </parent>
 
   <artifactId>quarkus-domino-api</artifactId>
