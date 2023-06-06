@@ -15,8 +15,10 @@ import io.quarkus.registry.config.RegistriesConfig;
 import io.quarkus.registry.config.RegistryConfig;
 import io.quarkus.registry.util.PlatformArtifacts;
 import java.io.BufferedWriter;
+import java.io.File;
 import java.io.IOException;
 import java.io.StringWriter;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -24,8 +26,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.apache.maven.artifact.versioning.ArtifactVersion;
-import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
@@ -41,6 +41,9 @@ import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.impl.RemoteRepositoryManager;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.resolution.ArtifactDescriptorResult;
+import org.eclipse.aether.util.version.GenericVersionScheme;
+import org.eclipse.aether.version.InvalidVersionSpecificationException;
+import org.eclipse.aether.version.Version;
 
 @Mojo(name = "extension-changes", threadSafe = true, requiresProject = false)
 public class ExtensionChangesMojo extends AbstractMojo {
@@ -57,14 +60,43 @@ public class ExtensionChangesMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
     List<RemoteRepository> repos;
 
+    /**
+     * Maven artifact coordinates of a platform member BOM extensions from which
+     * should be compared to a previous version of the BOM specified by either
+     * {@link #previousBom} parameter or registry configured either with
+     * the {@link #registryConfig} or the {@link #registry}
+     */
     @Parameter(property = "bom", required = true)
     String bom;
 
+    /**
+     * Maven artifact coordinates of the previous version of the platform member BOM
+     * {@link #bom} should be compared to. If not configured, the previous version of
+     * the platform member BOM will be obtained from the registry configured with
+     * either the {@link #registryConfig} or {@link #registry}
+     */
     @Parameter(property = "previousBom", required = false)
     String previousBom;
 
+    /**
+     * Extension registry config file used to obtain the previous version of
+     * the platform member BOM configured with {@link #bom}
+     */
+    @Parameter(property = "registryConfig", required = false)
+    File registryConfig;
+
+    /**
+     * Extension registry ID that should be used to obtain the previous version of
+     * the platform member BOM configured with {@link #bom}
+     */
     @Parameter(property = "registry", required = false, defaultValue = "registry.quarkus.io")
     String registry;
+
+    /**
+     * File to save the report to. If not configured the output will be logged in the terminal.
+     */
+    @Parameter(property = "outputFile", required = false)
+    File outputFile;
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
@@ -126,20 +158,27 @@ public class ExtensionChangesMojo extends AbstractMojo {
                     statusList.add(ExtensionStatus.classpathUpdate(prev.getKey(), prev.getValue()));
                 }
             } else {
-                statusList.add(ExtensionStatus.versionUpdate(prev.getKey(), prev.getValue()));
+                statusList.add(ExtensionStatus.versionUpdate(prev.getKey(), newVersion));
             }
         }
         for (var e : extensions.entrySet()) {
             statusList.add(ExtensionStatus.newStatus(e.getKey(), e.getValue()));
         }
 
-        var json = new StringWriter();
-        try (BufferedWriter writer = new BufferedWriter(json)) {
-            CatalogMapperHelper.serialize(statusList, json);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        if (outputFile != null) {
+            outputFile.getParentFile().mkdirs();
         }
-        System.out.println(json.getBuffer().toString());
+        StringWriter json = null;
+        try (BufferedWriter writer = outputFile == null
+                ? new BufferedWriter(json = new StringWriter())
+                : Files.newBufferedWriter(outputFile.toPath())) {
+            CatalogMapperHelper.serialize(statusList, writer);
+        } catch (IOException e) {
+            throw new MojoExecutionException("Failed to serialize extension changes report to JSON", e);
+        }
+        if (json != null) {
+            getLog().info(json.getBuffer().toString());
+        }
     }
 
     public static class ExtensionStatus {
@@ -277,18 +316,38 @@ public class ExtensionChangesMojo extends AbstractMojo {
 
     private ArtifactCoords getPreviousBom(MavenArtifactResolver resolver, ExtensionCatalog catalog)
             throws MojoExecutionException {
+
+        var extResolverBuilder = ExtensionCatalogResolver.builder()
+                .artifactResolver(resolver)
+                .messageWriter(new MojoMessageWriter(getLog()));
+        if (registryConfig != null) {
+            if (!registryConfig.exists()) {
+                throw new MojoExecutionException(registryConfig + " does not exist");
+            }
+            if (registryConfig.isDirectory()) {
+                throw new MojoExecutionException(registryConfig + " is a directory");
+            }
+            try {
+                extResolverBuilder.config(RegistriesConfig.fromFile(registryConfig.toPath()));
+            } catch (IOException e) {
+                throw new MojoExecutionException("Failed to parse registry configuration file " + registryConfig, e);
+            }
+        } else {
+            if (registry == null || registry.isEmpty()) {
+                throw new MojoExecutionException("Registry ID has not been provided");
+            }
+            extResolverBuilder.config(RegistriesConfig.builder()
+                    .setRegistries(List.of(
+                            RegistryConfig.builder()
+                                    .setId(registry)
+                                    .build()))
+                    .build());
+
+        }
+
         final ExtensionCatalogResolver catalogResolver;
         try {
-            catalogResolver = ExtensionCatalogResolver.builder()
-                    .artifactResolver(resolver)
-                    .messageWriter(new MojoMessageWriter(getLog()))
-                    .config(RegistriesConfig.builder()
-                            .setRegistries(List.of(
-                                    RegistryConfig.builder()
-                                            .setId(registry)
-                                            .build()))
-                            .build())
-                    .build();
+            catalogResolver = extResolverBuilder.build();
         } catch (RegistryResolutionException e) {
             throw new MojoExecutionException("Failed to initialize extension catalog resolver for registry " + registry, e);
         }
@@ -322,11 +381,23 @@ public class ExtensionChangesMojo extends AbstractMojo {
             throw new MojoExecutionException("Failed to resolve stream " + currentPlatform + ":" + currentStream, e);
         }
 
-        final ArtifactVersion current = new DefaultArtifactVersion(currentVersion);
-        ArtifactVersion previous = null;
+        final GenericVersionScheme versionScheme = new GenericVersionScheme();
+        final Version current;
+        try {
+            current = versionScheme.parseVersion(currentVersion);
+        } catch (InvalidVersionSpecificationException e) {
+            throw new MojoExecutionException(e);
+        }
+
+        Version previous = null;
         PlatformRelease previousRelease = null;
         for (var pr : prevStream.getReleases()) {
-            var v = new DefaultArtifactVersion(pr.getVersion().toString());
+            final Version v;
+            try {
+                v = versionScheme.parseVersion(pr.getVersion().toString());
+            } catch (InvalidVersionSpecificationException e) {
+                throw new MojoExecutionException(e);
+            }
             if (current.compareTo(v) > 0
                     && (previous == null || previous.compareTo(v) < 0)) {
                 previous = v;

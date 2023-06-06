@@ -274,6 +274,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             generateMavenRepoZipModule(pom);
         }
 
+        generateExtensionChangesModule(pom);
         addReleaseProfile(pom);
         persistPom(pom);
 
@@ -475,6 +476,86 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
         }
         return true;
+    }
+
+    private void generateExtensionChangesModule(Model parentPom) throws MojoExecutionException {
+        final String artifactId = "quarkus-extension-changes";
+        final Model pom = newModel();
+        pom.setArtifactId(artifactId);
+        pom.setPackaging(ArtifactCoords.TYPE_POM);
+        pom.setName(getNameBase(parentPom) + " " + artifactIdToName(artifactId));
+        parentPom.addModule(artifactId);
+        final File pomXml = getPomFile(parentPom, artifactId);
+        pom.setPomFile(pomXml);
+        final Parent parent = new Parent();
+        parent.setGroupId(ModelUtils.getGroupId(parentPom));
+        parent.setArtifactId(parentPom.getArtifactId());
+        parent.setVersion(ModelUtils.getVersion(parentPom));
+        parent.setRelativePath(pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
+        pom.setParent(parent);
+        Utils.skipInstallAndDeploy(pom);
+
+        Plugin plugin = new Plugin();
+        Build build = pom.getBuild();
+        if (build == null) {
+            build = new Build();
+            pom.setBuild(build);
+        }
+        build.addPlugin(plugin);
+        plugin.setGroupId(pluginDescriptor().getGroupId());
+        plugin.setArtifactId(pluginDescriptor().getArtifactId());
+
+        final String profileId = "extensionChanges";
+        Profile profile = new Profile();
+        profile.setId(profileId);
+        pom.addProfile(profile);
+        final Activation activation = new Activation();
+        profile.setActivation(activation);
+        final ActivationProperty ap = new ActivationProperty();
+        activation.setProperty(ap);
+        ap.setName(profileId);
+
+        build = new Build();
+        profile.setBuild(build);
+
+        PluginManagement pm = new PluginManagement();
+        build.setPluginManagement(pm);
+        plugin = new Plugin();
+        pm.addPlugin(plugin);
+        plugin.setGroupId(pluginDescriptor().getGroupId());
+        plugin.setArtifactId(pluginDescriptor().getArtifactId());
+
+        final StringBuilder sb = new StringBuilder();
+        for (PlatformMemberImpl m : members.values()) {
+            if (!m.config.isHidden() && m.config.isEnabled()) {
+                sb.append("quarkus-platform-bom:extension-changes@").append(m.generatedBomCoords().getArtifactId())
+                        .append(' ');
+            }
+        }
+        build.setDefaultGoal(sb.toString());
+
+        Path outputDir = buildDir.toPath().resolve("extension-changes");
+        final String prefix = pomXml.toPath().getParent().relativize(outputDir).toString();
+        for (PlatformMemberImpl m : members.values()) {
+            if (m.config.isHidden() || !m.config.isEnabled()) {
+                continue;
+            }
+            final PluginExecution exec = new PluginExecution();
+            plugin.addExecution(exec);
+            exec.setId(m.generatedBomCoords().getArtifactId());
+            exec.setPhase("process-resources");
+            exec.addGoal("extension-changes");
+            final Xpp3Dom config = new Xpp3Dom("configuration");
+            exec.setConfiguration(config);
+            config.addChild(textDomElement("bom",
+                    m.generatedBomCoords().getGroupId() + ":" + m.generatedBomCoords().getArtifactId() + ":"
+                            + getDependencyVersion(pom, m.descriptorCoords())));
+            config.addChild(
+                    textDomElement("outputFile",
+                            prefix + "/" + m.generatedBomCoords().getArtifactId() + "-extension-changes.json"));
+        }
+
+        persistPom(pom);
     }
 
     private void generateDepsToBuildModule(Model parentPom) throws MojoExecutionException {
@@ -1936,9 +2017,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
      * Returns either a property expression that should be used in place of the actual artifact version
      * or the actual artifact version, in case no property was found that could represent the version
      * 
-     * @param testArtifact test artifact coords
+     * @param artifactGroupId test artifact groupId
+     * @param version test artifact version
      * @return property expression or the actual version
-     * @throws MojoExecutionException in case of a failure
      */
     private String getTestArtifactVersion(String artifactGroupId, String version) {
         if (pomPropsByValues.isEmpty()) {
