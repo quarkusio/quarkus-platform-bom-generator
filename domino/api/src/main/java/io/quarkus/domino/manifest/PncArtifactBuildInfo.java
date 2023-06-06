@@ -91,6 +91,7 @@ public class PncArtifactBuildInfo {
         this.any = any;
     }
 
+    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
     public static class Content {
 
         private String id;

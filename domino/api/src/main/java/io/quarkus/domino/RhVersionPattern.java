@@ -14,7 +14,7 @@ public class RhVersionPattern {
         return RH_VERSION_PATTERN.matcher(version).matches();
     }
 
-    public static String ensureNoRhSuffix(String version) {
+    public static String ensureNoRhQualifier(String version) {
         return RH_VERSION_SUFFIX_PATTERN.matcher(version).replaceFirst("");
     }
 }
