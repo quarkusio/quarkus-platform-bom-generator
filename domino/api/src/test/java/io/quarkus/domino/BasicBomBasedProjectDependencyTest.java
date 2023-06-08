@@ -24,12 +24,27 @@ public class BasicBomBasedProjectDependencyTest {
         var testRepo = TestArtifactRepo.of(testRepoDir);
         artifactResolver = testRepo.getArtifactResolver();
 
-        var fooProject = TestProject.of("org.foo", "1.0")
+        var bazProject = TestProject.of("org.baz", "1.0")
+                .setRepoUrl("https://baz.org/lib")
+                .setTag("1.0")
+                .createMainModule("baz-lib")
+                .getProject();
+        testRepo.install(bazProject);
+
+        var fooProject10 = TestProject.of("org.foo", "1.0")
                 .setRepoUrl("https://foo.org/lib")
                 .setTag("1.0")
                 .createMainModule("foo-lib")
                 .getProject();
-        testRepo.install(fooProject);
+        testRepo.install(fooProject10);
+
+        var fooProject20 = TestProject.of("org.foo", "2.0")
+                .setRepoUrl("https://foo.org/lib")
+                .setTag("2.0")
+                .createMainModule("foo-lib")
+                .addDependency("org.baz", "baz-lib", "1.0")
+                .getProject();
+        testRepo.install(fooProject20);
 
         var barProject = TestProject.of("org.bar", "1.0")
                 .setRepoUrl("https://bar.org/lib")
@@ -47,10 +62,11 @@ public class BasicBomBasedProjectDependencyTest {
         acmeParent.addPomModule("acme-bom")
                 .addVersionConstraint("acme-common")
                 .addVersionConstraint("acme-lib")
+                .addVersionConstraint("org.foo", "foo-lib", "2.0")
                 .addVersionConstraint("org.bar", "bar-lib", "1.0");
         acmeParent.addModule("acme-common")
                 .importBom("acme-bom")
-                .addDependency("org.bar", "bar-lib", "1.0");
+                .addManagedDependency("org.bar", "bar-lib");
         acmeParent.addModule("acme-lib")
                 .importBom("acme-bom")
                 .addDependency("acme-common");
@@ -77,12 +93,11 @@ public class BasicBomBasedProjectDependencyTest {
                 .getReleaseCollection();
 
         assertThat(rc).isNotNull();
-        assertThat(rc.getReleases()).hasSize(3);
+        assertThat(rc.getReleases()).hasSize(4);
 
         var roots = rc.getRootReleaseRepos().iterator();
         assertThat(roots).hasNext();
         var release = roots.next();
-        assertThat(roots).isExhausted();
 
         assertThat(release.id()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://acme.org/lib", "1.0"));
         assertThat(release.getArtifacts()).hasSize(4);
@@ -97,12 +112,20 @@ public class BasicBomBasedProjectDependencyTest {
         assertThat(release.getArtifacts()).hasSize(2);
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.pom("org.bar", "bar-parent", "1.0"));
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.bar", "bar-lib", "1.0"));
+        assertThat(release.getDependencies()).isEmpty();
+
+        assertThat(roots).hasNext();
+        release = roots.next();
+        assertThat(roots).isExhausted();
+        assertThat(release.id()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://foo.org/lib", "2.0"));
+        assertThat(release.getArtifacts()).hasSize(1);
+        assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.foo", "foo-lib", "2.0"));
         assertThat(release.getDependencies()).hasSize(1);
 
         release = release.getDependencies().iterator().next();
-        assertThat(release.id()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://foo.org/lib", "1.0"));
+        assertThat(release.id()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://baz.org/lib", "1.0"));
         assertThat(release.getArtifacts()).hasSize(1);
-        assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.foo", "foo-lib", "1.0"));
+        assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.baz", "baz-lib", "1.0"));
         assertThat(release.getDependencies()).isEmpty();
     }
 
@@ -120,12 +143,11 @@ public class BasicBomBasedProjectDependencyTest {
                 .getReleaseCollection();
 
         assertThat(rc).isNotNull();
-        assertThat(rc.getReleases()).hasSize(2);
+        assertThat(rc.getReleases()).hasSize(3);
 
         var roots = rc.getRootReleaseRepos().iterator();
         assertThat(roots).hasNext();
         var release = roots.next();
-        assertThat(roots).isExhausted();
 
         assertThat(release.id()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://acme.org/lib", "1.0"));
         assertThat(release.getArtifacts()).hasSize(4);
@@ -140,6 +162,15 @@ public class BasicBomBasedProjectDependencyTest {
         assertThat(release.getArtifacts()).hasSize(2);
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.pom("org.bar", "bar-parent", "1.0"));
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.bar", "bar-lib", "1.0"));
+        assertThat(release.getDependencies()).isEmpty();
+
+        assertThat(roots).hasNext();
+        release = roots.next();
+        assertThat(roots).isExhausted();
+        assertThat(roots).isExhausted();
+        assertThat(release.id()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://foo.org/lib", "2.0"));
+        assertThat(release.getArtifacts()).hasSize(1);
+        assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.foo", "foo-lib", "2.0"));
         assertThat(release.getDependencies()).isEmpty();
     }
 

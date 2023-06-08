@@ -142,6 +142,10 @@ public class TestModule {
         return this;
     }
 
+    public TestModule addManagedDependency(String groupId, String artifactId) {
+        return addDependency(ArtifactCoords.jar(groupId, artifactId, null), JavaScopes.COMPILE);
+    }
+
     public TestModule addManagedDependency(TestModule module) {
         return addDependency(ArtifactCoords.jar(module.getGroupId(), module.getArtifactId(), null), JavaScopes.COMPILE);
     }

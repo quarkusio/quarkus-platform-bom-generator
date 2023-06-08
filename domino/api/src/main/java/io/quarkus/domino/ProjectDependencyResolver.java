@@ -537,6 +537,12 @@ public class ProjectDependencyResolver {
                     "Failed to determine project artifacts for the analysis: expected at least one of projectArtifacts, projectBom or projectDir to be configured");
         }
         result.sort(ArtifactCoordsComparator.getInstance());
+        if (log.isDebugEnabled()) {
+            log.debug("The following project artifacts will be processed:");
+            for (var c : result) {
+                log.debug(c.toCompactCoords());
+            }
+        }
         return result;
     }
 
@@ -1102,14 +1108,19 @@ public class ProjectDependencyResolver {
                 final String artifactId = resolveProperty(d.getArtifactId(), d, effectiveProps);
                 final String version = resolveProperty(d.getVersion(), d, effectiveProps);
                 if (groupId == null || version == null || artifactId == null) {
+                    log.warn("Failed to resolve coordindates of " + d.getGroupId() + ":" + d.getArtifactId() + ":"
+                            + d.getClassifier() +
+                            ":" + d.getType() + ":" + d.getVersion());
                     continue;
                 }
                 final ArtifactCoords bomCoords = ArtifactCoords.pom(groupId, artifactId, version);
                 if (!isExcluded(bomCoords)) {
                     final ResolvedDependency resolvedImport = addArtifactToBuild(bomCoords,
                             pomArtDep.resolved.getRepositories());
-                    pomArtDep.addBomImport(getOrCreateArtifactDep(resolvedImport));
-                    addImportedBomsAndParentPomToBuild(resolvedImport);
+                    if (resolvedImport != null) {
+                        pomArtDep.addBomImport(getOrCreateArtifactDep(resolvedImport));
+                        addImportedBomsAndParentPomToBuild(resolvedImport);
+                    }
                 }
             }
         }
@@ -1119,7 +1130,6 @@ public class ProjectDependencyResolver {
         final String value = PropertyResolver.resolvePropertyOrNull(expr, props);
         if (value == null) {
             log.warn("Failed to resolve property " + expr + " from " + dep);
-            throw new RuntimeException();
         }
         return value;
     }
