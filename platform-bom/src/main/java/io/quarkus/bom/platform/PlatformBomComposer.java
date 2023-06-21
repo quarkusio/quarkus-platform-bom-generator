@@ -162,8 +162,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                 final ProjectDependency effectiveDep = effectiveDep(d);
                 if (effectiveDep != null) {
                     if (releaseBuilder == null) {
-                        releaseBuilder = quarkusBomReleaseBuilders.computeIfAbsent(d.releaseId(),
-                                i -> ProjectRelease.builder(i));
+                        releaseBuilder = quarkusBomReleaseBuilders.computeIfAbsent(d.releaseId(), ProjectRelease::builder);
                     }
                     releaseBuilder.add(effectiveDep);
                     preferredDeps.put(effectiveDep.key(), effectiveDep);
@@ -205,7 +204,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                     platformDep = ProjectDependency.create(platformDep.releaseId(), new Dependency(platformDep.artifact(),
                             dep.dependency().getScope(), dep.dependency().isOptional(), dep.dependency().getExclusions()));
                 }
-                releaseBuilders.computeIfAbsent(platformDep.releaseId(), id -> ProjectRelease.builder(id)).add(platformDep);
+                releaseBuilders.computeIfAbsent(platformDep.releaseId(), ProjectRelease::builder).add(platformDep);
             });
 
             final Artifact generatedBomArtifact = member.generatedBomCoords();
@@ -336,13 +335,13 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             if (dep == null) {
                 continue;
             }
-            platformReleaseBuilders.computeIfAbsent(dep.releaseId(), id -> ProjectRelease.builder(id)).add(dep);
+            platformReleaseBuilders.computeIfAbsent(dep.releaseId(), ProjectRelease::builder).add(dep);
         }
 
         for (Collection<ProjectRelease> releases : extReleaseCollector.getOriginReleaseBuilders()) {
 
             if (releases.size() == 1) {
-                mergeExtensionDeps(releases.iterator().next(), null);
+                mergeExtensionDeps(releases.iterator().next());
                 continue;
             }
 
@@ -372,7 +371,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         }
 
         for (ProjectDependency dep : externalExtensionDeps.values()) {
-            platformReleaseBuilders.computeIfAbsent(dep.releaseId(), id -> ProjectRelease.builder(id)).add(dep);
+            platformReleaseBuilders.computeIfAbsent(dep.releaseId(), ProjectRelease::builder).add(dep);
         }
 
         // TODO align common not managed deps
@@ -542,7 +541,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             collectNotManagedDependencies(node.getChildren(), constraints, member, root);
             final Artifact a = node.getArtifact();
             final ArtifactKey key = ArtifactKey.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension());
-            if (a == null || constraints.contains(key)) {
+            if (constraints.contains(key)) {
                 continue;
             }
             commonNotManagedDeps.computeIfAbsent(key, k -> new HashMap<>())
@@ -571,17 +570,14 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         return enforced == null ? dep : ProjectDependency.create(dep.releaseId(), dep.dependency().setArtifact(enforced));
     }
 
-    private void mergeExtensionDeps(ProjectRelease release, Set<ArtifactKey> merged)
+    private void mergeExtensionDeps(ProjectRelease release)
             throws BomDecomposerException {
         for (ProjectDependency dep : release.dependencies()) {
-            if (merged != null && !merged.add(dep.key())) {
-                continue;
-            }
             // the origin may have changed in the release of the dependency
             final ProjectDependency previous = preferredDeps.get(dep.key());
             if (previous != null) {
                 ensurePreferredVersionUsed(null, previous, dep);
-                return;
+                continue;
             }
             addNonQuarkusDep(dep);
         }
