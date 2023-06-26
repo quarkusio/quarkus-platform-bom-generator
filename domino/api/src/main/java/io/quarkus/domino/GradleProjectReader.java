@@ -101,6 +101,7 @@ public class GradleProjectReader {
             out.println("    repositories {");
             out.println("        mavenCentral()");
             out.println("        mavenLocal()");
+            out.println("        maven { url 'https://repo.gradle.org/gradle/libs-releases' }");
             out.println("    }");
             out.println("    dependencies {");
             out.println(
