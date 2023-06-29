@@ -19,7 +19,7 @@ public class ExtensionCoordsFilterFactory {
         return new ExtensionCoordsFilter() {
             @Override
             public boolean isExcludeFromBom(Artifact a) {
-                if (member.originalBomCoords().getGroupId().equals(a.getGroupId())) {
+                if (member.getInputBom().getGroupId().equals(a.getGroupId())) {
                     return false;
                 }
                 if (!enableNonMemberQuarkiverseExtensions && a.getGroupId().startsWith("io.quarkiverse")) {

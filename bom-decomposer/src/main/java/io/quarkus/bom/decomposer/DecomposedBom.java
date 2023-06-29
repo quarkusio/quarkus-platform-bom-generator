@@ -27,6 +27,10 @@ public class DecomposedBom {
             return this;
         }
 
+        public Artifact getBomArtifact() {
+            return bomArtifact;
+        }
+
         public Builder addRelease(ProjectRelease release) {
             releases.computeIfAbsent(release.id().origin(), t -> new HashMap<>()).put(release.id().version(), release);
             return this;

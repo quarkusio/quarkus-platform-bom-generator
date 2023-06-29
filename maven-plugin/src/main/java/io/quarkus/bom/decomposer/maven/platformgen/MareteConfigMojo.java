@@ -250,12 +250,12 @@ public class MareteConfigMojo extends AbstractMojo {
         final ArtifactCoords universeBom = ArtifactCoords.fromString(platformConfig.getUniversal().getBom());
         expectedBoms.add(ga(universeBom));
         expectedBoms.add(ga(ArtifactCoords.fromString(platformConfig.getCore().getBom())));
-        expectedBoms.add(ga(platformConfig.getCore().getGeneratedBom(universeBom.getGroupId())));
+        expectedBoms.add(ga(platformConfig.getCore().getPlatformBom(universeBom.getGroupId())));
         for (PlatformMemberConfig member : platformConfig.getMembers()) {
             if (!member.isEnabled() || member.isHidden()) {
                 continue;
             }
-            expectedBoms.add(ga(member.getGeneratedBom(universeBom.getGroupId())));
+            expectedBoms.add(ga(member.getPlatformBom(universeBom.getGroupId())));
         }
         return expectedBoms;
     }

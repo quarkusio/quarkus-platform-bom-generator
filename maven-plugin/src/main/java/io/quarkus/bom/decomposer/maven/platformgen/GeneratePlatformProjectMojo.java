@@ -153,7 +153,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     File updatedPom;
 
     @Parameter(property = "recordUpdatedBoms")
-    private boolean recordUpdatedBoms;
+    boolean recordUpdatedBoms;
 
     Artifact universalBom;
     MavenArtifactResolver nonWorkspaceResolver;
@@ -195,10 +195,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         return goals.contains("clean");
     }
 
-    private boolean isGenerateDominoCliConfig() {
-        return Boolean.parseBoolean(project.getProperties().getProperty("generate-domino-cli-config"));
-    }
-
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
 
@@ -232,10 +228,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         parent.setRelativePath(pomXml.toPath().getParent().relativize(project.getFile().getParentFile().toPath()).toString());
         pom.setParent(parent);
 
-        pom.getProperties().setProperty(PLATFORM_KEY_PROP, releaseConfig().getPlatformKey());
-        pom.getProperties().setProperty(PLATFORM_STREAM_PROP, releaseConfig().getStream());
-        pom.getProperties().setProperty(PLATFORM_RELEASE_PROP, releaseConfig().getVersion());
-
         final Build build = new Build();
         pom.setBuild(build);
         final PluginManagement pm = new PluginManagement();
@@ -255,7 +247,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         for (PlatformMemberImpl member : members.values()) {
             generatePlatformDescriptorModule(member.descriptorCoords(), member.baseModel, true,
-                    quarkusCore.originalBomCoords().equals(member.originalBomCoords()),
+                    quarkusCore.getInputBom().equals(member.getInputBom()),
                     platformConfig.getAttachedMavenPlugin(), member);
             generatePlatformPropertiesModule(member, true);
             persistPom(member.baseModel);
@@ -276,53 +268,66 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         generateExtensionChangesModule(pom);
         addReleaseProfile(pom);
+
+        pom.getProperties().setProperty(PLATFORM_KEY_PROP, releaseConfig().getPlatformKey());
+        pom.getProperties().setProperty(PLATFORM_STREAM_PROP, releaseConfig().getStream());
+        pom.getProperties().setProperty(PLATFORM_RELEASE_PROP, releaseConfig().getVersion());
+
         persistPom(pom);
 
         recordUpdatedBoms();
+        generateBomReports();
+        generateDominoCliConfig();
+    }
 
-        if (platformConfig.isGenerateBomReports() || platformConfig.getGenerateBomReportsZip() != null) {
-            final Path reportsOutputDir = reportsDir.toPath();
-            // reset the resolver to pick up all the generated platform modules
-            //resetResolver();
-            try (ReportIndexPageGenerator index = new ReportIndexPageGenerator(
-                    reportsOutputDir.resolve("index.html"))) {
+    private void generateBomReports() throws MojoExecutionException {
+        if (!(platformConfig.isGenerateBomReports() || platformConfig.getGenerateBomReportsZip() != null)) {
+            return;
+        }
+        final Path reportsOutputDir = reportsDir.toPath();
+        // reset the resolver to pick up all the generated platform modules
+        //resetResolver();
+        try (ReportIndexPageGenerator index = new ReportIndexPageGenerator(
+                reportsOutputDir.resolve("index.html"))) {
 
-                final Path releasesReport = reportsOutputDir.resolve("main").resolve("generated-releases.html");
-                generateReleasesReport(universalGeneratedBom, releasesReport);
-                index.universalBom(universalPlatformBomXml.toUri().toURL(), universalGeneratedBom, releasesReport);
+            final Path releasesReport = reportsOutputDir.resolve("main").resolve("generated-releases.html");
+            generateReleasesReport(universalGeneratedBom, releasesReport);
+            index.universalBom(universalPlatformBomXml.toUri().toURL(), universalGeneratedBom, releasesReport);
 
-                for (PlatformMemberImpl member : members.values()) {
-                    if (member.originalBomCoords() == null) {
-                        continue;
-                    }
-                    generateBomReports(member.originalBom, member.generatedBom,
-                            reportsOutputDir.resolve(member.config().getName().toLowerCase()), index,
-                            member.generatedPomFile, artifactResolver());
+            for (PlatformMemberImpl member : members.values()) {
+                if (member.getInputBom() == null) {
+                    continue;
                 }
-            } catch (Exception e) {
-                throw new MojoExecutionException("Failed to generate platform member BOM reports", e);
+                generateBomReports(member.originalBom, member.generatedBom,
+                        reportsOutputDir.resolve(member.config().getName().toLowerCase()), index,
+                        member.generatedPomFile, artifactResolver());
             }
-
-            if (platformConfig.getGenerateBomReportsZip() != null) {
-                Path zip = Paths.get(platformConfig.getGenerateBomReportsZip());
-                if (!zip.isAbsolute()) {
-                    zip = reportsOutputDir.getParent().resolve(zip);
-                }
-                try {
-                    Files.createDirectories(zip.getParent());
-                    ZipUtils.zip(reportsOutputDir, zip);
-                } catch (Exception e) {
-                    throw new MojoExecutionException("Failed to ZIP platform member BOM reports", e);
-                }
-            }
+        } catch (Exception e) {
+            throw new MojoExecutionException("Failed to generate platform member BOM reports", e);
         }
 
-        if (isGenerateDominoCliConfig()) {
-            generateDominoCliConfig();
+        if (platformConfig.getGenerateBomReportsZip() != null) {
+            Path zip = Paths.get(platformConfig.getGenerateBomReportsZip());
+            if (!zip.isAbsolute()) {
+                zip = reportsOutputDir.getParent().resolve(zip);
+            }
+            try {
+                Files.createDirectories(zip.getParent());
+                ZipUtils.zip(reportsOutputDir, zip);
+            } catch (Exception e) {
+                throw new MojoExecutionException("Failed to ZIP platform member BOM reports", e);
+            }
         }
     }
 
+    private boolean isGenerateBomReports() {
+        return platformConfig.isGenerateBomReports() || platformConfig.getGenerateBomReportsZip() != null;
+    }
+
     private void generateDominoCliConfig() throws MojoExecutionException {
+        if (!Boolean.parseBoolean(project.getProperties().getProperty("generate-domino-cli-config"))) {
+            return;
+        }
         final Path dominoDir = Path.of(DominoInfo.CONFIG_DIR_NAME).normalize().toAbsolutePath().resolve("manifest");
         IoUtils.recursiveDelete(dominoDir);
         try {
@@ -334,14 +339,15 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             if (!member.config().isEnabled() || member.config().isHidden()) {
                 continue;
             }
-            getLog().info("Generating Domino CLI SBOM generator config for " + member.generatedBomCoords().getArtifactId());
+            getLog().info(
+                    "Generating Domino CLI SBOM generator config for " + member.getGeneratedPlatformBom().getArtifactId());
 
             final ProjectDependencyConfig.Mutable dominoConfig = ProjectDependencyConfig.builder()
                     .setProjectBom(PlatformArtifacts.ensureBomArtifact(member.descriptorCoords()))
                     .setProductInfo(SbomConfig.ProductConfig.toProductInfo(getProductInfo(member)));
 
             if (!this.quarkusCore.descriptorCoords().equals(member.descriptorCoords())) {
-                var quarkusBom = quarkusCore.generatedBomCoords();
+                var quarkusBom = quarkusCore.getGeneratedPlatformBom();
                 dominoConfig.setNonProjectBoms(List.of(ArtifactCoords.pom(quarkusBom.getGroupId(),
                         quarkusBom.getArtifactId(), quarkusBom.getVersion())));
             }
@@ -453,7 +459,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
             try {
                 dominoConfig.build()
-                        .persist(dominoDir.resolve(member.generatedBomCoords().getArtifactId() + "-config.json"));
+                        .persist(dominoDir.resolve(member.getGeneratedPlatformBom().getArtifactId() + "-config.json"));
             } catch (IOException e) {
                 throw new MojoExecutionException("Failed to persist Domino config", e);
             }
@@ -462,7 +468,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
     private static boolean isExtensionCandidate(Artifact a, Collection<String> extensionGroupIds,
             Collection<ArtifactCoordsPattern> excludePatterns) {
-        if (!a.getExtension().equals("jar")
+        if (!a.getExtension().equals(ArtifactCoords.TYPE_JAR)
                 || "javadoc".equals(a.getClassifier())
                 || "tests".equals(a.getClassifier())
                 || "sources".equals(a.getClassifier())
@@ -528,7 +534,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final StringBuilder sb = new StringBuilder();
         for (PlatformMemberImpl m : members.values()) {
             if (!m.config.isHidden() && m.config.isEnabled()) {
-                sb.append("quarkus-platform-bom:extension-changes@").append(m.generatedBomCoords().getArtifactId())
+                sb.append("quarkus-platform-bom:extension-changes@").append(m.getConfiguredPlatformBom().getArtifactId())
                         .append(' ');
             }
         }
@@ -542,17 +548,17 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
             final PluginExecution exec = new PluginExecution();
             plugin.addExecution(exec);
-            exec.setId(m.generatedBomCoords().getArtifactId());
+            exec.setId(m.getConfiguredPlatformBom().getArtifactId());
             exec.setPhase("process-resources");
             exec.addGoal("extension-changes");
             final Xpp3Dom config = new Xpp3Dom("configuration");
             exec.setConfiguration(config);
             config.addChild(textDomElement("bom",
-                    m.generatedBomCoords().getGroupId() + ":" + m.generatedBomCoords().getArtifactId() + ":"
+                    m.getConfiguredPlatformBom().getGroupId() + ":" + m.getConfiguredPlatformBom().getArtifactId() + ":"
                             + getDependencyVersion(pom, m.descriptorCoords())));
             config.addChild(
                     textDomElement("outputFile",
-                            prefix + "/" + m.generatedBomCoords().getArtifactId() + "-extension-changes.json"));
+                            prefix + "/" + m.getConfiguredPlatformBom().getArtifactId() + "-extension-changes.json"));
         }
 
         persistPom(pom);
@@ -616,7 +622,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final StringBuilder sb = new StringBuilder();
         for (PlatformMemberImpl m : members.values()) {
             if (!m.config.isHidden() && m.config.isEnabled()) {
-                sb.append("quarkus-platform-bom:dependencies-to-build@").append(m.generatedBomCoords().getArtifactId())
+                sb.append("quarkus-platform-bom:dependencies-to-build@").append(m.getConfiguredPlatformBom().getArtifactId())
                         .append(' ');
             }
         }
@@ -630,16 +636,17 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
             final PluginExecution exec = new PluginExecution();
             plugin.addExecution(exec);
-            exec.setId(m.generatedBomCoords().getArtifactId());
+            exec.setId(m.getConfiguredPlatformBom().getArtifactId());
             exec.setPhase("process-resources");
             exec.addGoal("dependencies-to-build");
             final Xpp3Dom config = new Xpp3Dom("configuration");
             exec.setConfiguration(config);
             config.addChild(textDomElement("bom",
-                    m.generatedBomCoords().getGroupId() + ":" + m.generatedBomCoords().getArtifactId() + ":"
+                    m.getConfiguredPlatformBom().getGroupId() + ":" + m.getConfiguredPlatformBom().getArtifactId() + ":"
                             + getDependencyVersion(pom, m.descriptorCoords())));
             config.addChild(
-                    textDomElement("outputFile", prefix + "/" + m.generatedBomCoords().getArtifactId() + outputFileSuffix));
+                    textDomElement("outputFile",
+                            prefix + "/" + m.getConfiguredPlatformBom().getArtifactId() + outputFileSuffix));
 
             final SbomConfig sbomConfig = forSbom ? m.config().getSbom() : null;
             if (sbomConfig != null) {
@@ -755,13 +762,13 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             productConfig.setType("FRAMEWORK");
         }
         if (isBlank(productConfig.getGroup())) {
-            productConfig.setGroup(member.generatedBomCoords().getGroupId());
+            productConfig.setGroup(member.getGeneratedPlatformBom().getGroupId());
         }
         if (isBlank(productConfig.getName())) {
-            productConfig.setName(member.generatedBomCoords().getArtifactId());
+            productConfig.setName(member.getGeneratedPlatformBom().getArtifactId());
         }
         if (isBlank(productConfig.getVersion())) {
-            productConfig.setVersion(member.generatedBomCoords().getVersion());
+            productConfig.setVersion(member.getGeneratedPlatformBom().getVersion());
         }
         return productConfig;
     }
@@ -899,7 +906,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private void updatePreviousMemberRelease(PlatformMemberImpl member, int membersIndex) throws MojoExecutionException {
-        if (!member.bomChanged) {
+        if (member.bomChanged == null || !member.bomChanged) {
             return;
         }
         final int memberIndex = pomLineContaining("<name>" + member.config().getName() + "</name>", membersIndex);
@@ -925,9 +932,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
             buf.append(l.charAt(i));
         }
-        buf.append("    <lastDetectedBomUpdate>").append(member.generatedBomCoords().getGroupId()).append(":")
-                .append(member.generatedBomCoords().getArtifactId()).append(":")
-                .append(member.generatedBomCoords().getVersion()).append("</lastDetectedBomUpdate>");
+        buf.append("    <lastDetectedBomUpdate>").append(member.getGeneratedPlatformBom().getGroupId()).append(":")
+                .append(member.getGeneratedPlatformBom().getArtifactId()).append(":")
+                .append(member.getGeneratedPlatformBom().getVersion()).append("</lastDetectedBomUpdate>");
         int prevIndex = pomLineContaining("<lastDetectedBomUpdate>", releaseIndex, releaseEnd);
         if (prevIndex < 0) {
             pomLines().add(releaseIndex + 1, buf.toString());
@@ -977,8 +984,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         // MOVE RESOURCES
-        try {
-            Files.list(javaSources).forEach(p -> {
+        try (var stream = Files.list(javaSources)) {
+            stream.forEach(p -> {
                 if (p.getFileName().toString().equals("io")) {
                     return;
                 }
@@ -1043,7 +1050,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             dm = new DependencyManagement();
             pom.setDependencyManagement(dm);
         }
-        final Artifact quarkusBom = quarkusCore.generatedBomCoords();
+        final Artifact quarkusBom = quarkusCore.getGeneratedPlatformBom();
         final Dependency quarkusBomImport = new Dependency();
         quarkusBomImport.setGroupId(quarkusBom.getGroupId());
         quarkusBomImport.setArtifactId(quarkusBom.getArtifactId());
@@ -1243,7 +1250,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             dm = new DependencyManagement();
             pom.setDependencyManagement(dm);
         }
-        final Artifact quarkusBom = quarkusCore.generatedBomCoords();
+        final Artifact quarkusBom = quarkusCore.getGeneratedPlatformBom();
         final Dependency quarkusBomImport = new Dependency();
         quarkusBomImport.setGroupId(quarkusBom.getGroupId());
         quarkusBomImport.setArtifactId(quarkusBom.getArtifactId());
@@ -1332,7 +1339,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final StringBuilder sb = new StringBuilder();
         for (PlatformMemberImpl m : members.values()) {
             if (!m.config.isHidden() && m.config.isEnabled()) {
-                sb.append("quarkus-platform-bom:generate-maven-repo-zip@").append(m.generatedBomCoords().getArtifactId())
+                sb.append("quarkus-platform-bom:generate-maven-repo-zip@").append(m.getConfiguredPlatformBom().getArtifactId())
                         .append(' ');
             }
         }
@@ -1358,24 +1365,24 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
             final PluginExecution exec = new PluginExecution();
             plugin.addExecution(exec);
-            exec.setId(m.generatedBomCoords().getArtifactId());
+            exec.setId(m.getConfiguredPlatformBom().getArtifactId());
             exec.setPhase("process-resources");
             exec.addGoal("generate-maven-repo-zip");
 
             Xpp3Dom e = new Xpp3Dom("generateMavenRepoZip");
 
             final Xpp3Dom bom = new Xpp3Dom("bom");
-            bom.setValue(m.generatedBomCoords().toString());
+            bom.setValue(m.getGeneratedPlatformBom().toString());
             e.addChild(bom);
 
             if (generateMavenRepoZip.getRepositoryDir() != null) {
                 e.addChild(textDomElement("repositoryDir", generateMavenRepoZip.getRepositoryDir()));
             }
 
-            final Path repoDir = repoOutputDir.resolve(m.generatedBomCoords().getArtifactId());
+            final Path repoDir = repoOutputDir.resolve(m.getConfiguredPlatformBom().getArtifactId());
             e.addChild(textDomElement("repositoryDir", repoDir.toString()));
             e.addChild(textDomElement("zipLocation",
-                    repoDir + "/" + m.generatedBomCoords().getArtifactId() + "-maven-repo.zip"));
+                    repoDir + "/" + m.getConfiguredPlatformBom().getArtifactId() + "-maven-repo.zip"));
 
             if (generateMavenRepoZip.getIncludedVersionsPattern() != null) {
                 e.addChild(textDomElement("includedVersionsPattern", generateMavenRepoZip.getIncludedVersionsPattern()));
@@ -1427,16 +1434,16 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
     private void generateMemberModule(PlatformMemberImpl member, Model parentPom) throws MojoExecutionException {
 
-        final String moduleName = getArtifactIdBase(member.generatedBomCoords().getArtifactId());
+        final String moduleName = getArtifactIdBase(member.getGeneratedPlatformBom().getArtifactId());
 
         final Model pom = newModel();
 
-        if (!member.generatedBomCoords().getGroupId().equals(project.getGroupId())) {
-            pom.setGroupId(member.generatedBomCoords().getGroupId());
+        if (!member.getGeneratedPlatformBom().getGroupId().equals(project.getGroupId())) {
+            pom.setGroupId(member.getGeneratedPlatformBom().getGroupId());
         }
         pom.setArtifactId(moduleName + "-parent");
-        if (!member.generatedBomCoords().getVersion().equals(project.getVersion())) {
-            pom.setVersion(member.generatedBomCoords().getVersion());
+        if (!member.getGeneratedPlatformBom().getVersion().equals(project.getVersion())) {
+            pom.setVersion(member.getGeneratedPlatformBom().getVersion());
         }
 
         pom.setPackaging(ArtifactCoords.TYPE_POM);
@@ -1461,7 +1468,11 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             generateMemberIntegrationTestsModule(member);
         }
 
-        if (member.config().isHidden()) {
+        if (member.config().isHidden()
+                || platformConfig.getRelease() != null
+                        && platformConfig.getRelease().isOnlyChangedMembers()
+                        && member.getGeneratedPlatformBom().equals(member.previousLastUpdatedBom())) {
+            getLog().info("Excluding " + member.getGeneratedPlatformBom() + " from the upcoming release");
             Utils.skipInstallAndDeploy(pom);
         }
         persistPom(pom);
@@ -1491,6 +1502,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         member.generatedPomFile = platformBomXml;
 
         if (recordUpdatedBoms) {
+            isChangedSinceLastRelease(member);
+        }
+    }
+
+    private boolean isChangedSinceLastRelease(PlatformMemberImpl member) throws MojoExecutionException {
+        if (member.bomChanged == null) {
             final Artifact prevBomCoords = member.previousLastUpdatedBom();
             if (prevBomCoords == null) {
                 member.bomChanged = true;
@@ -1507,27 +1524,27 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                     member.bomChanged = true;
                 } else {
                     final Set<ArtifactCoords> prevArtifacts = new HashSet<>(prevDeps.size());
-                    for (int i = 0; i < prevDeps.size(); ++i) {
-                        final org.eclipse.aether.graph.Dependency d = prevDeps.get(i);
-                        final Artifact a = d.getArtifact();
-                        if (!isIrrelevantConstraint(a)) {
-                            prevArtifacts.add(toCoords(a));
+                    for (var d : prevDeps) {
+                        if (isMeaningfulClasspathConstraint(d.getArtifact())) {
+                            prevArtifacts.add(toCoords(d.getArtifact()));
                         }
                     }
 
                     final Set<ArtifactCoords> currentArtifacts = new HashSet<>(prevArtifacts.size());
                     for (ProjectRelease r : member.generatedBom.releases()) {
                         for (ProjectDependency d : r.dependencies()) {
-                            final Artifact a = d.artifact();
-                            if (!isIrrelevantConstraint(a)) {
-                                currentArtifacts.add(toCoords(a));
+                            if (isMeaningfulClasspathConstraint(d.artifact())) {
+                                currentArtifacts.add(toCoords(d.artifact()));
                             }
                         }
                     }
                     member.bomChanged = !prevArtifacts.equals(currentArtifacts);
                 }
+            } else {
+                member.bomChanged = false;
             }
         }
+        return member.bomChanged;
     }
 
     private Profile getGeneratedBomReleaseProfile() {
@@ -1578,12 +1595,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         return ArtifactCoords.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(), a.getVersion());
     }
 
-    private static boolean isIrrelevantConstraint(final Artifact a) {
-        return !a.getExtension().equals(ArtifactCoords.TYPE_JAR)
-                || PlatformArtifacts.isCatalogArtifactId(a.getArtifactId())
-                || a.getArtifactId().endsWith(Constants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX)
-                || "sources".equals(a.getClassifier())
-                || "javadoc".equals(a.getClassifier());
+    private static boolean isMeaningfulClasspathConstraint(final Artifact a) {
+        return a.getExtension().equals(ArtifactCoords.TYPE_JAR)
+                && !(PlatformArtifacts.isCatalogArtifactId(a.getArtifactId())
+                        || a.getArtifactId().endsWith(Constants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX)
+                        || "sources".equals(a.getClassifier())
+                        || "javadoc".equals(a.getClassifier()));
     }
 
     private List<String> pomLines() {
@@ -1996,7 +2013,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
         Plugin plugin = new Plugin();
         build.addPlugin(plugin);
-        plugin.setGroupId(quarkusCore.originalBomCoords().getGroupId());
+        plugin.setGroupId(quarkusCore.getInputBom().getGroupId());
         plugin.setArtifactId("quarkus-maven-plugin");
         plugin.setVersion(quarkusCore.getVersionProperty());
         PluginExecution e = new PluginExecution();
@@ -2273,12 +2290,13 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         // to make the descriptor pom resolvable during the platform BOM generation, we need to persist the generated POMs
         persistPom(pom);
         persistPom(parentPom);
-        generateUniversalPlatformBomModule(pom);
+        var generatedBom = generateUniversalPlatformBomModule(pom);
 
         if (platformConfig.getUniversal().isGeneratePlatformProperties()) {
             final PlatformMemberConfig tmpConfig = new PlatformMemberConfig();
             tmpConfig.setBom(platformConfig.getUniversal().getBom());
             final PlatformMemberImpl tmp = new PlatformMemberImpl(tmpConfig);
+            tmp.setAlignedDecomposedBom(generatedBom);
             tmp.baseModel = pom;
             generatePlatformPropertiesModule(tmp, false);
         }
@@ -2354,7 +2372,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 platformKey.setValue("${" + PLATFORM_KEY_PROP + "}");
                 for (PlatformMember m : members.values()) {
                     if (!m.config().isHidden()) {
-                        addMemberDescriptorConfig(pom, membersConfig, m.stackDescriptorCoords());
+                        addMemberDescriptorConfig(pom, membersConfig, m.descriptorCoords());
                     }
                 }
             }
@@ -2364,7 +2382,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         if (copyQuarkusCoreMetadata) {
             // copy the quarkus-bom metadata
             overrides = CatalogMapperHelper.mapper().createObjectNode();
-            final Artifact bom = quarkusCore.originalBomCoords();
+            final Artifact bom = quarkusCore.getInputBom();
             final Path jsonPath = artifactResolver().resolve(new DefaultArtifact(bom.getGroupId(),
                     bom.getArtifactId() + Constants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX, bom.getVersion(), "json",
                     bom.getVersion())).getArtifact().getFile().toPath();
@@ -2405,8 +2423,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         if (member != null) {
             // Update last-bom-update
-            pom.getProperties().setProperty(MEMBER_LAST_BOM_UPDATE_PROP, member.lastUpdatedBom().getGroupId() + ":"
-                    + member.lastUpdatedBom().getArtifactId() + ":" + member.lastUpdatedBom().getVersion());
+            var lastUpdatedBom = member.lastUpdatedBom();
+            pom.getProperties().setProperty(MEMBER_LAST_BOM_UPDATE_PROP, lastUpdatedBom.getGroupId() + ":"
+                    + lastUpdatedBom.getArtifactId() + ":" + lastUpdatedBom.getVersion());
             if (overrides == null) {
                 overrides = CatalogMapperHelper.mapper().createObjectNode();
             }
@@ -2620,18 +2639,18 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                     : member;
             List<org.eclipse.aether.graph.Dependency> originalDm;
             try {
-                originalDm = nonWorkspaceResolver().resolveDescriptor(srcMember.originalBomCoords()).getManagedDependencies();
+                originalDm = nonWorkspaceResolver().resolveDescriptor(srcMember.getInputBom()).getManagedDependencies();
             } catch (BootstrapMavenException e) {
-                throw new MojoExecutionException("Failed to resolve " + member.originalBomCoords(), e);
+                throw new MojoExecutionException("Failed to resolve " + member.getInputBom(), e);
             }
             final Properties tmp = new Properties();
             for (org.eclipse.aether.graph.Dependency d : originalDm) {
                 final Artifact a = d.getArtifact();
                 if (a.getExtension().equals("properties")
                         && a.getArtifactId().endsWith(Constants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX)
-                        && a.getArtifactId().startsWith(srcMember.originalBomCoords().getArtifactId())
-                        && a.getGroupId().equals(srcMember.originalBomCoords().getGroupId())
-                        && a.getVersion().equals(srcMember.originalBomCoords().getVersion())) {
+                        && a.getArtifactId().startsWith(srcMember.getInputBom().getArtifactId())
+                        && a.getGroupId().equals(srcMember.getInputBom().getGroupId())
+                        && a.getVersion().equals(srcMember.getInputBom().getVersion())) {
                     try (BufferedReader reader = Files
                             .newBufferedReader(nonWorkspaceResolver.resolve(a).getArtifact().getFile().toPath())) {
                         tmp.load(reader);
@@ -2668,8 +2687,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 if (buf.length() > 0) {
                     buf.append(",");
                 }
-                membersConfig.addChild(textDomElement("member", m.stackDescriptorCoords().toString()));
-                final ArtifactCoords bomCoords = PlatformArtifacts.ensureBomArtifact(m.stackDescriptorCoords());
+                membersConfig.addChild(textDomElement("member", m.descriptorCoords().toString()));
+                final ArtifactCoords bomCoords = PlatformArtifacts.ensureBomArtifact(m.descriptorCoords());
                 if (bomCoords.getGroupId().equals(project.getGroupId())
                         && bomCoords.getVersion().equals(project.getVersion())) {
                     buf.append("${project.groupId}:").append(bomCoords.getArtifactId()).append("::pom:${project.version}");
@@ -2735,7 +2754,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         return pluginDescr == null ? pluginDescr = (PluginDescriptor) getPluginContext().get("pluginDescriptor") : pluginDescr;
     }
 
-    private void generateUniversalPlatformBomModule(Model parentPom) throws MojoExecutionException {
+    private DecomposedBom generateUniversalPlatformBomModule(Model parentPom) throws MojoExecutionException {
 
         final Artifact bomArtifact = getUniversalBomArtifact();
         final PlatformBomGeneratorConfig bomGen = platformConfig.getBomGenerator();
@@ -2826,6 +2845,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 universalBomDepKeys.add(d.key());
             }
         }
+        return universalGeneratedBom;
     }
 
     private Artifact getUniversalBomArtifact() {
@@ -2869,7 +2889,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 tmp.setStream(microDot < 0 ? projectVersion : projectVersion.substring(0, microDot));
             }
             if (tmp.getVersion() == null) {
-                tmp.setVersion(project.getVersion());
+                tmp.setVersion(quarkusCore.getGeneratedPlatformBom().getVersion());
             }
             platformReleaseConfig = tmp;
         }
@@ -2911,7 +2931,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         final PlatformMemberConfig config;
         private final Artifact originalBomCoords;
-        private Artifact generatedBomCoords;
+        private Artifact configuredPlatformBom;
         private ArtifactCoords descriptorCoords;
         private ArtifactCoords propertiesCoords;
         private ArtifactCoords stackDescriptorCoords;
@@ -2923,7 +2943,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         private Path generatedPomFile;
         private String versionProperty;
         private Artifact prevBomRelease;
-        private boolean bomChanged;
+        private Boolean bomChanged;
         private List<org.eclipse.aether.graph.Dependency> inputConstraints;
 
         PlatformMemberImpl(PlatformMemberConfig config) {
@@ -2941,8 +2961,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             if (!config.getExtensionGroupIds().isEmpty()) {
                 return config.getExtensionGroupIds();
             }
-            if (originalBomCoords() != null) {
-                return List.of(originalBomCoords().getGroupId());
+            if (getInputBom() != null) {
+                return List.of(getInputBom().getGroupId());
             }
             return List.of();
         }
@@ -2968,25 +2988,37 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         @Override
         public Artifact lastUpdatedBom() {
-            return bomChanged || previousLastUpdatedBom() == null ? generatedBomCoords() : previousLastUpdatedBom();
+            return bomChanged != null && bomChanged || previousLastUpdatedBom() == null ? getGeneratedPlatformBom()
+                    : previousLastUpdatedBom();
         }
 
         @Override
-        public Artifact originalBomCoords() {
+        public Artifact getInputBom() {
             return originalBomCoords;
         }
 
         @Override
-        public Artifact generatedBomCoords() {
-            return generatedBomCoords == null
-                    ? generatedBomCoords = toPomArtifact(config.getGeneratedBom(getUniversalBomArtifact().getGroupId()))
-                    : generatedBomCoords;
+        public Artifact getConfiguredPlatformBom() {
+            return configuredPlatformBom == null
+                    ? configuredPlatformBom = toPomArtifact(config.getPlatformBom(getUniversalBomArtifact().getGroupId()))
+                    : configuredPlatformBom;
+        }
+
+        @Override
+        public Artifact getGeneratedPlatformBom() {
+            return this.getAlignedDecomposedBom().bomArtifact();
+        }
+
+        @Override
+        public boolean isBumpPlatformBomVersionOnChange() {
+            return platformConfig.getRelease() != null
+                    && platformConfig.getRelease().isOnlyChangedMembers();
         }
 
         @Override
         public ArtifactKey key() {
             if (key == null) {
-                key = originalBomCoords() == null ? toKey(generatedBomCoords()) : toKey(originalBomCoords());
+                key = getInputBom() == null ? toKey(getConfiguredPlatformBom()) : toKey(getInputBom());
             }
             return key;
         }
@@ -2995,14 +3027,14 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         public List<org.eclipse.aether.graph.Dependency> inputConstraints() {
             if (inputConstraints == null) {
                 final List<org.eclipse.aether.graph.Dependency> dm = config.getDependencyManagement().toAetherDependencies();
-                if (originalBomCoords() == null) {
+                if (getInputBom() == null) {
                     inputConstraints = dm;
                 } else if (dm.isEmpty()) {
                     inputConstraints = Collections
-                            .singletonList(new org.eclipse.aether.graph.Dependency(originalBomCoords(), "import"));
+                            .singletonList(new org.eclipse.aether.graph.Dependency(getInputBom(), "import"));
                 } else {
-                    if (originalBomCoords() != null) {
-                        dm.add(new org.eclipse.aether.graph.Dependency(originalBomCoords(), "import"));
+                    if (getInputBom() != null) {
+                        dm.add(new org.eclipse.aether.graph.Dependency(getInputBom(), "import"));
                     }
                     inputConstraints = dm;
                 }
@@ -3011,39 +3043,29 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         @Override
-        public ArtifactCoords stackDescriptorCoords() {
-            if (stackDescriptorCoords != null) {
-                return stackDescriptorCoords;
-            }
-            final String currentCoords = config.getRelease().getNext();
-            final String currentVersion = ArtifactCoords.fromString(currentCoords).getVersion();
-            return stackDescriptorCoords = ArtifactCoords.of(generatedBomCoords().getGroupId(),
-                    generatedBomCoords().getArtifactId() + BootstrapConstants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX,
-                    currentVersion, "json", currentVersion);
-        }
-
-        @Override
         public ArtifactCoords descriptorCoords() {
             return descriptorCoords == null
-                    ? descriptorCoords = ArtifactCoords.of(generatedBomCoords().getGroupId(),
-                            generatedBomCoords().getArtifactId() + BootstrapConstants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX,
-                            generatedBomCoords().getVersion(), "json", generatedBomCoords().getVersion())
+                    ? descriptorCoords = ArtifactCoords.of(getGeneratedPlatformBom().getGroupId(),
+                            getGeneratedPlatformBom().getArtifactId()
+                                    + BootstrapConstants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX,
+                            getGeneratedPlatformBom().getVersion(), "json", getGeneratedPlatformBom().getVersion())
                     : descriptorCoords;
         }
 
         @Override
         public ArtifactCoords propertiesCoords() {
             return propertiesCoords == null
-                    ? propertiesCoords = ArtifactCoords.of(generatedBomCoords().getGroupId(),
-                            generatedBomCoords().getArtifactId() + BootstrapConstants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX,
-                            null, "properties", generatedBomCoords().getVersion())
+                    ? propertiesCoords = ArtifactCoords.of(getGeneratedPlatformBom().getGroupId(),
+                            getGeneratedPlatformBom().getArtifactId()
+                                    + BootstrapConstants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX,
+                            null, "properties", getGeneratedPlatformBom().getVersion())
                     : propertiesCoords;
         }
 
         @Override
         public String getVersionProperty() {
             if (versionProperty == null) {
-                final Artifact quarkusBom = quarkusCore.originalBomCoords();
+                final Artifact quarkusBom = quarkusCore.getInputBom();
                 versionProperty = getTestArtifactVersion(quarkusBom.getGroupId(), quarkusBom.getVersion());
                 if (versionProperty.equals(quarkusBom.getVersion())) {
                     final String ga = quarkusBom.getGroupId() + ":" + quarkusBom.getArtifactId() + ":";
