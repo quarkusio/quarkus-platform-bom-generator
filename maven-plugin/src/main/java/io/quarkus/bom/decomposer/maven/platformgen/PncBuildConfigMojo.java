@@ -60,7 +60,7 @@ public class PncBuildConfigMojo extends AbstractMojo {
     private void configureDefaultRepoParams(final JsonNode repositoryGeneration) throws MojoExecutionException {
         final JsonNode defaultParameters = getOrCreateNode(repositoryGeneration, PARAMETERS);
         setIfNotConfigured(defaultParameters, BOM_GAVS, () -> {
-            var c = platformConfig.getCore().getGeneratedBom(platformConfig.getRelease().getPlatformKey());
+            var c = platformConfig.getCore().getPlatformBom(platformConfig.getRelease().getPlatformKey());
             return c.getGroupId() + ':' + c.getArtifactId() + ':' + c.getVersion();
         });
         setIfNotConfigured(defaultParameters, "resolveIncludes", "*:*:*redhat-*");
@@ -110,7 +110,7 @@ public class PncBuildConfigMojo extends AbstractMojo {
             if (!member.isEnabled() || member.isHidden()) {
                 continue;
             }
-            final ArtifactCoords memberBom = member.getGeneratedBom(defaultGroupId);
+            final ArtifactCoords memberBom = member.getPlatformBom(defaultGroupId);
             final JsonNode step = getOrCreateItemWithElement(steps,
                     memberBom.getGroupId() + ':' + memberBom.getArtifactId() + ':' + memberBom.getVersion(),
                     PARAMETERS, BOM_GAVS);

@@ -18,17 +18,19 @@ public interface PlatformMember {
 
     Artifact lastUpdatedBom();
 
-    Artifact originalBomCoords();
+    Artifact getInputBom();
 
-    Artifact generatedBomCoords();
+    Artifact getConfiguredPlatformBom();
+
+    Artifact getGeneratedPlatformBom();
+
+    boolean isBumpPlatformBomVersionOnChange();
 
     ArtifactKey key();
 
     PlatformMemberConfig config();
 
     List<Dependency> inputConstraints();
-
-    ArtifactCoords stackDescriptorCoords();
 
     ArtifactCoords descriptorCoords();
 

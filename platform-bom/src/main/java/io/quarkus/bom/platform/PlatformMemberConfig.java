@@ -267,7 +267,7 @@ public class PlatformMemberConfig {
         this.dependencyCheck = dependencyCheck;
     }
 
-    public ArtifactCoords getGeneratedBom(String defaultGroupId) {
+    public ArtifactCoords getPlatformBom(String defaultGroupId) {
         if (getRelease() == null || getRelease().getNext() == null) {
             final ArtifactCoords originalBom = ArtifactCoords.fromString(getBom());
             return ArtifactCoords.pom(defaultGroupId, originalBom.getArtifactId(), originalBom.getVersion());

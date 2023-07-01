@@ -1,9 +1,13 @@
 package io.quarkus.bom.decomposer.maven.platformgen;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 public class PlatformReleaseConfig {
     private String platformKey;
     private String stream;
     private String version;
+
+    private boolean onlyChangedMembers;
 
     public String getPlatformKey() {
         return platformKey;
@@ -27,5 +31,14 @@ public class PlatformReleaseConfig {
 
     public void setVersion(String version) {
         this.version = version;
+    }
+
+    @JsonIgnore
+    public boolean isOnlyChangedMembers() {
+        return onlyChangedMembers;
+    }
+
+    public void setOnlyChangedMembers(boolean onlyChangedMembers) {
+        this.onlyChangedMembers = onlyChangedMembers;
     }
 }

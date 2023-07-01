@@ -39,9 +39,9 @@ public class PlatformBomConfig {
         }
 
         public Builder addMember(PlatformMember member) {
-            if (member.originalBomCoords() != null
-                    && member.originalBomCoords().getArtifactId().equals("quarkus-bom")
-                    && member.originalBomCoords().getGroupId().equals("io.quarkus")) {
+            if (member.getInputBom() != null
+                    && member.getInputBom().getArtifactId().equals("quarkus-bom")
+                    && member.getInputBom().getGroupId().equals("io.quarkus")) {
                 config.quarkusBom = member;
             } else {
                 config.directDeps.add(member);
