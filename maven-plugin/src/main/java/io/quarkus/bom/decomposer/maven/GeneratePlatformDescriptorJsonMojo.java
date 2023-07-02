@@ -164,6 +164,12 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
     @Parameter(required = false)
     ExtensionDependencyCheck extensionDependencyCheck;
 
+    /**
+     * Whether to enable workspace discovery for the Quarkus Maven artifact resolver
+     */
+    @Parameter(property = "workspaceDiscovery")
+    boolean workspaceDiscovery;
+
     MavenArtifactResolver resolver;
 
     @Override
@@ -535,13 +541,15 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
     private MavenArtifactResolver getResolver() throws MojoExecutionException {
         if (resolver == null) {
             try {
-                resolver = MavenArtifactResolver.builder()
-                        .setRepositorySystem(repoSystem)
+                var builder = MavenArtifactResolver.builder()
                         .setRemoteRepositoryManager(remoteRepoManager)
-                        .setRepositorySystemSession(repoSession)
-                        .setRemoteRepositories(repos)
-                        .setWorkspaceDiscovery(false)
-                        .build();
+                        .setRemoteRepositories(repos);
+                if (!workspaceDiscovery) {
+                    builder.setRepositorySystem(repoSystem)
+                            .setRepositorySystemSession(repoSession)
+                            .setWorkspaceDiscovery(false);
+                }
+                resolver = builder.build();
             } catch (BootstrapMavenException e) {
                 throw new MojoExecutionException("Failed to initialize Maven artifact resolver", e);
             }

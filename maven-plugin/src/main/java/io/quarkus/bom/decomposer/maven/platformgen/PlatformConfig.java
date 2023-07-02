@@ -4,6 +4,7 @@ import io.quarkus.bom.decomposer.maven.GenerateMavenRepoZip;
 import io.quarkus.bom.platform.PlatformMemberConfig;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 public class PlatformConfig {
@@ -14,7 +15,7 @@ public class PlatformConfig {
 
     private PlatformMemberConfig core;
 
-    private Collection<PlatformMemberConfig> members;
+    private Collection<PlatformMemberConfig> members = List.of();
 
     private PlatformBomGeneratorConfig bomGenerator;
 

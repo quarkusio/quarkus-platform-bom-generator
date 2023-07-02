@@ -64,6 +64,7 @@
     <module>domino</module>
     <module>maven-plugin</module>
     <module>platform-bom</module>
+    <module>integration-tests</module>
   </modules>
   <dependencyManagement>
     <dependencies>

@@ -238,6 +238,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         plugin.setArtifactId(pluginDescriptor().getArtifactId());
         plugin.setVersion(getTestArtifactVersion(pluginDescriptor().getGroupId(), pluginDescriptor().getVersion()));
         plugin.setExtensions(true);
+        // to be able to initialize the resolver
+        persistPom(pom);
 
         generateUniversalPlatformModule(pom);
 
@@ -2762,8 +2764,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 .artifactResolver(artifactResolver())
                 .pomResolver(PomSource.of(bomArtifact))
                 .includePlatformProperties(platformConfig.getUniversal().isGeneratePlatformProperties())
-                .platformBom(bomArtifact)
-                .enableNonMemberQuarkiverseExtensions(bomGen.enableNonMemberQuarkiverseExtensions);
+                .platformBom(bomArtifact);
 
         if (platformConfig.getBomGenerator() != null) {
             configBuilder.disableGroupAlignmentToPreferredVersions(
@@ -2774,6 +2775,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         if (bomGen != null) {
+            configBuilder.enableNonMemberQuarkiverseExtensions(bomGen.enableNonMemberQuarkiverseExtensions);
             if (bomGen.enforcedDependencies != null) {
                 for (String enforced : bomGen.enforcedDependencies) {
                     final ArtifactCoords coords = ArtifactCoords.fromString(enforced);
@@ -2978,7 +2980,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         @Override
         public Artifact previousLastUpdatedBom() {
             if (prevBomRelease == null) {
-                final String prev = config.getRelease().getLastDetectedBomUpdate();
+                final String prev = config.getRelease() == null ? null : config.getRelease().getLastDetectedBomUpdate();
                 if (prev != null) {
                     prevBomRelease = toPomArtifact(prev);
                 }
