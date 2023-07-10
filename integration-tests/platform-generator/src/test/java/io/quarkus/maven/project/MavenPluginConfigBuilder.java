@@ -29,4 +29,11 @@ public class MavenPluginConfigBuilder {
         }
         return new MavenPluginConfigBuilder(dom);
     }
+
+    public MavenPluginConfigBuilder configureNew(String name) {
+        Objects.requireNonNull(name, "name is null");
+        var dom = new Xpp3Dom(name);
+        this.dom.addChild(dom);
+        return new MavenPluginConfigBuilder(dom);
+    }
 }
