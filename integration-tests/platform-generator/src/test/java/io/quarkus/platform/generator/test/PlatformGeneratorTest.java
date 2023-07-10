@@ -62,7 +62,7 @@ public class PlatformGeneratorTest {
                 .setProjectDir(workingDir)
                 .addMember("Camel", camelBom)
                 .generateProject()
-                .build("process-resources");
+                .build();
 
         assertThat(platform.getCore()).isNotNull();
         assertThat(platform.getCore().getExtensionCatalog()).isNotNull();
@@ -82,10 +82,8 @@ public class PlatformGeneratorTest {
         assertThat(platform.getUniverse().containsConstraint(jacksonLibA10.getArtifactCoords())).isTrue();
         assertThat(platform.getUniverse().containsConstraint(jacksonLibB10.getArtifactCoords())).isTrue();
         assertThat(platform.getUniverse().containsConstraint(petsCat10.getArtifactCoords())).isTrue();
-        // TODO due to the limitation in the LocalWorkspace
-        //assertThat(platform.getUniverse().containsConstraint(petsDog10.getArtifactCoords())).isTrue();
-        assertThat(platform.getUniverse().containsConstraint(petsDog10.getArtifactCoords())).isFalse();
-        assertThat(platform.getUniverse().containsConstraint(petsDog20.getArtifactCoords())).isTrue();
+        assertThat(platform.getUniverse().containsConstraint(petsDog10.getArtifactCoords())).isTrue();
+        assertThat(platform.getUniverse().containsConstraint(petsDog20.getArtifactCoords())).isFalse();
 
         assertThat(platform.getMembers()).hasSize(1);
 
@@ -95,8 +93,7 @@ public class PlatformGeneratorTest {
         assertThat(camel.containsConstraint(jacksonLibA10.getArtifactCoords())).isTrue();
         assertThat(camel.containsConstraint(jacksonLibB10.getArtifactCoords())).isTrue();
         assertThat(camel.containsConstraint(petsCat10.getArtifactCoords())).isFalse();
-        // TODO due to the limitation in the LocalWorkspace
-        // assertThat(camel.containsConstraint(petsDog10.getArtifactCoords())).isTrue();
-        assertThat(platform.getUniverse().containsConstraint(petsDog20.getArtifactCoords())).isTrue();
+        assertThat(camel.containsConstraint(petsDog10.getArtifactCoords())).isTrue();
+        assertThat(camel.containsConstraint(petsDog20.getArtifactCoords())).isFalse();
     }
 }

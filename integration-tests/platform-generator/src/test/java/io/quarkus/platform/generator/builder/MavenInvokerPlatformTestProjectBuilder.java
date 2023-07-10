@@ -28,11 +28,14 @@ public class MavenInvokerPlatformTestProjectBuilder implements PlatformTestProje
 
     @Override
     public PlatformBuildResult build(String... args) {
+        // install is the default to workaround the limitation in the workspace discovery
+        // when it comes to including multiple versions of the same project in the same workspace
+        var cmdArgs = args.length == 0 ? List.of("install") : List.of(args);
         final Properties props = new Properties();
-        props.setProperty("workspaceDiscovery", "true");
+        //props.setProperty("workspaceDiscovery", "true");
         RunningInvoker invoker = new RunningInvoker(projectDir.toFile(), false);
         try {
-            invoker.execute(List.of(args), Map.of(), props).getProcess().waitFor();
+            invoker.execute(cmdArgs, Map.of(), props).getProcess().waitFor();
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
