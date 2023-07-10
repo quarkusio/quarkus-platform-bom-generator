@@ -6,6 +6,7 @@ import java.io.OutputStream;
 import java.io.PrintStream;
 import java.io.UnsupportedEncodingException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -31,6 +32,8 @@ public class RunningInvoker extends MavenProcessInvoker {
     private final File log;
     private final PrintStreamHandler outStreamHandler;
     private final PrintStreamHandler errStreamHandler;
+    private Path settings;
+    private Path localRepo;
 
     public RunningInvoker(File basedir, boolean debug) {
         this(basedir, debug, false);
@@ -86,6 +89,10 @@ public class RunningInvoker extends MavenProcessInvoker {
         return stream;
     }
 
+    public void setSettings(Path settings) {
+        this.settings = settings;
+    }
+
     public void stop() {
         if (result == null) {
             return;
@@ -112,6 +119,9 @@ public class RunningInvoker extends MavenProcessInvoker {
         request.setBaseDirectory(getWorkingDirectory());
         request.setPomFile(new File(getWorkingDirectory(), "pom.xml"));
         request.setProperties(properties);
+        if (settings != null) {
+            request.setUserSettingsFile(settings.toFile());
+        }
 
         if (System.getProperty("mavenOpts") != null) {
             request.setMavenOpts(System.getProperty("mavenOpts"));
