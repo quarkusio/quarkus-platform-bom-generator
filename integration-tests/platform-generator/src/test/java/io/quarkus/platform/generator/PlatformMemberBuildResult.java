@@ -60,6 +60,11 @@ public class PlatformMemberBuildResult {
         return name;
     }
 
+    // TODO
+    //public boolean isConfiguredToBeInstalledAndDeployed() {
+    //
+    //}
+
     public boolean isCore() {
         return moduleDir.getFileName().toString().equals(PlatformGeneratorConstants.QUARKUS);
     }
