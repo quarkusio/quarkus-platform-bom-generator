@@ -9,7 +9,7 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-public class MemeberDependencyAlignmentTest {
+public class ReleaseOnlyChangedMembersTest {
 
     @TempDir
     Path workingDir;
@@ -19,7 +19,8 @@ public class MemeberDependencyAlignmentTest {
         //Path workingDir = Path.of("/home/aloubyansky/playground/test-project");
         //IoUtils.recursiveDelete(workingDir);
 
-        var platformGenerator = PlatformTestProjectGenerator.newInstance();
+        var platformGenerator = PlatformTestProjectGenerator.newInstance()
+                .setReleaseOnlyChangedMembers(true);
 
         var jackson10 = platformGenerator.configureProject("org.jackson", "jackson-parent", "1.0")
                 .setScm("https://jackson.org", "1.0");
@@ -70,8 +71,8 @@ public class MemeberDependencyAlignmentTest {
                 .addVersionConstraint(petsDog20)
                 .addVersionConstraint(fruitsApple10);
 
-        var amqProject = platformGenerator.configureProject("org.amq", "amq-parent", "1.0")
-                .setScm("https://amq.org", "1.0");
+        var amqProject = platformGenerator.configureProject("org.amq", "amq-parent", "2.0")
+                .setScm("https://amq.org", "2.0");
         var amqJms = amqProject.addQuarkusExtensionRuntimeModule("amq-jms");
         var amqBom = amqProject.addPomModule("amq-bom")
                 .addVersionConstraint(amqJms)
@@ -87,18 +88,17 @@ public class MemeberDependencyAlignmentTest {
         final Set<ArtifactCoords> members = Set.of(
                 ArtifactCoords.pom(PlatformTestProjectGenerator.DEFAULT_GROUP_ID, "quarkus-bom",
                         PlatformTestProjectGenerator.DEFAULT_VERSION),
-                ArtifactCoords.pom(PlatformTestProjectGenerator.DEFAULT_GROUP_ID, "quarkus-camel-bom",
-                        PlatformTestProjectGenerator.DEFAULT_VERSION),
-                ArtifactCoords.pom(PlatformTestProjectGenerator.DEFAULT_GROUP_ID, "quarkus-amq-bom",
-                        PlatformTestProjectGenerator.DEFAULT_VERSION));
+                ArtifactCoords.pom(PlatformTestProjectGenerator.DEFAULT_GROUP_ID, "quarkus-camel-bom", "1.0"),
+                ArtifactCoords.pom(PlatformTestProjectGenerator.DEFAULT_GROUP_ID, "quarkus-amq-bom", "2.0"));
+
         assertThat(platform.getCore()).isNotNull();
         assertThat(platform.getCore().getExtensionCatalog()).isNotNull();
-        assertThat(platform.getCore().getPlatformKey()).isEqualTo(PlatformTestProjectGenerator.DEFAULT_GROUP_ID);
+        assertThat(platform.getCore().getPlatformKey()).isEqualTo("org.acme.quarkus.platform");
         assertThat(platform.getCore().getPlatformStream()).isEqualTo("1");
-        assertThat(platform.getCore().getPlatformVersion()).isEqualTo(PlatformTestProjectGenerator.DEFAULT_VERSION);
+        assertThat(platform.getCore().getPlatformVersion()).isEqualTo("1.0-SNAPSHOT");
         assertThat(platform.getCore().getReleaseMembers()).isEqualTo(members);
         assertThat(platform.getCore().getBom()).isNotNull();
-        assertThat(platform.getCore().getBom().getVersion()).isEqualTo(PlatformTestProjectGenerator.DEFAULT_VERSION);
+        assertThat(platform.getCore().getBom().getVersion()).isEqualTo("1.0-SNAPSHOT");
         assertThat(platform.getCore().containsConstraint(
                 ArtifactCoords.jar("io.quarkus", "quarkus-core", platform.getCore().getQuarkusCoreVersion()))).isTrue();
         assertThat(platform.getCore().containsConstraint(jacksonLibA10.getArtifactCoords())).isTrue();
@@ -108,14 +108,14 @@ public class MemeberDependencyAlignmentTest {
 
         assertThat(platform.getUniverse()).isNotNull();
         assertThat(platform.getUniverse().getExtensionCatalog()).isNotNull();
-        assertThat(platform.getUniverse().getPlatformKey()).isEqualTo(PlatformTestProjectGenerator.DEFAULT_GROUP_ID);
+        assertThat(platform.getUniverse().getPlatformKey()).isEqualTo("org.acme.quarkus.platform");
         assertThat(platform.getUniverse().getPlatformStream()).isEqualTo("1");
-        assertThat(platform.getUniverse().getPlatformVersion()).isEqualTo(PlatformTestProjectGenerator.DEFAULT_VERSION);
+        assertThat(platform.getUniverse().getPlatformVersion()).isEqualTo("1.0-SNAPSHOT");
         assertThat(platform.getUniverse().getReleaseMembers())
                 .isEqualTo(Set.of(ArtifactCoords.pom(PlatformTestProjectGenerator.DEFAULT_GROUP_ID, "acme-quarkus-universe-bom",
                         PlatformTestProjectGenerator.DEFAULT_VERSION)));
         assertThat(platform.getUniverse().getBom()).isNotNull();
-        assertThat(platform.getUniverse().getBom().getVersion()).isEqualTo(PlatformTestProjectGenerator.DEFAULT_VERSION);
+        assertThat(platform.getUniverse().getBom().getVersion()).isEqualTo("1.0-SNAPSHOT");
         assertThat(platform.getUniverse().containsConstraint(
                 ArtifactCoords.jar("io.quarkus", "quarkus-core", platform.getCore().getQuarkusCoreVersion()))).isTrue();
         assertThat(platform.getUniverse().containsConstraint(jacksonLibA10.getArtifactCoords())).isTrue();
@@ -128,11 +128,11 @@ public class MemeberDependencyAlignmentTest {
 
         var camel = platform.getMember("Camel");
         assertThat(camel).isNotNull();
-        assertThat(camel.getPlatformKey()).isEqualTo(PlatformTestProjectGenerator.DEFAULT_GROUP_ID);
+        assertThat(camel.getPlatformKey()).isEqualTo("org.acme.quarkus.platform");
         assertThat(camel.getPlatformStream()).isEqualTo("1");
-        assertThat(camel.getPlatformVersion()).isEqualTo(PlatformTestProjectGenerator.DEFAULT_VERSION);
+        assertThat(camel.getPlatformVersion()).isEqualTo("1.0-SNAPSHOT");
         assertThat(camel.getReleaseMembers()).isEqualTo(members);
-        assertThat(camel.getBom().getVersion()).isEqualTo(PlatformTestProjectGenerator.DEFAULT_VERSION);
+        assertThat(camel.getBom().getVersion()).isEqualTo("1.0");
         assertThat(camel.containsConstraint(camelAtom.getArtifactCoords())).isTrue();
         assertThat(camel.containsConstraint(jacksonLibA10.getArtifactCoords())).isTrue();
         assertThat(camel.containsConstraint(jacksonLibB10.getArtifactCoords())).isTrue();
@@ -143,11 +143,11 @@ public class MemeberDependencyAlignmentTest {
 
         var amq = platform.getMember("AMQ");
         assertThat(amq).isNotNull();
-        assertThat(amq.getPlatformKey()).isEqualTo(PlatformTestProjectGenerator.DEFAULT_GROUP_ID);
+        assertThat(amq.getPlatformKey()).isEqualTo("org.acme.quarkus.platform");
         assertThat(amq.getPlatformStream()).isEqualTo("1");
-        assertThat(amq.getPlatformVersion()).isEqualTo(PlatformTestProjectGenerator.DEFAULT_VERSION);
+        assertThat(amq.getPlatformVersion()).isEqualTo("1.0-SNAPSHOT");
         assertThat(amq.getReleaseMembers()).isEqualTo(members);
-        assertThat(amq.getBom().getVersion()).isEqualTo(PlatformTestProjectGenerator.DEFAULT_VERSION);
+        assertThat(amq.getBom().getVersion()).isEqualTo("2.0");
         assertThat(amq.containsConstraint(amqJms.getArtifactCoords())).isTrue();
         assertThat(amq.containsConstraint(fruitsOrange20.getArtifactCoords())).isTrue();
     }

@@ -29,7 +29,9 @@ public class MavenModuleGenerator {
     public static final String DEFAULT_VERSION = "1.0-SNAPSHOT";
 
     public static MavenModuleGenerator newProject(String groupId, String artifactId, String version) {
-        return new MavenModuleGenerator(groupId, artifactId, version);
+        return new MavenModuleGenerator(groupId, artifactId, version)
+                .setProperty("project.build.sourceEncoding", "UTF-8")
+                .setProperty("project.reporting.outputEncoding", "UTF-8");
     }
 
     public static MavenModuleGenerator newMultiModuleProject(String groupId, String artifactId, String version) {

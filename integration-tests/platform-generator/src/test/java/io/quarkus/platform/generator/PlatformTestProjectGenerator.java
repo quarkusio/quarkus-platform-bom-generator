@@ -11,8 +11,8 @@ import java.util.Objects;
 
 public class PlatformTestProjectGenerator {
 
-    private static final String DEFAULT_GROUP_ID = "org.acme.quarkus.platform";
-    private static final String DEFAULT_VERSION = "1.0-SNAPSHOT";
+    public static final String DEFAULT_GROUP_ID = "org.acme.quarkus.platform";
+    public static final String DEFAULT_VERSION = "1.0-SNAPSHOT";
     private static final String PLATFORM_GENERATOR_GROUP_ID = "io.quarkus";
     private static final String PLATFORM_GENERATOR_ARTIFACT_ID = "quarkus-platform-bom-maven-plugin";
     private static final String PLATFORM_GENERATOR_VERSION;
@@ -73,6 +73,7 @@ public class PlatformTestProjectGenerator {
     private String platformVersion = DEFAULT_VERSION;
     private boolean installUniversalBom;
     private String quarkusBomVersion = DEFAULT_VERSION;
+    private boolean releaseOnlyChangedMembers;
 
     private final MavenModuleGenerator rootPom;
     private final MavenModuleGenerator quarkusParent;
@@ -81,6 +82,8 @@ public class PlatformTestProjectGenerator {
 
     private PlatformTestProjectGenerator() {
         rootPom = MavenModuleGenerator.newMultiModuleProject("acme-quarkus-platform-parent");
+        rootPom.managePlugin("org.codehaus.mojo", "flatten-maven-plugin", "1.5.0");
+        rootPom.managePlugin("org.apache.maven.plugins", "maven-resources-plugin", "3.3.1");
         quarkusParent = rootPom.addPomModule("quarkus-parent")
                 .setScm("https://quarkus.io", quarkusBomVersion);
         quarkusBom = configureCoreProject(quarkusParent);
@@ -152,6 +155,11 @@ public class PlatformTestProjectGenerator {
         return this;
     }
 
+    public PlatformTestProjectGenerator setReleaseOnlyChangedMembers(boolean releaseOnlyChangedMembers) {
+        this.releaseOnlyChangedMembers = releaseOnlyChangedMembers;
+        return this;
+    }
+
     public PlatformTestProjectBuilder generateProject() {
 
         configurePlatformGenerator(rootPom.addPomModule(PLATFORM_CONFIG_MODULE));
@@ -194,28 +202,36 @@ public class PlatformTestProjectGenerator {
         var pluginConfig = managedPlatformGen.configure();
         var platformConfig = pluginConfig.configure("platformConfig");
 
-        var releaseConfig = platformConfig.configure("release");
-        releaseConfig.setParameter("platformKey", "${platform.groupId}");
-        releaseConfig.setParameter("version", "${platform.version}");
-
         var universal = platformConfig.configure("universal");
         universal.setParameter("bom", "${platform.groupId}:acme-quarkus-universe-bom:${platform.version}");
         universal.setParameter("skipInstall", installUniversalBom ? "false" : "true");
 
+        platformModule.setProperty("quarkus-bom.version", quarkusBomVersion);
         var core = platformConfig.configure("core");
         core.setParameter("name", "Core");
-        core.setParameter("bom", "io.quarkus:quarkus-bom:" + quarkusBomVersion);
+        core.setParameter("bom", "io.quarkus:quarkus-bom:${quarkus-bom.version}");
+        var coreRelease = core.configure("release");
+
+        var releaseConfig = platformConfig.configure("release");
+        releaseConfig.setParameter("platformKey", "${platform.groupId}");
+        releaseConfig.setParameter("version", "${platform.version}");
+        if (releaseOnlyChangedMembers) {
+            releaseConfig.setParameter("onlyChangedMembers", "true");
+            coreRelease.setParameter("next", "${platform.groupId}:quarkus-bom:${quarkus-bom.version}");
+        } else {
+            coreRelease.setParameter("next", "${platform.groupId}:quarkus-bom:${platform.version}");
+        }
 
         var bomGenerator = platformConfig.configure("bomGenerator");
         var excludedDeps = bomGenerator.configure("excludedDependencies");
         excludedDeps.setParameter("dependency",
-                "io.quarkus:quarkus-bom-quarkus-platform-descriptor:" + quarkusBomVersion + ":json");
+                "io.quarkus:quarkus-bom-quarkus-platform-descriptor:${quarkus-bom.version}:json");
         excludedDeps.setParameter("dependency", "io.quarkus:quarkus-bom-quarkus-platform-properties::json");
 
         if (!memberConfigs.isEmpty()) {
             var members = platformConfig.configure("members");
             for (PlatformMemberGeneratorConfig memberConfig : memberConfigs) {
-                configureMemberModule(memberConfig, platformConfig, members);
+                configureMemberModule(memberConfig, members, platformModule);
             }
         }
 
@@ -230,10 +246,25 @@ public class PlatformTestProjectGenerator {
                 .setPhase("process-resources");
     }
 
-    private void configureMemberModule(PlatformMemberGeneratorConfig memberConfig, MavenPluginConfigBuilder platformConfig,
-            MavenPluginConfigBuilder members) {
+    private void configureMemberModule(PlatformMemberGeneratorConfig memberConfig, MavenPluginConfigBuilder members,
+            MavenModuleGenerator platformModule) {
+        Objects.requireNonNull(memberConfig.inputBom);
+        var versionProperty = memberConfig.inputBom.getArtifactId() + ".version";
+        platformModule.setProperty(versionProperty, memberConfig.inputBom.getVersion());
+
         var member = members.configureNew("member");
         member.setParameter("name", memberConfig.getName());
-        member.setParameter("bom", Objects.requireNonNull(memberConfig.inputBom).toCompactCoords());
+        member.setParameter("bom", memberConfig.inputBom.getGroupId() + ":" + memberConfig.inputBom.getArtifactId() + ":${"
+                + versionProperty + "}");
+
+        var release = member.configure("release");
+        if (releaseOnlyChangedMembers) {
+            release.setParameter("next", "${platform.groupId}:quarkus-"
+                    + memberConfig.inputBom.getArtifactId()
+                    + ":${" + versionProperty + "}");
+        } else {
+            release.setParameter("next",
+                    "${platform.groupId}:quarkus-" + memberConfig.inputBom.getArtifactId() + ":${platform.version}");
+        }
     }
 }
