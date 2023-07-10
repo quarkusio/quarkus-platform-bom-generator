@@ -212,8 +212,11 @@ public class PlatformTestProjectGenerator {
                 "io.quarkus:quarkus-bom-quarkus-platform-descriptor:" + quarkusBomVersion + ":json");
         excludedDeps.setParameter("dependency", "io.quarkus:quarkus-bom-quarkus-platform-properties::json");
 
-        for (PlatformMemberGeneratorConfig memberConfig : memberConfigs) {
-            configureMemberModule(memberConfig, platformConfig);
+        if (!memberConfigs.isEmpty()) {
+            var members = platformConfig.configure("members");
+            for (PlatformMemberGeneratorConfig memberConfig : memberConfigs) {
+                configureMemberModule(memberConfig, platformConfig, members);
+            }
         }
 
         var platformGen = platformModule.addManagedPlugin(PLATFORM_GENERATOR_GROUP_ID, PLATFORM_GENERATOR_ARTIFACT_ID)
@@ -227,9 +230,9 @@ public class PlatformTestProjectGenerator {
                 .setPhase("process-resources");
     }
 
-    private void configureMemberModule(PlatformMemberGeneratorConfig memberConfig, MavenPluginConfigBuilder platformConfig) {
-        var members = platformConfig.configure("members");
-        var member = members.configure("member");
+    private void configureMemberModule(PlatformMemberGeneratorConfig memberConfig, MavenPluginConfigBuilder platformConfig,
+            MavenPluginConfigBuilder members) {
+        var member = members.configureNew("member");
         member.setParameter("name", memberConfig.getName());
         member.setParameter("bom", Objects.requireNonNull(memberConfig.inputBom).toCompactCoords());
     }

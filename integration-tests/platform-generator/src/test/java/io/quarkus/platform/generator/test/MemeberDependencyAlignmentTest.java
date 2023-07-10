@@ -8,7 +8,7 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-public class PlatformGeneratorTest {
+public class MemeberDependencyAlignmentTest {
 
     @TempDir
     Path workingDir;
@@ -46,6 +46,16 @@ public class PlatformGeneratorTest {
         var petsCat20 = pets20.addModule("pets-cat");
         var petsDog20 = pets20.addModule("pets-dog");
 
+        var fruits10 = platformGenerator.configureProject("org.fruits", "fruits-parent", "1.0")
+                .setScm("https://fruits.org", "1.0");
+        var fruitsApple10 = fruits10.addModule("fruits-apple");
+        var fruitsOrange10 = fruits10.addModule("fruits-orange");
+
+        var fruits20 = platformGenerator.configureProject("org.fruits", "fruits-parent", "2.0")
+                .setScm("https://fruits.org", "2.0");
+        var fruitsApple20 = fruits20.addModule("fruits-apple");
+        var fruitsOrange20 = fruits20.addModule("fruits-orange");
+
         var quarkusBom = platformGenerator.getQuarkusBom()
                 .importBom(jacksonBom10)
                 .addVersionConstraint(petsCat10);
@@ -56,11 +66,20 @@ public class PlatformGeneratorTest {
         var camelBom = camelProject.addPomModule("camel-bom")
                 .importBom(jacksonBom20)
                 .addVersionConstraint(camelAtom)
-                .addVersionConstraint(petsDog20);
+                .addVersionConstraint(petsDog20)
+                .addVersionConstraint(fruitsApple10);
+
+        var amqProject = platformGenerator.configureProject("org.amq", "amq-parent", "1.0")
+                .setScm("https://amq.org", "1.0");
+        var amqJms = amqProject.addQuarkusExtensionRuntimeModule("amq-jms");
+        var amqBom = amqProject.addPomModule("amq-bom")
+                .addVersionConstraint(amqJms)
+                .addVersionConstraint(fruitsOrange20);
 
         var platform = platformGenerator
                 .setProjectDir(workingDir)
                 .addMember("Camel", camelBom)
+                .addMember("AMQ", amqBom)
                 .generateProject()
                 .build();
 
@@ -85,7 +104,7 @@ public class PlatformGeneratorTest {
         assertThat(platform.getUniverse().containsConstraint(petsDog10.getArtifactCoords())).isTrue();
         assertThat(platform.getUniverse().containsConstraint(petsDog20.getArtifactCoords())).isFalse();
 
-        assertThat(platform.getMembers()).hasSize(1);
+        assertThat(platform.getMembers()).hasSize(2);
 
         var camel = platform.getMember("Camel");
         assertThat(camel).isNotNull();
@@ -95,5 +114,11 @@ public class PlatformGeneratorTest {
         assertThat(camel.containsConstraint(petsCat10.getArtifactCoords())).isFalse();
         assertThat(camel.containsConstraint(petsDog10.getArtifactCoords())).isTrue();
         assertThat(camel.containsConstraint(petsDog20.getArtifactCoords())).isFalse();
+        assertThat(camel.containsConstraint(fruitsApple20.getArtifactCoords())).isTrue();
+
+        var amq = platform.getMember("AMQ");
+        assertThat(amq).isNotNull();
+        assertThat(amq.containsConstraint(amqJms.getArtifactCoords())).isTrue();
+        assertThat(amq.containsConstraint(fruitsOrange20.getArtifactCoords())).isTrue();
     }
 }
