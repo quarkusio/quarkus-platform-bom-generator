@@ -3,11 +3,16 @@ package io.quarkus.platform.generator;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.registry.catalog.ExtensionCatalog;
+import io.quarkus.registry.util.PlatformArtifacts;
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Stream;
 import org.apache.maven.model.Model;
@@ -21,8 +26,13 @@ public class PlatformMemberBuildResult {
     private final Path moduleDir;
     private String name;
     private ExtensionCatalog extensionCatalog;
+    private Properties properties;
     private Model bom;
     private Set<ArtifactCoords> constraints;
+    private String platformKey;
+    private String platformStream;
+    private String platformVersion;
+    private Set<ArtifactCoords> members;
 
     private PlatformMemberBuildResult(Path moduleDir) {
         this.moduleDir = moduleDir;
@@ -83,6 +93,34 @@ public class PlatformMemberBuildResult {
         return extensionCatalog;
     }
 
+    public Properties getProperties() {
+        if (properties == null) {
+            var targetDir = moduleDir.resolve(PlatformGeneratorConstants.PROPERTIES).resolve("target");
+            if (!Files.exists(targetDir)) {
+                throw new IllegalStateException(targetDir + " does not exist");
+            }
+            try (Stream<Path> stream = Files.list(targetDir)) {
+                var i = stream.iterator();
+                while (i.hasNext()) {
+                    var f = i.next();
+                    if (f.getFileName().toString().endsWith(".properties")) {
+                        try (BufferedReader reader = Files.newBufferedReader(f)) {
+                            properties = new Properties();
+                            properties.load(reader);
+                        }
+                        break;
+                    }
+                }
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+            if (properties == null) {
+                throw new IllegalStateException("Failed to locate properties under " + targetDir);
+            }
+        }
+        return properties;
+    }
+
     public Model getBom() {
         if (bom == null) {
             var pomXml = moduleDir.resolve(PlatformGeneratorConstants.BOM).resolve("pom.xml");
@@ -120,5 +158,103 @@ public class PlatformMemberBuildResult {
             }
         }
         return constraints.contains(coords);
+    }
+
+    public Set<ArtifactCoords> getReleaseMembers() {
+        if (members == null) {
+            readReleaseInfo();
+        }
+        return members;
+    }
+
+    public String getPlatformKey() {
+        if (members == null) {
+            readReleaseInfo();
+        }
+        return platformKey;
+    }
+
+    public String getPlatformStream() {
+        if (members == null) {
+            readReleaseInfo();
+        }
+        return platformStream;
+    }
+
+    public String getPlatformVersion() {
+        if (members == null) {
+            readReleaseInfo();
+        }
+        return platformVersion;
+    }
+
+    private void readReleaseInfo() {
+        var release = (Map) getExtensionCatalog().getMetadata().get("platform-release");
+        if (release == null) {
+            members = Set.of();
+            return;
+        }
+        platformKey = (String) release.get("platform-key");
+        platformStream = (String) release.get("stream");
+        platformVersion = (String) release.get("version");
+        List<String> members = (List<String>) release.get("members");
+        if (members == null) {
+            this.members = Set.of();
+        } else {
+            this.members = new HashSet<>(members.size());
+            for (var s : members) {
+                this.members.add(PlatformArtifacts.getBomArtifactForCatalog(ArtifactCoords.fromString(s)));
+            }
+        }
+
+        if (!isUniverse()) {
+            String infoProp = null;
+            for (String name : getProperties().stringPropertyNames()) {
+                if (name.startsWith("platform.release-info@")) {
+                    infoProp = name;
+                    var value = getProperties().getProperty(name);
+                    var infoStr = name.substring("platform.release-info@".length());
+                    var i = infoStr.indexOf('$');
+                    if (i < 0) {
+                        throw new IllegalStateException("Failed to locate '$' in " + name);
+                    }
+                    var s = infoStr.substring(0, i);
+                    if (!platformKey.equals(s)) {
+                        throw new IllegalStateException(
+                                "Platform key " + platformKey + " from JSON does not match " + s + " from the properties");
+                    }
+                    var j = infoStr.indexOf('#', i + 1);
+                    if (j < 0) {
+                        throw new IllegalStateException("Failed to locate '#' in " + name);
+                    }
+                    s = infoStr.substring(i + 1, j);
+                    if (!platformStream.equals(s)) {
+                        throw new IllegalStateException(
+                                "Platform stream " + platformStream + " from JSON does not match " + s
+                                        + " from the properties");
+                    }
+                    s = infoStr.substring(j + 1);
+                    if (!platformVersion.equals(s)) {
+                        throw new IllegalStateException(
+                                "Platform version " + platformVersion + " from JSON does not match " + s
+                                        + " from the properties");
+                    }
+                    var arr = value.split(",");
+                    var propMembers = new HashSet<ArtifactCoords>(arr.length);
+                    for (var coords : arr) {
+                        propMembers.add(ArtifactCoords.fromString(coords));
+                    }
+                    if (!this.members.equals(propMembers)) {
+                        throw new IllegalStateException(
+                                "Release members " + this.members + " from JSON do not match " + propMembers
+                                        + " from the properties");
+                    }
+                    break;
+                }
+            }
+            if (infoProp == null) {
+                throw new IllegalStateException("Failed to locate platform release info among " + properties);
+            }
+        }
     }
 }
