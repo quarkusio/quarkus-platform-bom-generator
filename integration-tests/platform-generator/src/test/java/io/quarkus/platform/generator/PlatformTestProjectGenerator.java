@@ -159,6 +159,7 @@ public class PlatformTestProjectGenerator {
         rootPom.generate(projectDir);
 
         return MavenInvokerPlatformTestProjectBuilder.getInstance()
+                .setUseDefaultLocalRepositoryAsRemote(true)
                 .setProjectDir(projectDir)
                 .setPlatformModule(projectDir.resolve(PLATFORM_CONFIG_MODULE));
     }
