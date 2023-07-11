@@ -33,6 +33,7 @@ public class PlatformMemberBuildResult {
     private String platformStream;
     private String platformVersion;
     private Set<ArtifactCoords> members;
+    private Boolean partOfRelease;
 
     private PlatformMemberBuildResult(Path moduleDir) {
         this.moduleDir = moduleDir;
@@ -40,30 +41,17 @@ public class PlatformMemberBuildResult {
 
     public String getName() {
         if (name == null) {
-            final Model model;
-            try {
-                model = ModelUtils.readModel(moduleDir.resolve("pom.xml"));
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
-            name = model.getName();
-            if (name == null) {
-                name = model.getArtifactId();
-            } else if (name.startsWith("Quarkus Platform - ")) {
-                name = name.substring("Quarkus Platform - ".length());
-                var i = name.lastIndexOf('-');
-                if (i > 0) {
-                    name = name.substring(0, i - 1);
-                }
-            }
+            readMemberModulePom();
         }
         return name;
     }
 
-    // TODO
-    //public boolean isConfiguredToBeInstalledAndDeployed() {
-    //
-    //}
+    public boolean isPartOfRelease() {
+        if (partOfRelease == null) {
+            readMemberModulePom();
+        }
+        return partOfRelease;
+    }
 
     public boolean isCore() {
         return moduleDir.getFileName().toString().equals(PlatformGeneratorConstants.QUARKUS);
@@ -191,6 +179,45 @@ public class PlatformMemberBuildResult {
             readReleaseInfo();
         }
         return platformVersion;
+    }
+
+    private void readMemberModulePom() {
+        final Model model;
+        try {
+            model = ModelUtils.readModel(moduleDir.resolve("pom.xml"));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        name = model.getName();
+        if (name == null) {
+            name = model.getArtifactId();
+        } else if (name.startsWith("Quarkus Platform - ")) {
+            name = name.substring("Quarkus Platform - ".length());
+            var i = name.lastIndexOf('-');
+            if (i > 0) {
+                name = name.substring(0, i - 1);
+            }
+        }
+        partOfRelease = true;
+        var build = model.getBuild();
+        if (build != null) {
+            var pm = build.getPluginManagement();
+            if (pm != null) {
+                for (var plugin : pm.getPlugins()) {
+                    if (plugin.getArtifactId().equals("maven-install-plugin")) {
+                        for (var e : plugin.getExecutions()) {
+                            if ("none".equals(e.getPhase())) {
+                                partOfRelease = false;
+                            } else {
+                                partOfRelease = true;
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     private void readReleaseInfo() {

@@ -58,6 +58,11 @@ public class ReleaseOnlyChangedMembersTest {
         var fruitsApple20 = fruits20.addModule("fruits-apple");
         var fruitsOrange20 = fruits20.addModule("fruits-orange");
 
+        var fruits21 = platformGenerator.configureProject("org.fruits", "fruits-parent", "2.1")
+                .setScm("https://fruits.org", "2.1");
+        var fruitsApple21 = fruits21.addModule("fruits-apple");
+        var fruitsOrange21 = fruits21.addModule("fruits-orange");
+
         var quarkusBom = platformGenerator.getQuarkusBom()
                 .importBom(jacksonBom10)
                 .addVersionConstraint(petsCat10);
@@ -85,13 +90,20 @@ public class ReleaseOnlyChangedMembersTest {
                 .addVersionConstraint(amqJms21)
                 .addVersionConstraint(fruitsOrange20);
 
+        var amqProject22 = platformGenerator.configureProject("org.amq", "amq-parent", "2.2")
+                .setScm("https://amq.org", "2.2");
+        var amqJms22 = amqProject22.addQuarkusExtensionRuntimeModule("amq-jms");
+        var amqBom22 = amqProject22.addPomModule("amq-bom")
+                .addVersionConstraint(amqJms22)
+                .addVersionConstraint(fruitsOrange21);
+
         var platformBuilder = platformGenerator
                 .setProjectDir(workingDir)
                 .addMember("Camel", camelBom)
                 .addMember("AMQ", amqBom20)
                 .generateProject();
 
-        var platform = platformBuilder.build();
+        var platform = platformBuilder.build("clean install -DrecordUpdatedBoms");
 
         Set<ArtifactCoords> members = Set.of(
                 ArtifactCoords.pom(PlatformTestProjectGenerator.DEFAULT_GROUP_ID, "quarkus-bom",
@@ -100,6 +112,7 @@ public class ReleaseOnlyChangedMembersTest {
                 ArtifactCoords.pom(PlatformTestProjectGenerator.DEFAULT_GROUP_ID, "quarkus-amq-bom", "2.0"));
 
         assertThat(platform.getCore()).isNotNull();
+        assertThat(platform.getCore().isPartOfRelease()).isTrue();
         assertThat(platform.getCore().getExtensionCatalog()).isNotNull();
         assertThat(platform.getCore().getPlatformKey()).isEqualTo("org.acme.quarkus.platform");
         assertThat(platform.getCore().getPlatformStream()).isEqualTo("1");
@@ -136,6 +149,7 @@ public class ReleaseOnlyChangedMembersTest {
 
         var camel = platform.getMember("Camel");
         assertThat(camel).isNotNull();
+        assertThat(camel.isPartOfRelease()).isTrue();
         assertThat(camel.getPlatformKey()).isEqualTo("org.acme.quarkus.platform");
         assertThat(camel.getPlatformStream()).isEqualTo("1");
         assertThat(camel.getPlatformVersion()).isEqualTo("1.0-SNAPSHOT");
@@ -151,6 +165,7 @@ public class ReleaseOnlyChangedMembersTest {
 
         var amq = platform.getMember("AMQ");
         assertThat(amq).isNotNull();
+        assertThat(amq.isPartOfRelease()).isTrue();
         assertThat(amq.getPlatformKey()).isEqualTo("org.acme.quarkus.platform");
         assertThat(amq.getPlatformStream()).isEqualTo("1");
         assertThat(amq.getPlatformVersion()).isEqualTo("1.0-SNAPSHOT");
@@ -160,7 +175,7 @@ public class ReleaseOnlyChangedMembersTest {
         assertThat(amq.containsConstraint(fruitsOrange20.getArtifactCoords())).isTrue();
 
         // BUMP AMQ to 2.1
-        platform = platformBuilder.build("-pl quarkus-platform-config clean install -Damq-bom.version=2.1");
+        platform = platformBuilder.build("-pl quarkus-platform-config clean install -Damq-bom.version=2.1 -DrecordUpdatedBoms");
 
         members = Set.of(
                 ArtifactCoords.pom(PlatformTestProjectGenerator.DEFAULT_GROUP_ID, "quarkus-bom",
@@ -169,6 +184,7 @@ public class ReleaseOnlyChangedMembersTest {
                 ArtifactCoords.pom(PlatformTestProjectGenerator.DEFAULT_GROUP_ID, "quarkus-amq-bom", "2.1"));
 
         assertThat(platform.getCore()).isNotNull();
+        assertThat(platform.getCore().isPartOfRelease()).isFalse();
         assertThat(platform.getCore().getExtensionCatalog()).isNotNull();
         assertThat(platform.getCore().getPlatformKey()).isEqualTo("org.acme.quarkus.platform");
         assertThat(platform.getCore().getPlatformStream()).isEqualTo("1");
@@ -187,6 +203,7 @@ public class ReleaseOnlyChangedMembersTest {
 
         camel = platform.getMember("Camel");
         assertThat(camel).isNotNull();
+        assertThat(camel.isPartOfRelease()).isFalse();
         assertThat(camel.getPlatformKey()).isEqualTo("org.acme.quarkus.platform");
         assertThat(camel.getPlatformStream()).isEqualTo("1");
         assertThat(camel.getPlatformVersion()).isEqualTo("1.0-SNAPSHOT");
@@ -202,6 +219,7 @@ public class ReleaseOnlyChangedMembersTest {
 
         amq = platform.getMember("AMQ");
         assertThat(amq).isNotNull();
+        assertThat(amq.isPartOfRelease()).isTrue();
         assertThat(amq.getPlatformKey()).isEqualTo("org.acme.quarkus.platform");
         assertThat(amq.getPlatformStream()).isEqualTo("1");
         assertThat(amq.getPlatformVersion()).isEqualTo("1.0-SNAPSHOT");
@@ -209,5 +227,60 @@ public class ReleaseOnlyChangedMembersTest {
         assertThat(amq.getBom().getVersion()).isEqualTo("2.1");
         assertThat(amq.containsConstraint(amqJms21.getArtifactCoords())).isTrue();
         assertThat(amq.containsConstraint(fruitsOrange20.getArtifactCoords())).isTrue();
+
+        // BUMP AMQ to 2.2
+        platform = platformBuilder.build("-pl quarkus-platform-config clean install -Damq-bom.version=2.2 -DrecordUpdatedBoms");
+
+        members = Set.of(
+                ArtifactCoords.pom(PlatformTestProjectGenerator.DEFAULT_GROUP_ID, "quarkus-bom",
+                        PlatformTestProjectGenerator.DEFAULT_VERSION),
+                ArtifactCoords.pom(PlatformTestProjectGenerator.DEFAULT_GROUP_ID, "quarkus-camel-bom", "1.0.SP1"),
+                ArtifactCoords.pom(PlatformTestProjectGenerator.DEFAULT_GROUP_ID, "quarkus-amq-bom", "2.2"));
+
+        assertThat(platform.getCore()).isNotNull();
+        assertThat(platform.getCore().isPartOfRelease()).isFalse();
+        assertThat(platform.getCore().getExtensionCatalog()).isNotNull();
+        assertThat(platform.getCore().getPlatformKey()).isEqualTo("org.acme.quarkus.platform");
+        assertThat(platform.getCore().getPlatformStream()).isEqualTo("1");
+        assertThat(platform.getCore().getPlatformVersion()).isEqualTo("1.0-SNAPSHOT");
+        assertThat(platform.getCore().getReleaseMembers()).isEqualTo(members);
+        assertThat(platform.getCore().getBom()).isNotNull();
+        assertThat(platform.getCore().getBom().getVersion()).isEqualTo("1.0-SNAPSHOT");
+        assertThat(platform.getCore().containsConstraint(
+                ArtifactCoords.jar("io.quarkus", "quarkus-core", platform.getCore().getQuarkusCoreVersion()))).isTrue();
+        assertThat(platform.getCore().containsConstraint(jacksonLibA10.getArtifactCoords())).isTrue();
+        assertThat(platform.getCore().containsConstraint(jacksonLibB10.getArtifactCoords())).isTrue();
+        assertThat(platform.getCore().containsConstraint(petsCat10.getArtifactCoords())).isTrue();
+        assertThat(platform.getCore().containsConstraint(petsDog10.getArtifactCoords())).isFalse();
+
+        assertThat(platform.getMembers()).hasSize(2);
+
+        camel = platform.getMember("Camel");
+        assertThat(camel).isNotNull();
+        assertThat(camel.isPartOfRelease()).isTrue();
+        assertThat(camel.getPlatformKey()).isEqualTo("org.acme.quarkus.platform");
+        assertThat(camel.getPlatformStream()).isEqualTo("1");
+        assertThat(camel.getPlatformVersion()).isEqualTo("1.0-SNAPSHOT");
+        assertThat(camel.getReleaseMembers()).isEqualTo(members);
+        assertThat(camel.getBom().getVersion()).isEqualTo("1.0.SP1");
+        assertThat(camel.containsConstraint(camelAtom.getArtifactCoords())).isTrue();
+        assertThat(camel.containsConstraint(jacksonLibA10.getArtifactCoords())).isTrue();
+        assertThat(camel.containsConstraint(jacksonLibB10.getArtifactCoords())).isTrue();
+        assertThat(camel.containsConstraint(petsCat10.getArtifactCoords())).isFalse();
+        assertThat(camel.containsConstraint(petsDog10.getArtifactCoords())).isTrue();
+        assertThat(camel.containsConstraint(petsDog20.getArtifactCoords())).isFalse();
+        assertThat(camel.containsConstraint(fruitsApple21.getArtifactCoords())).isTrue();
+
+        amq = platform.getMember("AMQ");
+        assertThat(amq).isNotNull();
+        assertThat(amq.isPartOfRelease()).isTrue();
+        assertThat(amq.getPlatformKey()).isEqualTo("org.acme.quarkus.platform");
+        assertThat(amq.getPlatformStream()).isEqualTo("1");
+        assertThat(amq.getPlatformVersion()).isEqualTo("1.0-SNAPSHOT");
+        assertThat(amq.getReleaseMembers()).isEqualTo(members);
+        assertThat(amq.getBom().getVersion()).isEqualTo("2.2");
+        assertThat(amq.containsConstraint(amqJms22.getArtifactCoords())).isTrue();
+        assertThat(amq.containsConstraint(fruitsOrange21.getArtifactCoords())).isTrue();
+
     }
 }
