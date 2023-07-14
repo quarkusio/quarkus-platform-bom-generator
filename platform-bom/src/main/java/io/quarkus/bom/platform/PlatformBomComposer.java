@@ -967,20 +967,22 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
     }
 
     private static String bumpVersion(String version) {
-        var v = new DefaultArtifactVersion(version);
+        var baseVersion = RhVersionPattern.ensureNoRhQualifier(version);
+        var rhQualifier = version.substring(baseVersion.length());
+        var v = new DefaultArtifactVersion(baseVersion);
         if (v.getQualifier() == null) {
-            version += ".SP1";
+            baseVersion += ".SP1";
         } else if ("Final".equals(v.getQualifier())) {
-            version = version.replace("Final", "SP1");
+            baseVersion = baseVersion.replace("Final", "SP1");
         } else if (v.getQualifier().startsWith("SP")) {
-            int i = version.lastIndexOf("SP");
-            String suffix = version.substring(i);
+            int i = baseVersion.lastIndexOf("SP");
+            String suffix = baseVersion.substring(i);
             String number = suffix.substring(2);
             String newSuffix = "SP" + (Integer.parseInt(number) + 1);
-            version = version.replace(suffix, newSuffix);
+            baseVersion = baseVersion.replace(suffix, newSuffix);
         } else {
-            version += ".SP1";
+            baseVersion += ".SP1";
         }
-        return version;
+        return rhQualifier.isEmpty() ? baseVersion : baseVersion + rhQualifier;
     }
 }
