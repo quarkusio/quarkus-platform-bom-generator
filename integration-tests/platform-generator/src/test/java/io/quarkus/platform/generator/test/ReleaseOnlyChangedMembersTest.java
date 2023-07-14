@@ -199,6 +199,14 @@ public class ReleaseOnlyChangedMembersTest {
         assertThat(platform.getCore().containsConstraint(petsCat10.getArtifactCoords())).isTrue();
         assertThat(platform.getCore().containsConstraint(petsDog10.getArtifactCoords())).isFalse();
 
+        assertThat(platform.getUniverse()).isNotNull();
+        assertThat(platform.getUniverse().getExtensionCatalog()).isNotNull();
+        assertThat(platform.getUniverse().getPlatformKey()).isEqualTo("org.acme.quarkus.platform");
+        assertThat(platform.getUniverse().getPlatformStream()).isEqualTo("1");
+        assertThat(platform.getUniverse().getPlatformVersion()).isEqualTo("1.0-SNAPSHOT");
+        assertThat(platform.getUniverse().getBom()).isNotNull();
+        assertThat(platform.getUniverse().getBom().getVersion()).isEqualTo("1.0-SNAPSHOT");
+
         assertThat(platform.getMembers()).hasSize(2);
 
         camel = platform.getMember("Camel");

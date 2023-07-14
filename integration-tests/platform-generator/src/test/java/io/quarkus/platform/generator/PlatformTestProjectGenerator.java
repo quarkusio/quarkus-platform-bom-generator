@@ -70,7 +70,7 @@ public class PlatformTestProjectGenerator {
     private Path projectDir;
     private String generatorVersion = PLATFORM_GENERATOR_VERSION;
     private String platformKey = DEFAULT_GROUP_ID;
-    private String platformVersion = DEFAULT_VERSION;
+    private String platformVersion = "${project.version}";
     private boolean installUniversalBom;
     private String quarkusBomVersion = DEFAULT_VERSION;
     private boolean releaseOnlyChangedMembers;
