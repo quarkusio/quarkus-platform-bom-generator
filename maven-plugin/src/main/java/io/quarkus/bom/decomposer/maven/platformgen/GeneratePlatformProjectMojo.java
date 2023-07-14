@@ -224,9 +224,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Parent parent = new Parent();
         parent.setGroupId(project.getGroupId());
         parent.setArtifactId(project.getArtifactId());
-        parent.setVersion(project.getVersion());
         parent.setRelativePath(pomXml.toPath().getParent().relativize(project.getFile().getParentFile().toPath()).toString());
         pom.setParent(parent);
+        setParentVersion(pom, project.getOriginalModel());
+        if (parent.getVersion().equals("${revision}")) {
+            pom.addProperty("revision", project.getVersion());
+        }
 
         final Build build = new Build();
         pom.setBuild(build);
@@ -280,6 +283,19 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         recordUpdatedBoms();
         generateBomReports();
         generateDominoCliConfig();
+    }
+
+    private static void setParentVersion(Model model, Model parentModel) {
+        var parent = model.getParent();
+        var version = parentModel.getVersion();
+        if (version == null) {
+            var pp = parentModel.getParent();
+            if (pp == null) {
+                throw new IllegalArgumentException("Failed to determine the version for the parent model");
+            }
+            version = pp.getVersion();
+        }
+        parent.setVersion(version);
     }
 
     private void generateBomReports() throws MojoExecutionException {
@@ -498,9 +514,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Parent parent = new Parent();
         parent.setGroupId(ModelUtils.getGroupId(parentPom));
         parent.setArtifactId(parentPom.getArtifactId());
-        parent.setVersion(ModelUtils.getVersion(parentPom));
         parent.setRelativePath(pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
         pom.setParent(parent);
+        setParentVersion(pom, parentPom);
         Utils.skipInstallAndDeploy(pom);
 
         Plugin plugin = new Plugin();
@@ -587,9 +603,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Parent parent = new Parent();
         parent.setGroupId(ModelUtils.getGroupId(parentPom));
         parent.setArtifactId(parentPom.getArtifactId());
-        parent.setVersion(ModelUtils.getVersion(parentPom));
         parent.setRelativePath(pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
         pom.setParent(parent);
+        setParentVersion(pom, parentPom);
         Utils.skipInstallAndDeploy(pom);
 
         Plugin plugin = new Plugin();
@@ -908,7 +924,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private void updatePreviousMemberRelease(PlatformMemberImpl member, int membersIndex) throws MojoExecutionException {
-        if (member.bomChanged == null || !member.bomChanged) {
+        if (member.bomChanged == null || !member.bomChanged || member.config().isHidden()) {
             return;
         }
         final int memberIndex = pomLineContaining("<name>" + member.config().getName() + "</name>", membersIndex);
@@ -916,10 +932,21 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             throw new MojoExecutionException(
                     "Failed to locate member configuration with <name>" + member.config().getName() + "</name>");
         }
-        final int releaseIndex = pomLineContaining("<release>", memberIndex);
+        var releaseIndex = pomLineContaining("<release>", memberIndex);
         if (releaseIndex < 0) {
-            throw new MojoExecutionException("Failed to locate <release> configuration for member with <name>"
-                    + member.config().getName() + "</name>");
+            releaseIndex = memberIndex + 1;
+            var sb = new StringBuilder();
+            var nameLine = pomLines().get(memberIndex);
+            for (int i = 0; i < nameLine.length(); ++i) {
+                var ch = nameLine.charAt(i);
+                if (Character.isWhitespace(ch)) {
+                    sb.append(ch);
+                } else {
+                    break;
+                }
+            }
+            pomLines().add(releaseIndex, sb + "<release>");
+            pomLines().add(releaseIndex + 1, sb + "</release>");
         }
         final int releaseEnd = pomLineContaining("</release>", releaseIndex);
         if (releaseEnd < 0) {
@@ -1043,9 +1070,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Parent parent = new Parent();
         parent.setGroupId(ModelUtils.getGroupId(parentPom));
         parent.setArtifactId(parentPom.getArtifactId());
-        parent.setVersion(ModelUtils.getVersion(parentPom));
         parent.setRelativePath(pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
         pom.setParent(parent);
+        setParentVersion(pom, parentPom);
 
         DependencyManagement dm = pom.getDependencyManagement();
         if (dm == null) {
@@ -1243,9 +1270,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Parent parent = new Parent();
         parent.setGroupId(ModelUtils.getGroupId(parentPom));
         parent.setArtifactId(parentPom.getArtifactId());
-        parent.setVersion(ModelUtils.getVersion(parentPom));
         parent.setRelativePath(pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
         pom.setParent(parent);
+        setParentVersion(pom, parentPom);
 
         DependencyManagement dm = pom.getDependencyManagement();
         if (dm == null) {
@@ -1311,9 +1338,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Parent parent = new Parent();
         parent.setGroupId(ModelUtils.getGroupId(parentPom));
         parent.setArtifactId(parentPom.getArtifactId());
-        parent.setVersion(ModelUtils.getVersion(parentPom));
         parent.setRelativePath(pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
         pom.setParent(parent);
+        setParentVersion(pom, parentPom);
         Utils.skipInstallAndDeploy(pom);
 
         Build build = pom.getBuild();
@@ -1458,9 +1485,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Parent parent = new Parent();
         parent.setGroupId(ModelUtils.getGroupId(parentPom));
         parent.setArtifactId(parentPom.getArtifactId());
-        parent.setVersion(ModelUtils.getVersion(parentPom));
         parent.setRelativePath(pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
         pom.setParent(parent);
+        setParentVersion(pom, parentPom);
 
         member.baseModel = pom;
 
@@ -1650,10 +1677,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Parent parent = new Parent();
         parent.setGroupId(ModelUtils.getGroupId(parentPom));
         parent.setArtifactId(parentPom.getArtifactId());
-        parent.setVersion(ModelUtils.getVersion(parentPom));
         parent.setRelativePath(
                 pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
         pom.setParent(parent);
+        setParentVersion(pom, parentPom);
 
         final DependencyManagement dm = new DependencyManagement();
         pom.setDependencyManagement(dm);
@@ -1774,10 +1801,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Parent parent = new Parent();
         parent.setGroupId(ModelUtils.getGroupId(parentPom));
         parent.setArtifactId(parentPom.getArtifactId());
-        parent.setVersion(ModelUtils.getVersion(parentPom));
         parent.setRelativePath(
                 pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
         pom.setParent(parent);
+        setParentVersion(pom, parentPom);
 
         if (!testConfig.getPomProperties().isEmpty()) {
             pom.setProperties(testConfig.getPomProperties());
@@ -2279,9 +2306,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Parent parent = new Parent();
         parent.setGroupId(ModelUtils.getGroupId(parentPom));
         parent.setArtifactId(parentPom.getArtifactId());
-        parent.setVersion(ModelUtils.getVersion(parentPom));
         parent.setRelativePath(pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
         pom.setParent(parent);
+        setParentVersion(pom, parentPom);
 
         generatePlatformDescriptorModule(
                 ArtifactCoords.of(bomArtifact.getGroupId(),
@@ -2332,9 +2359,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Parent parent = new Parent();
         parent.setGroupId(ModelUtils.getGroupId(parentPom));
         parent.setArtifactId(parentPom.getArtifactId());
-        parent.setVersion(ModelUtils.getVersion(parentPom));
         parent.setRelativePath(moduleDir.relativize(parentPom.getProjectDirectory().toPath()).toString());
         pom.setParent(parent);
+        setParentVersion(pom, parentPom);
 
         addResourcesPlugin(pom, true);
         final Build build = pom.getBuild();
@@ -2604,9 +2631,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Parent parent = new Parent();
         parent.setGroupId(ModelUtils.getGroupId(parentPom));
         parent.setArtifactId(parentPom.getArtifactId());
-        parent.setVersion(ModelUtils.getVersion(parentPom));
         parent.setRelativePath(moduleDir.relativize(parentPom.getProjectDirectory().toPath()).toString());
         pom.setParent(parent);
+        setParentVersion(pom, parentPom);
 
         // for the bom validation to work
         final DependencyManagement dm = new DependencyManagement();
@@ -3113,7 +3140,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private static String getDependencyVersion(Model pom, ArtifactCoords coords) {
-        return ModelUtils.getVersion(pom).equals(coords.getVersion()) ? "${project.version}" : coords.getVersion();
+        return ModelUtils.getRawVersion(pom).equals(coords.getVersion()) ? "${project.version}" : coords.getVersion();
     }
 
     private static ArtifactKey toKey(Artifact a) {
