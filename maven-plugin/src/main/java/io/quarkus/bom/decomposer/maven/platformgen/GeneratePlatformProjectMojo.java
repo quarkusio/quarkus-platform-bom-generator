@@ -961,9 +961,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
             buf.append(l.charAt(i));
         }
-        buf.append("    <lastDetectedBomUpdate>").append(member.getGeneratedPlatformBom().getGroupId()).append(":")
-                .append(member.getGeneratedPlatformBom().getArtifactId()).append(":")
-                .append(member.getGeneratedPlatformBom().getVersion()).append("</lastDetectedBomUpdate>");
+        var generatedBom = member.getAlignedDecomposedBom().bomArtifact();
+        buf.append("    <lastDetectedBomUpdate>").append(generatedBom.getGroupId()).append(":")
+                .append(generatedBom.getArtifactId()).append(":")
+                .append(generatedBom.getVersion()).append("</lastDetectedBomUpdate>");
         int prevIndex = pomLineContaining("<lastDetectedBomUpdate>", releaseIndex, releaseEnd);
         if (prevIndex < 0) {
             pomLines().add(releaseIndex + 1, buf.toString());
@@ -1540,37 +1541,43 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             final Artifact prevBomCoords = member.previousLastUpdatedBom();
             if (prevBomCoords == null) {
                 member.bomChanged = true;
-            } else if (!member.config().getRelease().getNext()
-                    .equals(member.config().getRelease().getLastDetectedBomUpdate())) {
-                final List<org.eclipse.aether.graph.Dependency> prevDeps;
-                try {
-                    prevDeps = nonWorkspaceResolver.resolveDescriptor(prevBomCoords).getManagedDependencies();
-                } catch (BootstrapMavenException e) {
-                    throw new MojoExecutionException("Failed to resolve " + prevBomCoords, e);
-                }
-                if (prevDeps.isEmpty()) {
-                    // failed to resolve
-                    member.bomChanged = true;
-                } else {
-                    final Set<ArtifactCoords> prevArtifacts = new HashSet<>(prevDeps.size());
-                    for (var d : prevDeps) {
-                        if (isMeaningfulClasspathConstraint(d.getArtifact())) {
-                            prevArtifacts.add(toCoords(d.getArtifact()));
-                        }
+            } else {
+                var prevCoords = ArtifactCoords.pom(prevBomCoords.getGroupId(), prevBomCoords.getArtifactId(),
+                        prevBomCoords.getVersion());
+                var generatedCoords = ArtifactCoords.pom(member.getAlignedDecomposedBom().bomArtifact().getGroupId(),
+                        member.getAlignedDecomposedBom().bomArtifact().getArtifactId(),
+                        member.getAlignedDecomposedBom().bomArtifact().getVersion());
+                if (!prevCoords.equals(generatedCoords)) {
+                    final List<org.eclipse.aether.graph.Dependency> prevDeps;
+                    try {
+                        prevDeps = nonWorkspaceResolver.resolveDescriptor(prevBomCoords).getManagedDependencies();
+                    } catch (BootstrapMavenException e) {
+                        throw new MojoExecutionException("Failed to resolve " + prevBomCoords, e);
                     }
-
-                    final Set<ArtifactCoords> currentArtifacts = new HashSet<>(prevArtifacts.size());
-                    for (ProjectRelease r : member.generatedBom.releases()) {
-                        for (ProjectDependency d : r.dependencies()) {
-                            if (isMeaningfulClasspathConstraint(d.artifact())) {
-                                currentArtifacts.add(toCoords(d.artifact()));
+                    if (prevDeps.isEmpty()) {
+                        // failed to resolve
+                        member.bomChanged = true;
+                    } else {
+                        final Set<ArtifactCoords> prevArtifacts = new HashSet<>(prevDeps.size());
+                        for (var d : prevDeps) {
+                            if (isMeaningfulClasspathConstraint(d.getArtifact())) {
+                                prevArtifacts.add(toCoords(d.getArtifact()));
                             }
                         }
+
+                        final Set<ArtifactCoords> currentArtifacts = new HashSet<>(prevArtifacts.size());
+                        for (ProjectRelease r : member.generatedBom.releases()) {
+                            for (ProjectDependency d : r.dependencies()) {
+                                if (isMeaningfulClasspathConstraint(d.artifact())) {
+                                    currentArtifacts.add(toCoords(d.artifact()));
+                                }
+                            }
+                        }
+                        member.bomChanged = !prevArtifacts.equals(currentArtifacts);
                     }
-                    member.bomChanged = !prevArtifacts.equals(currentArtifacts);
+                } else {
+                    member.bomChanged = false;
                 }
-            } else {
-                member.bomChanged = false;
             }
         }
         return member.bomChanged;
