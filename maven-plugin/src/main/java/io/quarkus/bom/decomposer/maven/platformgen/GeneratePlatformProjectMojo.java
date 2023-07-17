@@ -932,7 +932,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             throw new MojoExecutionException(
                     "Failed to locate member configuration with <name>" + member.config().getName() + "</name>");
         }
-        var releaseIndex = pomLineContaining("<release>", memberIndex);
+        // the release element may contain combine.self attribute
+        var releaseIndex = pomLineContaining("<release", memberIndex);
         if (releaseIndex < 0) {
             releaseIndex = memberIndex + 1;
             var sb = new StringBuilder();
@@ -945,7 +946,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                     break;
                 }
             }
-            pomLines().add(releaseIndex, sb + "<release>");
+            pomLines().add(releaseIndex, sb + "<release combine.self=\"override\">");
             pomLines().add(releaseIndex + 1, sb + "</release>");
         }
         final int releaseEnd = pomLineContaining("</release>", releaseIndex);
