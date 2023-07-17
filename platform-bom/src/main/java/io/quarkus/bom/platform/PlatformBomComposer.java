@@ -90,6 +90,8 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
 
     private Map<ArtifactKey, Map<String, Set<String>>> commonNotManagedDeps;
 
+    private final PlatformVersionIncrementor versionIncrementor = new SpPlatformVersionIncrementor();
+
     public PlatformBomComposer(PlatformBomConfig config) throws BomDecomposerException {
         this(config, MessageWriter.info());
     }
@@ -173,7 +175,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
 
     private DecomposedBom generateQuarkusBom() throws BomDecomposerException {
 
-        final boolean checkForChanges = config.quarkusBom().isBumpPlatformBomVersionOnChange()
+        final boolean checkForChanges = config.quarkusBom().isIncrementBomVersionOnChange()
                 && config.quarkusBom().previousLastUpdatedBom() != null
                 && config.quarkusBom().previousLastUpdatedBom().equals(config.quarkusBom().getConfiguredPlatformBom());
         final Set<ArtifactCoords> previousManagedDeps;
@@ -214,7 +216,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             var configured = config.quarkusBom().getConfiguredPlatformBom();
             quarkusBomBuilder.bomArtifact(new DefaultArtifact(
                     configured.getGroupId(), configured.getArtifactId(), configured.getClassifier(), configured.getExtension(),
-                    bumpVersion(config.quarkusBom())));
+                    incrementVersion(config.quarkusBom())));
             logger.info("Bumped version of %s to %s", config.quarkusBom().getConfiguredPlatformBom(),
                     quarkusBomBuilder.getBomArtifact());
         } else {
@@ -233,7 +235,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
     private void updateMemberBoms() {
         for (PlatformMember member : members.values()) {
             final boolean checkForChanges;
-            if (member.isBumpPlatformBomVersionOnChange() && member.previousLastUpdatedBom() != null) {
+            if (member.isIncrementBomVersionOnChange() && member.previousLastUpdatedBom() != null) {
                 var configuredVersion = RhVersionPattern.ensureNoRhQualifier(member.getConfiguredPlatformBom().getVersion());
                 var prevVersion = RhVersionPattern.ensureNoRhQualifier(member.previousLastUpdatedBom().getVersion());
                 checkForChanges = new DefaultArtifactVersion(prevVersion)
@@ -289,7 +291,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                 generatedBomArtifact = new DefaultArtifact(
                         configured.getGroupId(), configured.getArtifactId(), configured.getClassifier(),
                         configured.getExtension(),
-                        bumpVersion(member));
+                        incrementVersion(member));
                 logger.info("Bumped version of %s to %s", member.previousLastUpdatedBom(), generatedBomArtifact.getVersion());
             } else {
                 generatedBomArtifact = member.getConfiguredPlatformBom();
@@ -971,39 +973,8 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                         || "javadoc".equals(a.getClassifier()));
     }
 
-    private static String bumpVersion(PlatformMember member) {
-        var version = member.getConfiguredPlatformBom().getVersion();
-        var baseVersion = RhVersionPattern.ensureNoRhQualifier(version);
-        var rhQualifier = version.substring(baseVersion.length());
-        var v = new DefaultArtifactVersion(baseVersion);
-
-        if (member.previousLastUpdatedBom() != null) {
-            var prevBaseVersion = RhVersionPattern.ensureNoRhQualifier(member.previousLastUpdatedBom().getVersion());
-            var prevV = new DefaultArtifactVersion(prevBaseVersion);
-            if (prevV.getMajorVersion() == v.getMajorVersion()
-                    && prevV.getMinorVersion() == v.getMinorVersion()
-                    && prevV.getIncrementalVersion() == v.getIncrementalVersion()
-                    // compare qualifiers
-                    && prevV.compareTo(v) > 0) {
-
-                baseVersion = prevBaseVersion;
-                v = prevV;
-            }
-        }
-
-        if (v.getQualifier() == null) {
-            baseVersion += ".SP1";
-        } else if ("Final".equals(v.getQualifier())) {
-            baseVersion = baseVersion.replace("Final", "SP1");
-        } else if (v.getQualifier().startsWith("SP")) {
-            int i = baseVersion.lastIndexOf("SP");
-            String suffix = baseVersion.substring(i);
-            String number = suffix.substring(2);
-            String newSuffix = "SP" + (Integer.parseInt(number) + 1);
-            baseVersion = baseVersion.replace(suffix, newSuffix);
-        } else {
-            baseVersion += ".SP1";
-        }
-        return rhQualifier.isEmpty() ? baseVersion : baseVersion + rhQualifier;
+    private String incrementVersion(PlatformMember member) {
+        return versionIncrementor.nextVersion(member.getConfiguredPlatformBom().getVersion(),
+                member.previousLastUpdatedBom() == null ? null : member.previousLastUpdatedBom().getVersion());
     }
 }

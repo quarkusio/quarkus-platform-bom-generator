@@ -2460,7 +2460,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         if (member != null) {
             // Update last-bom-update
-            var lastUpdatedBom = member.lastUpdatedBom();
+            var lastUpdatedBom = member.latestBomRelease();
             pom.getProperties().setProperty(MEMBER_LAST_BOM_UPDATE_PROP, lastUpdatedBom.getGroupId() + ":"
                     + lastUpdatedBom.getArtifactId() + ":" + lastUpdatedBom.getVersion());
             if (overrides == null) {
@@ -3024,7 +3024,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         @Override
-        public Artifact lastUpdatedBom() {
+        public Artifact latestBomRelease() {
             return bomChanged != null && bomChanged || previousLastUpdatedBom() == null ? getGeneratedPlatformBom()
                     : previousLastUpdatedBom();
         }
@@ -3047,7 +3047,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         @Override
-        public boolean isBumpPlatformBomVersionOnChange() {
+        public boolean isIncrementBomVersionOnChange() {
             return platformConfig.getRelease() != null
                     && platformConfig.getRelease().isOnlyChangedMembers();
         }

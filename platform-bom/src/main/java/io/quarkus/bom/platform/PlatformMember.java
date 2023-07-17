@@ -16,7 +16,7 @@ public interface PlatformMember {
 
     Artifact previousLastUpdatedBom();
 
-    Artifact lastUpdatedBom();
+    Artifact latestBomRelease();
 
     Artifact getInputBom();
 
@@ -24,7 +24,7 @@ public interface PlatformMember {
 
     Artifact getGeneratedPlatformBom();
 
-    boolean isBumpPlatformBomVersionOnChange();
+    boolean isIncrementBomVersionOnChange();
 
     ArtifactKey key();
 
