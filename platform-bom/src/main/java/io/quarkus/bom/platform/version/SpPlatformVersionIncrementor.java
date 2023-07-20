@@ -1,4 +1,4 @@
-package io.quarkus.bom.platform;
+package io.quarkus.bom.platform.version;
 
 import io.quarkus.domino.RhVersionPattern;
 import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
