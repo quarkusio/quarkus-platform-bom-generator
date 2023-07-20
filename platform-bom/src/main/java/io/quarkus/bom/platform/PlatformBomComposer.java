@@ -12,6 +12,8 @@ import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.decomposer.ReleaseIdFactory;
 import io.quarkus.bom.decomposer.ReleaseOrigin;
 import io.quarkus.bom.decomposer.ReleaseVersion;
+import io.quarkus.bom.platform.version.PlatformVersionIncrementor;
+import io.quarkus.bom.platform.version.SpPlatformVersionIncrementor;
 import io.quarkus.bom.resolver.ArtifactNotFoundException;
 import io.quarkus.bom.resolver.ArtifactResolver;
 import io.quarkus.bom.resolver.ArtifactResolverProvider;

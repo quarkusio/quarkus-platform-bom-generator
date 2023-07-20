@@ -24,7 +24,7 @@ public class PncArtifactBuildInfo {
 
     private static volatile ObjectMapper mapper;
 
-    private static ObjectMapper getMapper() {
+    public static ObjectMapper getMapper() {
         if (mapper == null) {
             ObjectMapper om = new ObjectMapper();
             om.enable(SerializationFeature.INDENT_OUTPUT);

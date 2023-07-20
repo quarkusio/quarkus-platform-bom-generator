@@ -2,6 +2,7 @@ package io.quarkus.bom.platform;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.quarkus.bom.platform.version.SpPlatformVersionIncrementor;
 import org.junit.jupiter.api.Test;
 
 public class SpPlatformVersionIncrementorTest {

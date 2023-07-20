@@ -1,4 +1,4 @@
-package io.quarkus.bom.platform;
+package io.quarkus.bom.platform.version;
 
 public interface PlatformVersionIncrementor {
 
