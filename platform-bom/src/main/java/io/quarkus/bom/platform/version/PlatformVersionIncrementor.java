@@ -2,5 +2,5 @@ package io.quarkus.bom.platform.version;
 
 public interface PlatformVersionIncrementor {
 
-    String nextVersion(String baseVersion, String lastVersion);
+    String nextVersion(String groupId, String artifactId, String baseVersion, String lastVersion);
 }

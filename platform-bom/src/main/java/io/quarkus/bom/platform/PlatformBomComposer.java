@@ -13,6 +13,7 @@ import io.quarkus.bom.decomposer.ReleaseIdFactory;
 import io.quarkus.bom.decomposer.ReleaseOrigin;
 import io.quarkus.bom.decomposer.ReleaseVersion;
 import io.quarkus.bom.platform.version.PlatformVersionIncrementor;
+import io.quarkus.bom.platform.version.PncVersionIncrementor;
 import io.quarkus.bom.platform.version.SpPlatformVersionIncrementor;
 import io.quarkus.bom.resolver.ArtifactNotFoundException;
 import io.quarkus.bom.resolver.ArtifactResolver;
@@ -92,7 +93,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
 
     private Map<ArtifactKey, Map<String, Set<String>>> commonNotManagedDeps;
 
-    private final PlatformVersionIncrementor versionIncrementor = new SpPlatformVersionIncrementor();
+    private final PlatformVersionIncrementor versionIncrementor;
 
     public PlatformBomComposer(PlatformBomConfig config) throws BomDecomposerException {
         this(config, MessageWriter.info());
@@ -103,6 +104,9 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         this.logger = logger;
         this.resolver = config.artifactResolver();
         this.extCoordsFilterFactory = ExtensionCoordsFilterFactory.newInstance(config, logger);
+        this.versionIncrementor = "pnc".equalsIgnoreCase(config.versionIncrementor())
+                ? new PncVersionIncrementor(new SpPlatformVersionIncrementor())
+                : new SpPlatformVersionIncrementor();
 
         final DecomposedBom originalQuarkusBom = BomDecomposer.config()
                 .logger(logger)
@@ -126,8 +130,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                     .dependencies(getOriginalConstraints(member, true))
                     .bomArtifact(member.getInputBom() == null ? member.getConfiguredPlatformBom() : member.getInputBom())
                     .decompose();
-            originalBom = ExtensionFilter.getInstance(resolver(), logger, member)
-                    .transform(originalBom);
+            originalBom = ExtensionFilter.getInstance(resolver(), logger, member).transform(originalBom);
             member.setOriginalDecomposedBom(originalBom);
 
             if (!member.getOwnGroupIds().isEmpty()) {
@@ -177,9 +180,17 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
 
     private DecomposedBom generateQuarkusBom() throws BomDecomposerException {
 
-        final boolean checkForChanges = config.quarkusBom().isIncrementBomVersionOnChange()
-                && config.quarkusBom().previousLastUpdatedBom() != null
-                && config.quarkusBom().previousLastUpdatedBom().equals(config.quarkusBom().getConfiguredPlatformBom());
+        final boolean checkForChanges;
+        if (config.quarkusBom().isIncrementBomVersionOnChange() && config.quarkusBom().previousLastUpdatedBom() != null) {
+            var configuredVersion = RhVersionPattern
+                    .ensureNoRhQualifier(config.quarkusBom().getConfiguredPlatformBom().getVersion());
+            var prevVersion = RhVersionPattern.ensureNoRhQualifier(config.quarkusBom().previousLastUpdatedBom().getVersion());
+            checkForChanges = new DefaultArtifactVersion(prevVersion)
+                    .compareTo(new DefaultArtifactVersion(configuredVersion)) >= 0;
+        } else {
+            checkForChanges = false;
+        }
+
         final Set<ArtifactCoords> previousManagedDeps;
         if (checkForChanges) {
             logger.debug("Checking for changes %s", config.quarkusBom().previousLastUpdatedBom());
@@ -214,15 +225,20 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                 }
             }
         }
-        if (previousManagedDeps != null && (!previousManagedDeps.isEmpty() || newConstraints)) {
+        if (config.quarkusBom().isIncrementBomVersionOnChange()
+                && (config.quarkusBom().previousLastUpdatedBom() == null || !checkForChanges)
+                || previousManagedDeps != null && (!previousManagedDeps.isEmpty() || newConstraints)) {
             var configured = config.quarkusBom().getConfiguredPlatformBom();
             quarkusBomBuilder.bomArtifact(new DefaultArtifact(
                     configured.getGroupId(), configured.getArtifactId(), configured.getClassifier(), configured.getExtension(),
-                    incrementVersion(config.quarkusBom())));
-            logger.info("Bumped version of %s to %s", config.quarkusBom().getConfiguredPlatformBom(),
-                    quarkusBomBuilder.getBomArtifact());
+                    incrementVersion(config.quarkusBom(), checkForChanges)));
+            if (previousManagedDeps != null && (!previousManagedDeps.isEmpty() || newConstraints)) {
+                logger.info("Bumped version of %s to %s", config.quarkusBom().getConfiguredPlatformBom(),
+                        quarkusBomBuilder.getBomArtifact());
+            }
         } else {
-            quarkusBomBuilder.bomArtifact(config.quarkusBom().getConfiguredPlatformBom());
+            quarkusBomBuilder.bomArtifact(checkForChanges ? config.quarkusBom().previousLastUpdatedBom()
+                    : config.quarkusBom().getConfiguredPlatformBom());
         }
 
         addPlatformArtifacts(config.quarkusBom(), quarkusBomBuilder);
@@ -288,15 +304,19 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             });
 
             final Artifact generatedBomArtifact;
-            if (previousManagedDeps != null && (!previousManagedDeps.isEmpty() || newConstraints.get())) {
+            if (member.isIncrementBomVersionOnChange() && (member.previousLastUpdatedBom() == null || !checkForChanges)
+                    || previousManagedDeps != null && (!previousManagedDeps.isEmpty() || newConstraints.get())) {
                 var configured = member.getConfiguredPlatformBom();
                 generatedBomArtifact = new DefaultArtifact(
                         configured.getGroupId(), configured.getArtifactId(), configured.getClassifier(),
                         configured.getExtension(),
-                        incrementVersion(member));
-                logger.info("Bumped version of %s to %s", member.previousLastUpdatedBom(), generatedBomArtifact.getVersion());
+                        incrementVersion(member, checkForChanges));
+                if (previousManagedDeps != null && (!previousManagedDeps.isEmpty() || newConstraints.get())) {
+                    logger.info("Bumped version of %s to %s", member.previousLastUpdatedBom(),
+                            generatedBomArtifact.getVersion());
+                }
             } else {
-                generatedBomArtifact = member.getConfiguredPlatformBom();
+                generatedBomArtifact = checkForChanges ? member.previousLastUpdatedBom() : member.getConfiguredPlatformBom();
             }
 
             final DecomposedBom.Builder updatedBom = DecomposedBom.builder()
@@ -975,8 +995,12 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                         || "javadoc".equals(a.getClassifier()));
     }
 
-    private String incrementVersion(PlatformMember member) {
-        return versionIncrementor.nextVersion(member.getConfiguredPlatformBom().getVersion(),
-                member.previousLastUpdatedBom() == null ? null : member.previousLastUpdatedBom().getVersion());
+    private String incrementVersion(PlatformMember member, boolean takePreviousVersionIntoAccount) {
+        return versionIncrementor.nextVersion(
+                member.getConfiguredPlatformBom().getGroupId(),
+                member.getConfiguredPlatformBom().getArtifactId(),
+                member.getConfiguredPlatformBom().getVersion(),
+                !takePreviousVersionIntoAccount || member.previousLastUpdatedBom() == null ? null
+                        : member.previousLastUpdatedBom().getVersion());
     }
 }

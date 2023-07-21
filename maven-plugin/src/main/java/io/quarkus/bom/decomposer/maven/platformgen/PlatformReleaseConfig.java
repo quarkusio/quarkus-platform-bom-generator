@@ -8,6 +8,7 @@ public class PlatformReleaseConfig {
     private String version;
 
     private boolean onlyChangedMembers;
+    private String versionIncrementor;
 
     public String getPlatformKey() {
         return platformKey;
@@ -40,5 +41,14 @@ public class PlatformReleaseConfig {
 
     public void setOnlyChangedMembers(boolean onlyChangedMembers) {
         this.onlyChangedMembers = onlyChangedMembers;
+    }
+
+    @JsonIgnore
+    public String getVersionIncrementor() {
+        return versionIncrementor;
+    }
+
+    public void setVersionIncrementor(String versionIncrementor) {
+        this.versionIncrementor = versionIncrementor;
     }
 }
