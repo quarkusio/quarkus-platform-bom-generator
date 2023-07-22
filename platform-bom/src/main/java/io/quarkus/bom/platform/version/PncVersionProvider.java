@@ -38,9 +38,7 @@ public class PncVersionProvider {
     public static String getNextRedHatBuildVersion(String groupId, String artifactId, String version) {
         var v = getLastRedHatBuildVersion(groupId, artifactId, version);
         if (v == null) {
-            if (RhVersionPattern.isRhVersion(version)) {
-                return version;
-            }
+            version = RhVersionPattern.ensureNoRhQualifier(version);
             var av = new DefaultArtifactVersion(version);
             if (av.getQualifier() == null) {
                 return version + ".redhat-00001";

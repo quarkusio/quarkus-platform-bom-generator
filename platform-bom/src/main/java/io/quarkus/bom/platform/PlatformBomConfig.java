@@ -98,6 +98,11 @@ public class PlatformBomConfig {
             return this;
         }
 
+        public Builder versionIncrementor(String versionIncrementor) {
+            config.versionIncrementor = versionIncrementor;
+            return this;
+        }
+
         public PlatformBomConfig build() {
             Objects.requireNonNull(config.bomResolver);
             if (config.bomArtifact == null) {
@@ -128,6 +133,7 @@ public class PlatformBomConfig {
     private int foreignPreferredConstraint = (ForeignPreferredConstraint.WARN.flag()
             | ForeignPreferredConstraint.ACCEPT_IF_COMPATIBLE.flag());
     private boolean disableGroupAlignmentToPreferredVersions;
+    private String versionIncrementor;
 
     private PlatformBomConfig() {
     }
@@ -186,6 +192,10 @@ public class PlatformBomConfig {
 
     public int foreignPreferredConstraint() {
         return foreignPreferredConstraint;
+    }
+
+    public String versionIncrementor() {
+        return versionIncrementor;
     }
 
     boolean excluded(ArtifactKey key) {

@@ -2799,7 +2799,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 .artifactResolver(artifactResolver())
                 .pomResolver(PomSource.of(bomArtifact))
                 .includePlatformProperties(platformConfig.getUniversal().isGeneratePlatformProperties())
-                .platformBom(bomArtifact);
+                .platformBom(bomArtifact)
+                .versionIncrementor(
+                        platformConfig.getRelease() == null ? null : platformConfig.getRelease().getVersionIncrementor());
 
         if (platformConfig.getBomGenerator() != null) {
             configBuilder.disableGroupAlignmentToPreferredVersions(

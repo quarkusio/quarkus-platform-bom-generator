@@ -3,13 +3,25 @@ package io.quarkus.bom.platform.version;
 import io.quarkus.domino.RhVersionPattern;
 import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
 
-public class SpPlatformVersionIncrementor implements PlatformVersionIncrementor {
+public class PncVersionIncrementor implements PlatformVersionIncrementor {
+
+    private final PlatformVersionIncrementor baseIncrementor;
+
+    public PncVersionIncrementor() {
+        this(null);
+    }
+
+    public PncVersionIncrementor(PlatformVersionIncrementor baseIncrementor) {
+        this.baseIncrementor = baseIncrementor;
+    }
 
     @Override
     public String nextVersion(String groupId, String artifactId, String baseVersion, String lastVersion) {
-        if (lastVersion == null) {
-            return baseVersion;
+        if (baseIncrementor != null) {
+            var baseNextVersion = baseIncrementor.nextVersion(groupId, artifactId, baseVersion, lastVersion);
+            return PncVersionProvider.getNextRedHatBuildVersion(groupId, artifactId, baseNextVersion);
         }
+
         var upstreamBaseVersion = RhVersionPattern.ensureNoRhQualifier(baseVersion);
         var rhQualifier = baseVersion.substring(upstreamBaseVersion.length());
         var v = new DefaultArtifactVersion(upstreamBaseVersion);
@@ -28,19 +40,6 @@ public class SpPlatformVersionIncrementor implements PlatformVersionIncrementor 
             }
         }
 
-        if (v.getQualifier() == null) {
-            upstreamBaseVersion += ".SP1";
-        } else if ("Final".equals(v.getQualifier())) {
-            upstreamBaseVersion = upstreamBaseVersion.replace("Final", "SP1");
-        } else if (v.getQualifier().startsWith("SP")) {
-            int i = upstreamBaseVersion.lastIndexOf("SP");
-            String suffix = upstreamBaseVersion.substring(i);
-            String number = suffix.substring(2);
-            String newSuffix = "SP" + (Integer.parseInt(number) + 1);
-            upstreamBaseVersion = upstreamBaseVersion.replace(suffix, newSuffix);
-        } else {
-            upstreamBaseVersion += ".SP1";
-        }
-        return rhQualifier.isEmpty() ? upstreamBaseVersion : upstreamBaseVersion + "-redhat-00001";
+        return PncVersionProvider.getNextRedHatBuildVersion(groupId, artifactId, v.toString());
     }
 }

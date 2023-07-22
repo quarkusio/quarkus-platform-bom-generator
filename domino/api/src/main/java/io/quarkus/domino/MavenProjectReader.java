@@ -20,7 +20,8 @@ public class MavenProjectReader {
     private static final Map<String, String> PACKAGING_TYPE = Map.of(
             "maven-archetype", ArtifactCoords.TYPE_JAR,
             "bundle", ArtifactCoords.TYPE_JAR,
-            "maven-plugin", ArtifactCoords.TYPE_JAR);
+            "maven-plugin", ArtifactCoords.TYPE_JAR,
+            "war", ArtifactCoords.TYPE_JAR);
 
     private static String getTypeForPackaging(String packaging) {
         return PACKAGING_TYPE.getOrDefault(packaging, packaging);
