@@ -3,6 +3,7 @@ package io.quarkus.bom.decomposer.maven;
 import io.quarkus.bom.decomposer.PomUtils;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
+import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import java.io.File;
 import java.io.IOException;
@@ -87,12 +88,15 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
     @Parameter(required = false, property = "filterInvalidConstraints")
     boolean filterInvalidConstraints;
 
+    @Parameter(required = false, property = "excludeScopes")
+    List<String> excludeScopes;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
 
         final Artifact artifact = project.getArtifact();
-        final DefaultArtifact bomArtifact = new DefaultArtifact(artifact.getGroupId(), artifact.getArtifactId(), null, "pom",
-                artifact.getVersion());
+        final DefaultArtifact bomArtifact = new DefaultArtifact(artifact.getGroupId(), artifact.getArtifactId(),
+                ArtifactCoords.DEFAULT_CLASSIFIER, ArtifactCoords.TYPE_POM, artifact.getVersion());
         final ArtifactDescriptorResult bomDescriptor;
         try {
             bomDescriptor = repoSystem.readArtifactDescriptor(repoSession,
@@ -116,26 +120,32 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
         final Map<String, org.apache.maven.model.Dependency> modelDeps = alphabetically ? new HashMap<>(managedDeps.size())
                 : null;
         for (Dependency d : managedDeps) {
-            final org.eclipse.aether.artifact.Artifact a = d.getArtifact();
-
-            if (filterInvalidConstraints && !exists(a)) {
-                getLog().warn(a + " could not be resolved and was removed from the BOM");
+            if (!excludeScopes.isEmpty() && excludeScopes.contains(d.getScope())) {
+                if (getLog().isDebugEnabled()) {
+                    getLog().debug("Excluded " + d + " by scope");
+                }
                 continue;
             }
 
+            final org.eclipse.aether.artifact.Artifact a = d.getArtifact();
             final String type = a.getProperties().getOrDefault("type", a.getExtension());
             final ArtifactKey key = ArtifactKey.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(),
                     type);
             if (excludedKeys.contains(key)) {
                 continue;
             }
-
             final org.apache.maven.model.Dependency modelDep = toModelDep(d);
             if (a.getArtifactId().endsWith(BootstrapConstants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX) ||
                     a.getArtifactId().endsWith(BootstrapConstants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX)) {
                 dm.addDependency(modelDep);
                 continue;
             }
+
+            if (filterInvalidConstraints && !exists(a)) {
+                getLog().warn(a + " could not be resolved and was removed from the BOM");
+                continue;
+            }
+
             if (modelDeps != null) {
                 modelDeps.put(key.toString(), modelDep);
             } else {
