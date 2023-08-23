@@ -15,6 +15,11 @@ io.quarkus.bom.decomposer.detector.FasterXmlReleaseIdDetector
 io.quarkus.bom.decomposer.detector.GlassfishHk2ReleaseIdDetector
 io.quarkus.bom.decomposer.detector.GlassfishJerseyReleaseIdDetector
 io.quarkus.bom.decomposer.detector.GlassfishJsonpReleaseIdDetector
+io.quarkus.bom.decomposer.detector.GoogleApiCommonReleaseIdDetector
+io.quarkus.bom.decomposer.detector.GoogleCloudCoreReleaseIdDetector
+io.quarkus.bom.decomposer.detector.GoogleCloudIamReleaseIdDetector
+io.quarkus.bom.decomposer.detector.GoogleGaxReleaseIdDetector
+io.quarkus.bom.decomposer.detector.GoogleGrpcReleaseIdDetector
 io.quarkus.bom.decomposer.detector.GuavaReleaseIdDetector
 io.quarkus.bom.decomposer.detector.HapiFhirReleaseIdDetector
 io.quarkus.bom.decomposer.detector.HibernateReleaseIdDetector
