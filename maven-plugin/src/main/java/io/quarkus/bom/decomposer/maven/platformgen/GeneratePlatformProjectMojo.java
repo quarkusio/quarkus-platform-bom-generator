@@ -180,7 +180,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     // POM property names by values
     private final Map<String, String> pomPropsByValues = new HashMap<>();
 
-    private Profile generatedBomReleaseProfile;
+    private List<Profile> generatedBomReleaseProfile;
 
     private boolean isClean() {
         final List<String> goals;
@@ -873,9 +873,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private void addReleaseProfile(final Model pom) {
-        final Profile releaseProfile = getGeneratedBomReleaseProfile();
-        if (releaseProfile != null) {
-            pom.addProfile(releaseProfile);
+        final List<Profile> releaseProfiles = getGeneratedBomReleaseProfile();
+        for (var p : releaseProfiles) {
+            pom.addProfile(p);
         }
     }
 
@@ -1584,48 +1584,44 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         return member.bomChanged;
     }
 
-    private Profile getGeneratedBomReleaseProfile() {
+    private List<Profile> getGeneratedBomReleaseProfile() {
+
         if (generatedBomReleaseProfile == null) {
-            Profile parentReleaseProfile = null;
+            generatedBomReleaseProfile = new ArrayList<>(2);
             for (Profile p : project.getModel().getProfiles()) {
-                if (p.getId().equals("release")) {
-                    parentReleaseProfile = p;
-                    break;
+                if (p.getId().startsWith("release")) {
+                    generatedBomReleaseProfile.add(copyReleasePlugins(p));
                 }
             }
-            if (parentReleaseProfile == null) {
-                getLog().debug("Failed to locate profile with id 'release'");
-                return null;
-            }
-            Plugin gpgPlugin = null;
-            for (Plugin plugin : parentReleaseProfile.getBuild().getPlugins()) {
-                if (plugin.getArtifactId().equals("maven-gpg-plugin")) {
-                    if (plugin.getVersion() == null) {
-                        final Plugin managedGpgPlugin = project.getPluginManagement().getPluginsAsMap()
-                                .get("org.apache.maven.plugins:maven-gpg-plugin");
-                        if (managedGpgPlugin == null) {
-                            getLog().warn("Failed to determine the version for org.apache.maven.plugins:maven-gpg-plugin");
-                        }
-                        plugin = plugin.clone();
-                        plugin.setVersion(managedGpgPlugin.getVersion());
-                    }
-                    gpgPlugin = plugin;
-                    break;
-                }
-            }
-            if (gpgPlugin == null) {
-                getLog().warn("Failed to locate the maven-gpg-plugin plugin in the " + parentReleaseProfile.getId()
-                        + " profile");
-                return null;
-            }
-            final Profile memberReleaseProfile = new Profile();
-            memberReleaseProfile.setId(parentReleaseProfile.getId());
-            final Build build = new Build();
-            memberReleaseProfile.setBuild(build);
-            build.addPlugin(gpgPlugin);
-            generatedBomReleaseProfile = memberReleaseProfile;
         }
         return generatedBomReleaseProfile;
+    }
+
+    private Profile copyReleasePlugins(Profile parentReleaseProfile) {
+        final Profile memberReleaseProfile = new Profile();
+        memberReleaseProfile.setId(parentReleaseProfile.getId());
+        final Build build = new Build();
+        memberReleaseProfile.setBuild(build);
+        for (Plugin plugin : parentReleaseProfile.getBuild().getPlugins()) {
+            if (plugin.getArtifactId().equals("maven-gpg-plugin")) {
+                build.addPlugin(clonePluginConfig(plugin));
+            } else if (plugin.getArtifactId().equals("nexus-staging-maven-plugin")) {
+                build.addPlugin(clonePluginConfig(plugin));
+            }
+        }
+        return memberReleaseProfile;
+    }
+
+    private Plugin clonePluginConfig(Plugin plugin) {
+        if (plugin.getVersion() == null) {
+            final Plugin managedPlugin = project.getPluginManagement().getPluginsAsMap().get(plugin.getKey());
+            if (managedPlugin == null) {
+                getLog().warn("Failed to determine the version for " + plugin.getKey());
+            }
+            plugin = plugin.clone();
+            plugin.setVersion(managedPlugin.getVersion());
+        }
+        return plugin;
     }
 
     private static ArtifactCoords toCoords(final Artifact a) {
