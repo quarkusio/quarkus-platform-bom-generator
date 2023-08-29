@@ -41,6 +41,7 @@ public class Utils {
         disablePlugin(pom, "maven-install-plugin", "default-install");
         disablePlugin(pom, "maven-deploy-plugin", "default-deploy");
         pom.getProperties().setProperty("gpg.skip", "true");
+        pom.getProperties().setProperty("skipNexusStagingDeployMojo", "true");
     }
 
     public static void disablePlugin(Model pom, String pluginArtifactId, String execId) {
