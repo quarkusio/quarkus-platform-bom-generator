@@ -14,6 +14,7 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.devtools.messagewriter.MessageWriter;
+import io.quarkus.domino.pnc.PncVersionProvider;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -34,6 +35,7 @@ import java.util.Objects;
 import java.util.Properties;
 import java.util.ServiceLoader;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -293,11 +295,17 @@ public class ProjectDependencyResolver {
                     codeReposTotal = releaseRepos.size();
 
                     final List<ReleaseRepo> sorted = ReleaseCollection.sort(releaseRepos.values());
+                    boolean logLatestPncBuilds = Boolean.getBoolean("logLatestPncBuilds");
+                    AtomicInteger counter = new AtomicInteger();
                     for (ReleaseRepo e : sorted) {
                         logComment("repo-url " + e.id().origin());
                         logComment("tag " + e.id().version().asString());
-                        for (String s : toSortedStrings(e.artifacts.keySet(), config.isLogModulesToBuild())) {
-                            log(s);
+                        if (logLatestPncBuilds) {
+                            logLatestPncBuilds(e);
+                        } else {
+                            for (String s : toSortedStrings(e.artifacts.keySet(), config.isLogModulesToBuild())) {
+                                log(s);
+                            }
                         }
                     }
 
@@ -385,6 +393,48 @@ public class ProjectDependencyResolver {
                 log.info("Saving the report in " + logOutputFile.toAbsolutePath());
                 fileOutput.close();
             }
+        }
+    }
+
+    private void logLatestPncBuilds(ReleaseRepo e) {
+        log.info("Checking the latest PNC builds of " + e.id());
+        var gavSet = new HashSet<io.quarkus.maven.dependency.GAV>(e.artifacts.size());
+        var artifactSet = e.artifacts.keySet();
+        for (var c : artifactSet) {
+            gavSet.add(new io.quarkus.maven.dependency.GAV(c.getGroupId(), c.getArtifactId(), c.getVersion()));
+        }
+        var latestVersions = PncVersionProvider.getLastRedHatBuildVersions(gavSet);
+        var pncRebuilds = new HashMap<io.quarkus.maven.dependency.GAV, String>(latestVersions.size());
+        for (var latest : latestVersions) {
+            if (latest.getLatestVersion() != null && !latest.getLatestVersion().equals(latest.getVersion())) {
+                pncRebuilds.put(
+                        new io.quarkus.maven.dependency.GAV(latest.getGroupId(), latest.getArtifactId(), latest.getVersion()),
+                        latest.getLatestVersion());
+            }
+        }
+        final List<String> lines = new ArrayList<>(latestVersions.size());
+        for (var c : artifactSet) {
+            var gav = new io.quarkus.maven.dependency.GAV(c.getGroupId(), c.getArtifactId(), c.getVersion());
+            StringBuilder sb = null;
+            if (!config.isLogModulesToBuild()) {
+                sb = new StringBuilder();
+                sb.append(c.toGACTVString());
+            } else if (gavSet.remove(gav)) {
+                sb = new StringBuilder();
+                sb.append(gav);
+            }
+
+            if (sb != null) {
+                String latestVersion = pncRebuilds.get(gav);
+                if (latestVersion != null) {
+                    sb.append(" # was rebuilt as ").append(latestVersion);
+                }
+                lines.add(sb.toString());
+            }
+        }
+        Collections.sort(lines);
+        for (var line : lines) {
+            log(line);
         }
     }
 

@@ -1,6 +1,6 @@
 package io.quarkus.bom.decomposer.maven.platformgen;
 
-import io.quarkus.bom.platform.version.PncVersionProvider;
+import io.quarkus.domino.pnc.PncVersionProvider;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.file.Files;
