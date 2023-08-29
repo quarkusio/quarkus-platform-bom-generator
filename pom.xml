@@ -274,7 +274,8 @@
               <nexusUrl>https://s01.oss.sonatype.org/</nexusUrl>
               <serverId>ossrh</serverId>
               <autoReleaseAfterClose>true</autoReleaseAfterClose>
-              <keepStagingRepositoryOnCloseRuleFailure>false</keepStagingRepositoryOnCloseRuleFailure>
+              <keepStagingRepositoryOnCloseRuleFailure>true</keepStagingRepositoryOnCloseRuleFailure>
+              <stagingProgressTimeoutMinutes>60</stagingProgressTimeoutMinutes>
             </configuration>
           </plugin>
           <plugin>
