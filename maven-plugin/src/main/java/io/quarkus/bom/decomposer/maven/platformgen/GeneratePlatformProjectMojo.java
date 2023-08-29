@@ -258,10 +258,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             persistPom(member.baseModel);
         }
 
-        if (platformConfig.getAttachedMavenPlugin() != null) {
-            generateMavenPluginModule(pom);
-        }
-
         if (dependenciesToBuild != null) {
             generateDepsToBuildModule(pom);
             generateSbomModule(pom);
@@ -272,6 +268,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         generateExtensionChangesModule(pom);
+
+        // keep the Maven plugin as the last module to make sure the last module is deployable by the Nexus plugin
+        if (platformConfig.getAttachedMavenPlugin() != null) {
+            generateMavenPluginModule(pom);
+        }
+
         addReleaseProfile(pom);
 
         pom.getProperties().setProperty(PLATFORM_KEY_PROP, releaseConfig().getPlatformKey());
