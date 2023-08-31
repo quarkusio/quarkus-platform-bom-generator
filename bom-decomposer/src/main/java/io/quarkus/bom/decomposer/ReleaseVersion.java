@@ -1,9 +1,15 @@
 package io.quarkus.bom.decomposer;
 
+import io.quarkus.domino.scm.ScmRevision;
 import java.util.Objects;
 
+/**
+ * @deprecated in favor of {@link ScmRevision}
+ */
+@Deprecated(forRemoval = true)
 public interface ReleaseVersion {
 
+    @Deprecated(forRemoval = true)
     class Factory {
         public static ReleaseVersion tag(String tag) {
             return new StringReleaseVersion("Tag", tag, true);

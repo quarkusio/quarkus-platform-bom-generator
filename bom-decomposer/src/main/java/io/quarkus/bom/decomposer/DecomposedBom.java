@@ -1,9 +1,10 @@
 package io.quarkus.bom.decomposer;
 
 import io.quarkus.bom.PomResolver;
+import io.quarkus.domino.scm.ScmRepository;
+import io.quarkus.domino.scm.ScmRevision;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -32,7 +33,7 @@ public class DecomposedBom {
         }
 
         public Builder addRelease(ProjectRelease release) {
-            releases.computeIfAbsent(release.id().origin(), t -> new HashMap<>()).put(release.id().version(), release);
+            releases.computeIfAbsent(release.id().getRepository(), t -> new HashMap<>()).put(release.id(), release);
             return this;
         }
 
@@ -47,7 +48,7 @@ public class DecomposedBom {
 
     protected PomResolver bomSource;
     protected Artifact bomArtifact;
-    protected Map<ReleaseOrigin, Map<ReleaseVersion, ProjectRelease>> releases = new HashMap<>();
+    protected Map<ScmRepository, Map<ScmRevision, ProjectRelease>> releases = new HashMap<>();
 
     private DecomposedBom() {
     }
@@ -64,24 +65,24 @@ public class DecomposedBom {
         return bomSource;
     }
 
-    public boolean includes(ReleaseOrigin origin) {
+    public boolean includes(ScmRepository origin) {
         return releases.containsKey(origin);
     }
 
-    public Collection<ReleaseVersion> releaseVersions(ReleaseOrigin origin) {
-        return releases.getOrDefault(origin, Collections.emptyMap()).keySet();
+    public Collection<ScmRevision> releaseVersions(ScmRepository origin) {
+        return releases.getOrDefault(origin, Map.of()).keySet();
     }
 
-    public Collection<ProjectRelease> releases(ReleaseOrigin origin) {
-        return releases.getOrDefault(origin, Collections.emptyMap()).values();
+    public Collection<ProjectRelease> releases(ScmRepository origin) {
+        return releases.getOrDefault(origin, Map.of()).values();
     }
 
-    public ProjectRelease releaseOrNull(ReleaseId releaseId) {
-        return releases.getOrDefault(releaseId.origin(), Collections.emptyMap()).get(releaseId.version());
+    public ProjectRelease releaseOrNull(ScmRevision releaseId) {
+        return releases.getOrDefault(releaseId.getRepository(), Map.of()).get(releaseId);
     }
 
     public Iterable<ProjectRelease> releases() {
-        final Iterator<Map<ReleaseVersion, ProjectRelease>> origins = releases.values().iterator();
+        final Iterator<Map<ScmRevision, ProjectRelease>> origins = releases.values().iterator();
         return new Iterable<ProjectRelease>() {
             @Override
             public Iterator<ProjectRelease> iterator() {
@@ -107,8 +108,8 @@ public class DecomposedBom {
 
     public void visit(DecomposedBomVisitor visitor) throws BomDecomposerException {
         visitor.enterBom(bomArtifact);
-        List<ReleaseOrigin> origins = new ArrayList<>(releases.keySet());
-        for (ReleaseOrigin origin : origins) {
+        List<ScmRepository> origins = new ArrayList<>(releases.keySet());
+        for (ScmRepository origin : origins) {
             final Collection<ProjectRelease> releaseVersions = releases.get(origin).values();
             if (visitor.enterReleaseOrigin(origin, releaseVersions.size())) {
                 for (ProjectRelease v : releaseVersions) {

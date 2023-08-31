@@ -2,11 +2,10 @@ package io.quarkus.bom.test;
 
 import io.quarkus.bom.decomposer.ProjectDependency;
 import io.quarkus.bom.decomposer.ProjectRelease;
-import io.quarkus.bom.decomposer.ReleaseIdFactory;
 import io.quarkus.bom.decomposer.ReleaseOrigin;
-import io.quarkus.bom.decomposer.ReleaseOrigin.ScmConnectionOrigin;
-import io.quarkus.bom.decomposer.ReleaseVersion;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
+import io.quarkus.domino.scm.ScmRepository;
+import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -39,14 +38,14 @@ public class ProjectReleaseInstaller {
         return installer;
     }
 
-    private final ReleaseOrigin origin;
+    private final ScmRepository origin;
     private String projectGroupId;
     private String projectVersion;
     private PomInstaller parentPom;
     private ProjectRelease.Builder pb;
     private MavenArtifactResolver resolver;
 
-    private ProjectReleaseInstaller(ReleaseOrigin origin) {
+    private ProjectReleaseInstaller(ScmRepository origin) {
         this.origin = Objects.requireNonNull(origin);
     }
 
@@ -57,7 +56,7 @@ public class ProjectReleaseInstaller {
      * @return this builder
      */
     public ProjectReleaseInstaller tag(String tag) {
-        this.pb = ProjectRelease.builder(ReleaseIdFactory.create(origin, ReleaseVersion.Factory.tag(tag)));
+        this.pb = ProjectRelease.builder(ScmRevision.tag(origin, tag));
         this.projectVersion = tag;
         return this;
     }
@@ -69,7 +68,7 @@ public class ProjectReleaseInstaller {
      * @return
      */
     public ProjectReleaseInstaller version(String version) {
-        this.pb = ProjectRelease.builder(ReleaseIdFactory.create(origin, ReleaseVersion.Factory.version(version)));
+        this.pb = ProjectRelease.builder(ScmRevision.version(origin, version));
         this.projectVersion = version;
         return this;
     }
@@ -131,9 +130,8 @@ public class ProjectReleaseInstaller {
                 pomInstaller.parent(parentPom.model().getGroupId(), parentPom.model().getArtifactId(),
                         parentPom.model().getVersion());
             }
-            if (pb.id().origin() instanceof ReleaseOrigin.ScmConnectionOrigin) {
-                final ReleaseOrigin.ScmConnectionOrigin scm = (ScmConnectionOrigin) pb.id().origin();
-                pomInstaller.scm(scm.toString(), pb.id().version().asString());
+            if (pb.id().getRepository().hasUrl()) {
+                pomInstaller.scm(pb.id().getRepository().getUrl(), pb.id().getValue());
             }
             if ("pom".equals(a.getExtension())) {
                 pomInstaller.packaging("pom");

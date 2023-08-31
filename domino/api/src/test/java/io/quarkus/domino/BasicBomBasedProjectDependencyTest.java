@@ -2,13 +2,16 @@ package io.quarkus.domino;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.decomposer.ReleaseIdFactory;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.domino.test.repo.TestArtifactRepo;
 import io.quarkus.domino.test.repo.TestProject;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -95,11 +98,11 @@ public class BasicBomBasedProjectDependencyTest {
         assertThat(rc).isNotNull();
         assertThat(rc.getReleases()).hasSize(4);
 
-        var roots = rc.getRootReleaseRepos().iterator();
-        assertThat(roots).hasNext();
-        var release = roots.next();
+        var roots = toMap(rc.getRootReleaseRepos());
+        assertThat(roots).hasSize(2);
 
-        assertThat(release.id()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://acme.org/lib", "1.0"));
+        var release = roots.get(ReleaseIdFactory.forScmAndTag("https://acme.org/lib", "1.0"));
+        assertThat(release).isNotNull();
         assertThat(release.getArtifacts()).hasSize(4);
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.pom("org.acme", "acme-parent", "1.0"));
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.pom("org.acme", "acme-bom", "1.0"));
@@ -114,10 +117,8 @@ public class BasicBomBasedProjectDependencyTest {
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.bar", "bar-lib", "1.0"));
         assertThat(release.getDependencies()).isEmpty();
 
-        assertThat(roots).hasNext();
-        release = roots.next();
-        assertThat(roots).isExhausted();
-        assertThat(release.id()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://foo.org/lib", "2.0"));
+        release = roots.get(ReleaseIdFactory.forScmAndTag("https://foo.org/lib", "2.0"));
+        assertThat(release).isNotNull();
         assertThat(release.getArtifacts()).hasSize(1);
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.foo", "foo-lib", "2.0"));
         assertThat(release.getDependencies()).hasSize(1);
@@ -145,11 +146,10 @@ public class BasicBomBasedProjectDependencyTest {
         assertThat(rc).isNotNull();
         assertThat(rc.getReleases()).hasSize(3);
 
-        var roots = rc.getRootReleaseRepos().iterator();
-        assertThat(roots).hasNext();
-        var release = roots.next();
-
-        assertThat(release.id()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://acme.org/lib", "1.0"));
+        var roots = toMap(rc.getRootReleaseRepos());
+        assertThat(roots).hasSize(2);
+        var release = roots.get(ReleaseIdFactory.forScmAndTag("https://acme.org/lib", "1.0"));
+        assertThat(release).isNotNull();
         assertThat(release.getArtifacts()).hasSize(4);
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.pom("org.acme", "acme-parent", "1.0"));
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.pom("org.acme", "acme-bom", "1.0"));
@@ -164,11 +164,8 @@ public class BasicBomBasedProjectDependencyTest {
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.bar", "bar-lib", "1.0"));
         assertThat(release.getDependencies()).isEmpty();
 
-        assertThat(roots).hasNext();
-        release = roots.next();
-        assertThat(roots).isExhausted();
-        assertThat(roots).isExhausted();
-        assertThat(release.id()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://foo.org/lib", "2.0"));
+        release = roots.get(ReleaseIdFactory.forScmAndTag("https://foo.org/lib", "2.0"));
+        assertThat(release).isNotNull();
         assertThat(release.getArtifacts()).hasSize(1);
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.foo", "foo-lib", "2.0"));
         assertThat(release.getDependencies()).isEmpty();
@@ -209,5 +206,13 @@ public class BasicBomBasedProjectDependencyTest {
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.pom("org.bar", "bar-parent", "1.0"));
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.bar", "bar-lib", "1.0"));
         assertThat(release.getDependencies()).isEmpty();
+    }
+
+    private static Map<ReleaseId, ReleaseRepo> toMap(Iterable<ReleaseRepo> releases) {
+        var map = new HashMap<ReleaseId, ReleaseRepo>();
+        for (var r : releases) {
+            map.put(r.id(), r);
+        }
+        return map;
     }
 }

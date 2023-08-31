@@ -6,7 +6,6 @@ import com.redhat.hacbs.recipies.scm.RepositoryInfo;
 import com.redhat.hacbs.recipies.scm.ScmLocator;
 import com.redhat.hacbs.recipies.scm.TagInfo;
 import io.quarkus.bom.decomposer.BomDecomposerException;
-import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.decomposer.ReleaseIdDetector;
 import io.quarkus.bom.decomposer.ReleaseIdFactory;
 import io.quarkus.bom.decomposer.ReleaseIdResolver;
@@ -16,6 +15,8 @@ import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.bootstrap.util.IoUtils;
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.domino.pnc.PncVersionProvider;
+import io.quarkus.domino.scm.ScmRepository;
+import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -204,13 +205,13 @@ public class ProjectDependencyResolver {
     private final Set<String> excludeScopes;
 
     private final Map<ArtifactCoords, ArtifactDependency> artifactDeps = new HashMap<>();
-    private final Map<ReleaseId, ReleaseRepo> releaseRepos = new HashMap<>();
+    private final Map<ScmRevision, ReleaseRepo> releaseRepos = new HashMap<>();
     private final Map<ArtifactCoords, Map<String, String>> effectivePomProps = new HashMap<>();
 
     private final ReleaseIdResolver releaseIdResolver;
 
     private Map<ArtifactCoords, DependencyNode> preResolvedRootArtifacts = Map.of();
-    private ReleaseId projectReleaseId;
+    private ScmRevision projectReleaseId;
     private Set<GAV> projectGavs;
 
     private ProjectDependencyResolver(Builder builder) {
@@ -712,7 +713,7 @@ public class ProjectDependencyResolver {
 
     private void configureReleaseRepoDeps() {
 
-        final Iterator<Map.Entry<ReleaseId, ReleaseRepo>> i = releaseRepos.entrySet().iterator();
+        final Iterator<Map.Entry<ScmRevision, ReleaseRepo>> i = releaseRepos.entrySet().iterator();
         while (i.hasNext()) {
             if (i.next().getValue().artifacts.isEmpty()) {
                 i.remove();
@@ -748,8 +749,8 @@ public class ProjectDependencyResolver {
         }
     }
 
-    private ReleaseId getReleaseId(ArtifactCoords coords, List<RemoteRepository> repos) {
-        final ReleaseId releaseId;
+    private ScmRevision getReleaseId(ArtifactCoords coords, List<RemoteRepository> repos) {
+        final ScmRevision releaseId;
         if (this.preResolvedRootArtifacts.containsKey(coords)) {
             releaseId = projectReleaseId;
         } else {
@@ -818,12 +819,12 @@ public class ProjectDependencyResolver {
                         var pomArtifact = new DefaultArtifact(gav.getGroupId(), gav.getArtifactId(), ArtifactCoords.TYPE_POM,
                                 gav.getVersion());
 
-                        ReleaseId releaseId = null;
+                        ScmRevision releaseId = null;
                         for (ReleaseIdDetector rd : releaseDetectors) {
                             try {
                                 var rid = rd.detectReleaseId(ref.get(), pomArtifact);
-                                if (rid != null && rid.origin().isUrl()
-                                        && rid.origin().toString().contains("git")) {
+                                if (rid != null && rid.getRepository().hasUrl()
+                                        && rid.getRepository().getUrl().contains("git")) {
                                     releaseId = rid;
                                     break;
                                 }
@@ -843,12 +844,13 @@ public class ProjectDependencyResolver {
                             }
                         }
 
-                        if (releaseId != null && releaseId.origin().isUrl() && releaseId.origin().toString().contains("git")) {
+                        if (releaseId != null && releaseId.getRepository().hasUrl()
+                                && releaseId.getRepository().getUrl().contains("git")) {
                             log.warn("The SCM recipe database is missing an entry for " + gav.getGroupId() + ":"
                                     + gav.getArtifactId() + ":" + gav.getVersion() + ", " + releaseId
                                     + " will be used as a fallback");
-                            return new TagInfo(new RepositoryInfo("git", releaseId.origin().toString()),
-                                    releaseId.version().asString(), null);
+                            return new TagInfo(new RepositoryInfo("git", releaseId.getRepository().getUrl()),
+                                    releaseId.getValue(), null);
                         }
                         return null;
                     }
@@ -861,7 +863,7 @@ public class ProjectDependencyResolver {
             int succeeded;
 
             @Override
-            public ReleaseId detectReleaseId(ReleaseIdResolver releaseResolver, Artifact artifact)
+            public ScmRevision detectReleaseId(ReleaseIdResolver releaseResolver, Artifact artifact)
                     throws BomDecomposerException {
                 // there is the PNC build info-based SCM locator in front,
                 // if it failed, make sure the redhat qualifier is removed
@@ -873,7 +875,7 @@ public class ProjectDependencyResolver {
                     final TagInfo tag = scmLocator.resolveTagInfo(gav);
                     if (tag != null) {
                         ++succeeded;
-                        return ReleaseIdFactory.forScmAndTag(tag.getRepoInfo().getUri(), tag.getTag());
+                        return ScmRevision.tag(ScmRepository.ofUrl(tag.getRepoInfo().getUri()), tag.getTag());
                     }
                 } catch (Exception e) {
                     error = e;
@@ -939,7 +941,7 @@ public class ProjectDependencyResolver {
                             "vertx-service-factory");
 
                     @Override
-                    public ReleaseId detectReleaseId(ReleaseIdResolver releaseResolver, Artifact artifact)
+                    public ScmRevision detectReleaseId(ReleaseIdResolver releaseResolver, Artifact artifact)
                             throws BomDecomposerException {
                         if (!"io.vertx".equals(artifact.getGroupId())) {
                             return null;
@@ -966,7 +968,7 @@ public class ProjectDependencyResolver {
                                     artifact.getVersion());
                         }
                         var defaultReleaseId = releaseResolver.defaultReleaseId(artifact);
-                        if (defaultReleaseId.origin().toString().endsWith("vertx-sql-client")) {
+                        if (defaultReleaseId.getRepository().getId().endsWith("vertx-sql-client")) {
                             return defaultReleaseId;
                         }
 
@@ -1378,11 +1380,11 @@ public class ProjectDependencyResolver {
         }
     }
 
-    private ReleaseRepo getOrCreateRepo(ReleaseId id) {
-        return releaseRepos.computeIfAbsent(id, k -> new ReleaseRepo(id));
+    private ReleaseRepo getOrCreateRepo(ScmRevision id) {
+        return releaseRepos.computeIfAbsent(id, ReleaseRepo::new);
     }
 
-    private ReleaseRepo getRepo(ReleaseId id) {
+    private ReleaseRepo getRepo(ScmRevision id) {
         return Objects.requireNonNull(releaseRepos.get(id));
     }
 

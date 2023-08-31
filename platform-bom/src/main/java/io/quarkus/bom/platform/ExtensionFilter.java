@@ -5,11 +5,11 @@ import io.quarkus.bom.decomposer.DecomposedBom;
 import io.quarkus.bom.decomposer.DecomposedBomTransformer;
 import io.quarkus.bom.decomposer.ProjectDependency;
 import io.quarkus.bom.decomposer.ProjectRelease;
-import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.resolver.ArtifactResolver;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.devtools.messagewriter.MessageWriter;
+import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.paths.PathTree;
@@ -73,7 +73,7 @@ public class ExtensionFilter implements DecomposedBomTransformer {
         final List<Dependency> allDepList = new ArrayList<>();
         final Map<ArtifactKey, ProjectDependency> allDepMap = new HashMap<>();
         final Map<ArtifactKey, ProjectRelease> releaseMap = new HashMap<>();
-        final Map<ReleaseId, ProjectRelease> releases = new HashMap<>();
+        final Map<ScmRevision, ProjectRelease> releases = new HashMap<>();
 
         for (ProjectRelease r : decomposed.releases()) {
             releases.put(r.id(), r);

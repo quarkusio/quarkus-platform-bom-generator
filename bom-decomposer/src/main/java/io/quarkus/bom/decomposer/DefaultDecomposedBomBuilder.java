@@ -1,6 +1,7 @@
 package io.quarkus.bom.decomposer;
 
 import io.quarkus.bom.PomResolver;
+import io.quarkus.domino.scm.ScmRevision;
 import java.util.HashMap;
 import java.util.Map;
 import org.eclipse.aether.artifact.Artifact;
@@ -10,7 +11,7 @@ public class DefaultDecomposedBomBuilder implements DecomposedBomBuilder {
 
     private PomResolver bomSource;
     private Artifact bomArtifact;
-    private Map<ReleaseId, ProjectRelease.Builder> releases = new HashMap<>();
+    private final Map<ScmRevision, ProjectRelease.Builder> releases = new HashMap<>();
 
     @Override
     public void bomSource(PomResolver bomSource) {
@@ -23,8 +24,8 @@ public class DefaultDecomposedBomBuilder implements DecomposedBomBuilder {
     }
 
     @Override
-    public void bomDependency(ReleaseId releaseId, Dependency artifact) throws BomDecomposerException {
-        releases.computeIfAbsent(releaseId, t -> ProjectRelease.builder(t)).add(artifact);
+    public void bomDependency(ScmRevision releaseId, Dependency artifact) throws BomDecomposerException {
+        releases.computeIfAbsent(releaseId, ProjectRelease::builder).add(artifact);
     }
 
     @Override

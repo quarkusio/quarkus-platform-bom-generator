@@ -1,7 +1,7 @@
 package io.quarkus.bom.platform;
 
 import io.quarkus.bom.decomposer.ProjectRelease;
-import io.quarkus.bom.decomposer.ReleaseId;
+import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.ArtifactKey;
 import java.util.Collection;
 import java.util.HashMap;
@@ -14,7 +14,7 @@ public class ExtensionDeps {
     private final ArtifactKey runtimeKey;
     private final Set<ArtifactKey> runtimeDeps = new HashSet<>();
     private final Set<ArtifactKey> deploymentDeps = new HashSet<>();
-    private final Map<ReleaseId, ProjectRelease> projectDeps = new HashMap<>();
+    private final Map<ScmRevision, ProjectRelease> projectDeps = new HashMap<>();
     private final Map<ArtifactKey, ExtensionDeps> extensionDeps = new HashMap<>();
 
     ExtensionDeps(ArtifactKey runtimeKey) {

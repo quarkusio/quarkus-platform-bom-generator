@@ -1,101 +1,22 @@
 package io.quarkus.bom.decomposer;
 
-import java.util.Objects;
+import io.quarkus.domino.scm.ScmRepository;
 
-public interface ReleaseOrigin extends Comparable<ReleaseOrigin> {
+/**
+ * @deprecated in favor of {@link ScmRepository}
+ */
+@Deprecated(forRemoval = true)
+public interface ReleaseOrigin {
 
     class Factory {
-        public static ReleaseOrigin scmConnection(String connection) {
-            return new ScmConnectionOrigin(connection);
+        public static ScmRepository scmConnection(String connection) {
+            return ScmRepository.ofUrl(connection);
         }
 
-        public static ReleaseOrigin ga(String groupId, String artifactId) {
-            return new GaOrigin(groupId, artifactId);
+        public static ScmRepository ga(String groupId, String artifactId) {
+            return ScmRepository.ofId(groupId + ":" + artifactId);
         }
     }
 
     boolean isUrl();
-
-    class ScmConnectionOrigin implements ReleaseOrigin {
-
-        final String connection;
-
-        ScmConnectionOrigin(String connection) {
-            this.connection = Objects.requireNonNull(connection);
-        }
-
-        @Override
-        public String toString() {
-            return connection;
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(connection);
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj)
-                return true;
-            if (obj == null)
-                return false;
-            if (getClass() != obj.getClass())
-                return false;
-            ScmConnectionOrigin other = (ScmConnectionOrigin) obj;
-            return Objects.equals(connection, other.connection);
-        }
-
-        @Override
-        public int compareTo(ReleaseOrigin o) {
-            return toString().compareTo(o.toString());
-        }
-
-        @Override
-        public boolean isUrl() {
-            return true;
-        }
-    }
-
-    class GaOrigin implements ReleaseOrigin {
-        final String groupId;
-        final String artifactId;
-
-        GaOrigin(String groupId, String artifactId) {
-            this.groupId = Objects.requireNonNull(groupId);
-            this.artifactId = Objects.requireNonNull(artifactId);
-        }
-
-        @Override
-        public String toString() {
-            return groupId + ":" + artifactId;
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(artifactId, groupId);
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj)
-                return true;
-            if (obj == null)
-                return false;
-            if (getClass() != obj.getClass())
-                return false;
-            GaOrigin other = (GaOrigin) obj;
-            return Objects.equals(artifactId, other.artifactId) && Objects.equals(groupId, other.groupId);
-        }
-
-        @Override
-        public int compareTo(ReleaseOrigin o) {
-            return toString().compareTo(o.toString());
-        }
-
-        @Override
-        public boolean isUrl() {
-            return false;
-        }
-    }
 }
