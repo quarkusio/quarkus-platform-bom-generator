@@ -1,4 +1,4 @@
-package io.quarkus.bom.platform.version;
+package io.quarkus.domino.pnc;
 
 import java.util.Objects;
 

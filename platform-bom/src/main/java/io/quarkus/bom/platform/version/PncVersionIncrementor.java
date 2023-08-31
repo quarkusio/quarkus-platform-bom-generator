@@ -1,6 +1,7 @@
 package io.quarkus.bom.platform.version;
 
 import io.quarkus.domino.RhVersionPattern;
+import io.quarkus.domino.pnc.PncVersionProvider;
 import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
 
 public class PncVersionIncrementor implements PlatformVersionIncrementor {
