@@ -13,6 +13,7 @@ import io.quarkus.bom.decomposer.ReleaseIdResolver;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
+import io.quarkus.bootstrap.util.IoUtils;
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.domino.pnc.PncVersionProvider;
 import io.quarkus.maven.dependency.ArtifactCoords;
@@ -563,7 +564,38 @@ public class ProjectDependencyResolver {
         } else if (config.getProjectDir() != null) {
             final BuildTool buildTool = BuildTool.forProjectDir(config.getProjectDir());
             if (BuildTool.MAVEN.equals(buildTool)) {
-                result = MavenProjectReader.resolveModuleDependencies(resolver);
+                var ws = resolver.getMavenContext().getWorkspace();
+                result = MavenProjectReader.resolveModuleDependencies(ws);
+                if (!result.isEmpty()) {
+                    final List<Path> createdDirs = new ArrayList<>(ws.getProjects().size());
+                    for (var project : resolver.getMavenContext().getWorkspace().getProjects().values()) {
+                        if (!project.getRawModel().getPackaging().equals(ArtifactCoords.TYPE_POM)) {
+                            final Path classesDir = project.getClassesDir();
+                            if (!Files.exists(classesDir)) {
+                                Path topDirToCreate = classesDir;
+                                while (!Files.exists(topDirToCreate.getParent())) {
+                                    topDirToCreate = topDirToCreate.getParent();
+                                }
+                                try {
+                                    Files.createDirectories(classesDir);
+                                    createdDirs.add(topDirToCreate);
+                                } catch (IOException e) {
+                                    throw new RuntimeException("Failed to create " + classesDir, e);
+                                }
+                            }
+                        }
+                    }
+                    if (!createdDirs.isEmpty()) {
+                        Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+                            @Override
+                            public void run() {
+                                for (Path p : createdDirs) {
+                                    IoUtils.recursiveDelete(p);
+                                }
+                            }
+                        }));
+                    }
+                }
             } else if (BuildTool.GRADLE.equals(buildTool)) {
                 preResolvedRootArtifacts = GradleProjectReader.resolveModuleDependencies(config.getProjectDir(),
                         config.isGradleJava8(), config.getGradleJavaHome(), resolver);

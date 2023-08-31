@@ -1,16 +1,12 @@
 package io.quarkus.domino;
 
-import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalWorkspace;
-import io.quarkus.bootstrap.util.IoUtils;
 import io.quarkus.maven.dependency.ArtifactCoords;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Plugin;
 import org.apache.maven.model.PluginExecution;
@@ -27,20 +23,9 @@ public class MavenProjectReader {
         return PACKAGING_TYPE.getOrDefault(packaging, packaging);
     }
 
-    public static List<ArtifactCoords> resolveModuleDependencies(MavenArtifactResolver resolver) {
-
-        final LocalWorkspace ws = resolver.getMavenContext().getWorkspace();
-        final List<Path> createdDirs = new ArrayList<>();
-        Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
-            @Override
-            public void run() {
-                for (Path p : createdDirs) {
-                    IoUtils.recursiveDelete(p);
-                }
-            }
-        }));
-        ws.getProjects().values().forEach(p -> ensureResolvable(p, createdDirs));
-        final List<ArtifactCoords> result = new ArrayList<>();
+    public static List<ArtifactCoords> resolveModuleDependencies(LocalWorkspace ws) {
+        Objects.requireNonNull(ws, "Workspace is null");
+        final List<ArtifactCoords> result = new ArrayList<>(ws.getProjects().size());
         for (LocalProject project : ws.getProjects().values()) {
             if (isPublished(project)) {
                 var type = getTypeForPackaging(project.getRawModel().getPackaging());
@@ -54,12 +39,10 @@ public class MavenProjectReader {
     private static boolean isPublished(LocalProject project) {
         final Model model = project.getModelBuildingResult() == null ? project.getRawModel()
                 : project.getModelBuildingResult().getEffectiveModel();
-        String skipStr = model.getProperties().getProperty("maven.install.skip");
-        if (skipStr != null && Boolean.parseBoolean(skipStr)) {
-            return false;
-        }
-        skipStr = model.getProperties().getProperty("maven.deploy.skip");
-        if (skipStr != null && Boolean.parseBoolean(skipStr)) {
+        var modelProps = model.getProperties();
+        if (Boolean.parseBoolean(modelProps.getProperty("maven.install.skip"))
+                || Boolean.parseBoolean(modelProps.getProperty("maven.deploy.skip"))
+                || Boolean.parseBoolean(modelProps.getProperty("skipNexusStagingDeployMojo"))) {
             return false;
         }
         if (model.getBuild() != null) {
@@ -75,23 +58,5 @@ public class MavenProjectReader {
             }
         }
         return true;
-    }
-
-    private static void ensureResolvable(LocalProject project, List<Path> createdDirs) {
-        if (!project.getRawModel().getPackaging().equals(ArtifactCoords.TYPE_POM)) {
-            final Path classesDir = project.getClassesDir();
-            if (!Files.exists(classesDir)) {
-                Path topDirToCreate = classesDir;
-                while (!Files.exists(topDirToCreate.getParent())) {
-                    topDirToCreate = topDirToCreate.getParent();
-                }
-                try {
-                    Files.createDirectories(classesDir);
-                    createdDirs.add(topDirToCreate);
-                } catch (IOException e) {
-                    throw new RuntimeException("Failed to create " + classesDir, e);
-                }
-            }
-        }
     }
 }
