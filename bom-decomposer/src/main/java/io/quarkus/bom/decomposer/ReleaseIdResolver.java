@@ -5,6 +5,7 @@ import io.quarkus.bom.resolver.ArtifactResolverProvider;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.devtools.messagewriter.MessageWriter;
+import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.GAV;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -30,9 +31,9 @@ public class ReleaseIdResolver {
     private final ArtifactResolver resolver;
     private final Collection<ReleaseIdDetector> releaseDetectors;
     private final boolean validateRepoTag;
-    private Set<ReleaseId> validatedReleaseIds;
+    private Set<ScmRevision> validatedReleaseIds;
     private HttpClient httpClient;
-    private final Map<GAV, ReleaseId> releaseIdCache = new WeakHashMap<>();
+    private final Map<GAV, ScmRevision> releaseIdCache = new WeakHashMap<>();
 
     public ReleaseIdResolver(MavenArtifactResolver resolver) {
         this(ArtifactResolverProvider.get(resolver));
@@ -66,10 +67,10 @@ public class ReleaseIdResolver {
         this.log = log;
     }
 
-    public ReleaseId releaseId(Artifact artifact, List<RemoteRepository> repos)
+    public ScmRevision releaseId(Artifact artifact, List<RemoteRepository> repos)
             throws BomDecomposerException, UnresolvableModelException {
         var gav = new GAV(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion());
-        ReleaseId releaseId = releaseIdCache.get(gav);
+        var releaseId = releaseIdCache.get(gav);
         if (releaseId == null) {
             for (ReleaseIdDetector releaseDetector : releaseDetectors) {
                 releaseId = releaseDetector.detectReleaseId(this, artifact);
@@ -88,11 +89,11 @@ public class ReleaseIdResolver {
         return releaseId;
     }
 
-    public ReleaseId defaultReleaseId(Artifact artifact) throws BomDecomposerException {
+    public ScmRevision defaultReleaseId(Artifact artifact) throws BomDecomposerException {
         return defaultReleaseId(artifact, List.of());
     }
 
-    public ReleaseId defaultReleaseId(Artifact artifact, List<RemoteRepository> repos) throws BomDecomposerException {
+    public ScmRevision defaultReleaseId(Artifact artifact, List<RemoteRepository> repos) throws BomDecomposerException {
         /* @formatter:off
         final ModelSource ms = modelResolver.resolveModel(artifact.getGroupId(), artifact.getArtifactId(),
                 artifact.getVersion());
@@ -117,14 +118,14 @@ public class ReleaseIdResolver {
         return ReleaseIdFactory.forModel(model);
     }
 
-    public ReleaseId validateTag(ReleaseId releaseId) {
+    public ScmRevision validateTag(ScmRevision releaseId) {
         if (validatedReleaseIds == null) {
             validatedReleaseIds = new HashSet<>();
         }
         if (!validatedReleaseIds.add(releaseId)) {
             return releaseId;
         }
-        String repoUrl = releaseId.origin().toString();
+        String repoUrl = releaseId.getRepository().getId();
         if (!repoUrl.startsWith("https:") && !repoUrl.startsWith("http:")) {
             log.warn("Non-HTTP(s) origin " + repoUrl);
             return releaseId;
@@ -137,7 +138,7 @@ public class ReleaseIdResolver {
         } else if (repoUrl.contains("gitlab.com")) {
             repoUrl += "-/tags/";
         }
-        repoUrl += releaseId.version().asString();
+        repoUrl += releaseId.getValue();
         if (httpClient == null) {
             httpClient = HttpClient.newHttpClient();
         }

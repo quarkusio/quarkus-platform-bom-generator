@@ -1,7 +1,12 @@
 package io.quarkus.bom.decomposer;
 
+import io.quarkus.domino.scm.ScmRevision;
 import java.util.Objects;
 
+/**
+ * @deprecated in favor of {@link ScmRevision}
+ */
+@Deprecated(forRemoval = true)
 public class DefaultReleaseId implements ReleaseId {
 
     final ReleaseOrigin origin;

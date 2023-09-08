@@ -3,6 +3,8 @@ package io.quarkus.bom.decomposer;
 import io.quarkus.bom.decomposer.ProjectDependency.UpdateStatus;
 import io.quarkus.bom.resolver.ArtifactResolver;
 import io.quarkus.devtools.messagewriter.MessageWriter;
+import io.quarkus.domino.scm.ScmRepository;
+import io.quarkus.domino.scm.ScmRevision;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -32,19 +34,19 @@ public class UpdateAvailabilityTransformer implements DecomposedBomTransformer {
             List<ProjectRelease> releases = new ArrayList<>();
 
             @Override
-            public void leaveReleaseOrigin(ReleaseOrigin releaseOrigin) throws BomDecomposerException {
+            public void leaveReleaseOrigin(ScmRepository releaseOrigin) throws BomDecomposerException {
 
                 // sort the collected release versions
                 final List<ArtifactVersion> releaseVersions = new ArrayList<>();
-                final Map<ArtifactVersion, ReleaseId> versionToReleaseId = new HashMap<>();
+                final Map<ArtifactVersion, ScmRevision> versionToReleaseId = new HashMap<>();
                 for (ProjectRelease release : releases) {
                     for (String versionStr : release.artifactVersions()) {
                         final ArtifactVersion version = new DefaultArtifactVersion(versionStr);
                         releaseVersions.add(version);
-                        final ReleaseId prevReleaseId = versionToReleaseId.put(version, release.id());
+                        final ScmRevision prevReleaseId = versionToReleaseId.put(version, release.id());
                         if (prevReleaseId != null) {
-                            if (new DefaultArtifactVersion(prevReleaseId.version().asString())
-                                    .compareTo(new DefaultArtifactVersion(release.id().version().asString())) > 0) {
+                            if (new DefaultArtifactVersion(prevReleaseId.getValue())
+                                    .compareTo(new DefaultArtifactVersion(release.id().getValue())) > 0) {
                                 versionToReleaseId.put(version, prevReleaseId);
                             }
                         }
@@ -63,7 +65,7 @@ public class UpdateAvailabilityTransformer implements DecomposedBomTransformer {
 
                         while (i >= 0) {
                             final ArtifactVersion version = releaseVersions.get(i--);
-                            final ReleaseId releaseId = versionToReleaseId.get(version);
+                            final ScmRevision releaseId = versionToReleaseId.get(version);
                             if (release.id().equals(releaseId)) {
                                 // we've reached the release version the dep belongs to
                                 break;

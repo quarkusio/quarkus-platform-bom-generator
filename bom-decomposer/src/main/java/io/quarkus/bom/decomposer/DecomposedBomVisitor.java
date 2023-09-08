@@ -1,5 +1,6 @@
 package io.quarkus.bom.decomposer;
 
+import io.quarkus.domino.scm.ScmRepository;
 import org.eclipse.aether.artifact.Artifact;
 
 /**
@@ -24,9 +25,9 @@ public interface DecomposedBomVisitor {
      * @param releaseOrigin new detected release origin
      * @return whether to the detected project releases from this origin should be visited or not
      */
-    boolean enterReleaseOrigin(ReleaseOrigin releaseOrigin, int versions);
+    boolean enterReleaseOrigin(ScmRepository releaseOrigin, int versions);
 
-    void leaveReleaseOrigin(ReleaseOrigin releaseOrigin) throws BomDecomposerException;
+    void leaveReleaseOrigin(ScmRepository releaseOrigin) throws BomDecomposerException;
 
     /**
      * Called for every new release version.

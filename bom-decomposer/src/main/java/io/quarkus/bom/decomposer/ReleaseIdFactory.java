@@ -1,11 +1,13 @@
 package io.quarkus.bom.decomposer;
 
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
+import io.quarkus.domino.scm.ScmRepository;
+import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import org.apache.maven.model.Model;
 
 public class ReleaseIdFactory {
-    public static ReleaseId forModel(Model model) {
+    public static ScmRevision forModel(Model model) {
         final String version = ModelUtils.getVersion(model);
         final String scmOrigin = Util.getScmOrigin(model);
         if (scmOrigin != null) {
@@ -13,27 +15,27 @@ public class ReleaseIdFactory {
             return scmTag.isEmpty()
                     || "HEAD".equals(scmTag)
                             //|| !scmTag.contains(version) // sometimes the tag could be '1.4.x' and the version '1.4.1', etc
-                            ? create(ReleaseOrigin.Factory.scmConnection(scmOrigin), ReleaseVersion.Factory.version(version))
-                            : create(ReleaseOrigin.Factory.scmConnection(scmOrigin), ReleaseVersion.Factory.tag(scmTag));
+                            ? ScmRevision.version(ScmRepository.ofUrl(scmOrigin), version)
+                            : ScmRevision.tag(ScmRepository.ofUrl(scmOrigin), scmTag);
         }
-        return create(ReleaseOrigin.Factory.ga(ModelUtils.getGroupId(model), model.getArtifactId()),
-                ReleaseVersion.Factory.version(version));
+        return forGav(ModelUtils.getGroupId(model), model.getArtifactId(), version);
     }
 
+    @Deprecated(forRemoval = true)
     public static ReleaseId create(ReleaseOrigin origin, ReleaseVersion version) {
         return new DefaultReleaseId(origin, version);
     }
 
-    public static ReleaseId forGav(String groupId, String artifactId, String version) {
-        return create(ReleaseOrigin.Factory.ga(groupId, artifactId), ReleaseVersion.Factory.version(version));
+    public static ScmRevision forGav(String groupId, String artifactId, String version) {
+        return ScmRevision.version(ReleaseOrigin.Factory.ga(groupId, artifactId), version);
     }
 
-    public static ReleaseId forGav(String coordsStr) {
+    public static ScmRevision forGav(String coordsStr) {
         final ArtifactCoords coords = ArtifactCoords.fromString(coordsStr);
         return forGav(coords.getGroupId(), coords.getArtifactId(), coords.getVersion());
     }
 
-    public static ReleaseId forScmAndTag(String scm, String tag) {
-        return create(ReleaseOrigin.Factory.scmConnection(scm), ReleaseVersion.Factory.tag(tag));
+    public static ScmRevision forScmAndTag(String scm, String tag) {
+        return ScmRevision.tag(ScmRepository.ofUrl(scm), tag);
     }
 }

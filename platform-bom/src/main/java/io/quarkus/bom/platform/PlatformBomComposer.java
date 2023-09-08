@@ -8,10 +8,7 @@ import io.quarkus.bom.decomposer.DecomposedBomTransformer;
 import io.quarkus.bom.decomposer.DecomposedBomVisitor;
 import io.quarkus.bom.decomposer.ProjectDependency;
 import io.quarkus.bom.decomposer.ProjectRelease;
-import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.decomposer.ReleaseIdFactory;
-import io.quarkus.bom.decomposer.ReleaseOrigin;
-import io.quarkus.bom.decomposer.ReleaseVersion;
 import io.quarkus.bom.platform.version.PlatformVersionIncrementor;
 import io.quarkus.bom.platform.version.PncVersionIncrementor;
 import io.quarkus.bom.platform.version.SpPlatformVersionIncrementor;
@@ -23,6 +20,8 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.domino.RhVersionPattern;
+import io.quarkus.domino.scm.ScmRepository;
+import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.registry.Constants;
@@ -65,15 +64,15 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         return new PlatformBomComposer(config).platformBom();
     }
 
-    private final Map<ReleaseId, ProjectRelease.Builder> quarkusBomReleaseBuilders = new HashMap<>();
+    private final Map<ScmRevision, ProjectRelease.Builder> quarkusBomReleaseBuilders = new HashMap<>();
 
     private final MessageWriter logger;
     private final ExtensionCoordsFilterFactory extCoordsFilterFactory;
     private ArtifactResolver resolver;
 
-    private Collection<ReleaseVersion> preferredVersions = new HashSet<>();
-    private LinkedHashMap<String, ReleaseId> preferredReleaseByVersion;
-    private Map<ReleaseOrigin, Collection<ProjectRelease>> preferredReleases = new HashMap<>();
+    private Collection<String> preferredVersions = new HashSet<>();
+    private LinkedHashMap<String, ScmRevision> preferredReleaseByVersion;
+    private Map<ScmRepository, Collection<ProjectRelease>> preferredReleases = new HashMap<>();
 
     private Map<ArtifactKey, ProjectDependency> preferredDeps = new HashMap<>();
 
@@ -118,7 +117,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         initQuarkusBomReleaseBuilders(originalQuarkusBom);
 
         for (ProjectRelease r : quarkusBomReleaseBuilders.values()) {
-            preferredReleases.computeIfAbsent(r.id().origin(), k -> new ArrayList<>()).add(r);
+            preferredReleases.computeIfAbsent(r.id().getRepository(), k -> new ArrayList<>()).add(r);
         }
 
         for (PlatformMember member : config.externalMembers()) {
@@ -137,7 +136,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                 for (ProjectRelease r : originalBom.releases()) {
                     for (String groupId : r.groupIds()) {
                         if (member.getOwnGroupIds().contains(groupId)) {
-                            preferredReleases.computeIfAbsent(r.id().origin(), k -> new ArrayList<>()).add(r);
+                            preferredReleases.computeIfAbsent(r.id().getRepository(), k -> new ArrayList<>()).add(r);
                             break;
                         }
                     }
@@ -277,7 +276,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                 previousManagedDeps = null;
             }
 
-            final Map<ReleaseId, ProjectRelease.Builder> releaseBuilders = new HashMap<>();
+            final Map<ScmRevision, ProjectRelease.Builder> releaseBuilders = new HashMap<>();
             final AtomicBoolean newConstraints = new AtomicBoolean();
             acceptOriginalMemberConstraints(member, dep -> {
                 ProjectDependency platformDep = preferredDeps.get(dep.key());
@@ -355,9 +354,9 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         final Artifact generatedBomArtifact = updatedBom.getBomArtifact();
         if (!generatedBomArtifact.equals(memberConfig.getInputBom())) {
             // member platform descriptor artifact
-            final ReleaseId memberReleaseId = ReleaseIdFactory.create(
-                    ReleaseOrigin.Factory.ga(generatedBomArtifact.getGroupId(), generatedBomArtifact.getArtifactId()),
-                    ReleaseVersion.Factory.version(generatedBomArtifact.getVersion()));
+            final ScmRevision memberReleaseId = ScmRevision.version(
+                    ScmRepository.ofId(generatedBomArtifact.getGroupId() + ":" + generatedBomArtifact.getArtifactId()),
+                    generatedBomArtifact.getVersion());
             ProjectRelease memberRelease = ProjectRelease.builder(memberReleaseId)
                     .add(ProjectDependency.create(memberReleaseId,
                             new DefaultArtifact(generatedBomArtifact.getGroupId(),
@@ -420,12 +419,12 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
     }
 
     private DecomposedBom generatePlatformBom() throws BomDecomposerException {
-        final Map<ReleaseId, ProjectRelease.Builder> platformReleaseBuilders = new HashMap<>();
+        final Map<ScmRevision, ProjectRelease.Builder> platformReleaseBuilders = new HashMap<>();
 
         // platform descriptor artifact
-        final ReleaseId bomReleaseId = ReleaseIdFactory.create(
-                ReleaseOrigin.Factory.ga(config.bomArtifact().getGroupId(), config.bomArtifact().getArtifactId()),
-                ReleaseVersion.Factory.version(config.bomArtifact().getVersion()));
+        final ScmRevision bomReleaseId = ScmRevision.version(
+                ScmRepository.ofId(config.bomArtifact().getGroupId() + ":" + config.bomArtifact().getArtifactId()),
+                config.bomArtifact().getVersion());
         final ProjectRelease.Builder bomReleaseBuilder = ProjectRelease.builder(bomReleaseId)
                 .add(ProjectDependency.create(bomReleaseId,
                         new DefaultArtifact(config.bomArtifact().getGroupId(),
@@ -471,7 +470,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             }
 
             // align each dependency from the origin to the preferred version
-            final LinkedHashMap<String, ReleaseId> preferredVersions = preferredVersions(releases);
+            final LinkedHashMap<String, ScmRevision> preferredVersions = preferredVersions(releases);
             for (ProjectDependency dep : preferredReleaseDeps.values()) {
                 final ProjectDependency preferredDep = preferredDeps.get(dep.key());
                 if (preferredDep != null && preferredDep.artifact().getVersion().equals(dep.artifact().getVersion())) {
@@ -497,8 +496,8 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
     }
 
     private ProjectDependency getPreferredDependencyVersion(ProjectDependency dep,
-            LinkedHashMap<String, ReleaseId> preferredVersions) {
-        for (Map.Entry<String, ReleaseId> preferredVersion : preferredVersions.entrySet()) {
+            LinkedHashMap<String, ScmRevision> preferredVersions) {
+        for (Map.Entry<String, ScmRevision> preferredVersion : preferredVersions.entrySet()) {
             if (dep.artifact().getVersion().equals(preferredVersion.getKey())) {
                 return dep;
             }
@@ -517,7 +516,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         return dep;
     }
 
-    private void logCommonNotManagedDeps(Map<ReleaseId, ProjectRelease.Builder> releaseBuilders)
+    private void logCommonNotManagedDeps(Map<ScmRevision, ProjectRelease.Builder> releaseBuilders)
             throws BomDecomposerException {
         final String logCommonNotManagedDeps = System.getProperty(LOG_COMMON_NOT_MANAGED_DEPS);
         if (logCommonNotManagedDeps == null
@@ -538,9 +537,9 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             collectNotManagedExtensionDeps(member, universeConstraints);
         }
 
-        final Map<ReleaseOrigin, ProjectRelease.Builder> releaseBuildersByOrigin = new HashMap<>(releaseBuilders.size());
-        for (Map.Entry<ReleaseId, ProjectRelease.Builder> e : releaseBuilders.entrySet()) {
-            releaseBuildersByOrigin.put(e.getKey().origin(), e.getValue());
+        final Map<ScmRepository, ProjectRelease.Builder> releaseBuildersByOrigin = new HashMap<>(releaseBuilders.size());
+        for (Map.Entry<ScmRevision, ProjectRelease.Builder> e : releaseBuilders.entrySet()) {
+            releaseBuildersByOrigin.put(e.getKey().getRepository(), e.getValue());
         }
 
         for (Map.Entry<ArtifactKey, Map<String, Set<String>>> e : commonNotManagedDeps.entrySet()) {
@@ -558,13 +557,13 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             for (ArtifactVersion v : versions) {
                 final Path pom = resolver().resolve(new DefaultArtifact(e.getKey().getGroupId(), e.getKey().getArtifactId(),
                         null, ArtifactCoords.TYPE_POM, v.toString())).getArtifact().getFile().toPath();
-                final ReleaseId releaseId;
+                final ScmRevision releaseId;
                 try {
                     releaseId = ReleaseIdFactory.forModel(ModelUtils.readModel(pom));
                 } catch (IOException e1) {
                     throw new BomDecomposerException("Failed to determine the release ID for " + pom, e1);
                 }
-                final ProjectRelease.Builder rb = releaseBuildersByOrigin.get(releaseId.origin());
+                final ProjectRelease.Builder rb = releaseBuildersByOrigin.get(releaseId.getRepository());
                 if (rb != null) {
                     logger.info("NON-MANAGED FAMILY " + e.getKey() + ":" + v);
                     if (rb.id().equals(releaseId)) {
@@ -731,18 +730,18 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
     }
 
     @Override
-    public boolean enterReleaseOrigin(ReleaseOrigin releaseOrigin, int versions) {
+    public boolean enterReleaseOrigin(ScmRepository releaseOrigin, int versions) {
         preferredReleaseByVersion = null;
         preferredVersions.clear();
         final Collection<ProjectRelease> releases = preferredReleases.get(releaseOrigin);
         if (releases != null) {
-            releases.forEach(r -> preferredVersions.add(r.id().version()));
+            releases.forEach(r -> preferredVersions.add(r.id().getValue()));
         }
         return true;
     }
 
     @Override
-    public void leaveReleaseOrigin(ReleaseOrigin releaseOrigin) throws BomDecomposerException {
+    public void leaveReleaseOrigin(ScmRepository releaseOrigin) throws BomDecomposerException {
     }
 
     @Override
@@ -764,7 +763,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             }
             return;
         }
-        if (preferredVersions.contains(release.id().version())) {
+        if (preferredVersions.contains(release.id().getValue())) {
             for (ProjectDependency dep : release.dependencies()) {
                 final ProjectDependency previousPreference = preferredDeps.putIfAbsent(dep.key(), dep);
                 if (previousPreference != null) {
@@ -773,11 +772,11 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             }
             return;
         }
-        final LinkedHashMap<String, ReleaseId> preferredVersions = getPreferredVersions(release.id().origin());
+        final LinkedHashMap<String, ScmRevision> preferredVersions = getPreferredVersions(release.id().getRepository());
         for (final ProjectDependency memberDep : release.dependencies()) {
             ProjectDependency currentPreference = memberDep;
             if (!preferredVersions.containsKey(memberDep.artifact().getVersion())) {
-                for (Map.Entry<String, ReleaseId> preferredVersion : preferredVersions.entrySet()) {
+                for (Map.Entry<String, ScmRevision> preferredVersion : preferredVersions.entrySet()) {
                     if (config.isDisableGroupAlignmentToPreferredVersions()
                             && versionConstraintComparator().isPreferredVersion(preferredVersion.getKey())) {
                         // we still want to re-align to a more recent upstream
@@ -798,7 +797,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         }
     }
 
-    private LinkedHashMap<String, ReleaseId> getPreferredVersions(ReleaseOrigin origin) {
+    private LinkedHashMap<String, ScmRevision> getPreferredVersions(ScmRepository origin) {
         if (preferredReleaseByVersion == null) {
             final Collection<ProjectRelease> releases = preferredReleases.get(origin);
             if (releases != null) {
@@ -892,21 +891,21 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         return versionComparator;
     }
 
-    private LinkedHashMap<String, ReleaseId> preferredVersions(Collection<ProjectRelease> releases) {
-        final TreeMap<ArtifactVersion, ReleaseId> treeMap = new TreeMap<>(
+    private LinkedHashMap<String, ScmRevision> preferredVersions(Collection<ProjectRelease> releases) {
+        final TreeMap<ArtifactVersion, ScmRevision> treeMap = new TreeMap<>(
                 Collections.reverseOrder(versionConstraintComparator()));
         for (ProjectRelease release : releases) {
             for (String versionStr : release.artifactVersions()) {
                 final DefaultArtifactVersion version = new DefaultArtifactVersion(versionStr);
-                final ReleaseId prevReleaseId = treeMap.put(version, release.id());
-                if (prevReleaseId != null && new DefaultArtifactVersion(prevReleaseId.version().asString())
-                        .compareTo(new DefaultArtifactVersion(release.id().version().asString())) > 0) {
+                final ScmRevision prevReleaseId = treeMap.put(version, release.id());
+                if (prevReleaseId != null && new DefaultArtifactVersion(prevReleaseId.getValue())
+                        .compareTo(new DefaultArtifactVersion(release.id().getValue())) > 0) {
                     treeMap.put(version, prevReleaseId);
                 }
             }
         }
-        final LinkedHashMap<String, ReleaseId> result = new LinkedHashMap<>(treeMap.size());
-        for (Map.Entry<ArtifactVersion, ReleaseId> entry : treeMap.entrySet()) {
+        final LinkedHashMap<String, ScmRevision> result = new LinkedHashMap<>(treeMap.size());
+        for (Map.Entry<ArtifactVersion, ScmRevision> entry : treeMap.entrySet()) {
             result.put(entry.getKey().toString(), entry.getValue());
         }
         return result;

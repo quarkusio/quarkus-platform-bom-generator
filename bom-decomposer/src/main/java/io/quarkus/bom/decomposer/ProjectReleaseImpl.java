@@ -1,7 +1,7 @@
 package io.quarkus.bom.decomposer;
 
+import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.ArtifactKey;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -22,7 +22,7 @@ class ProjectReleaseImpl implements ProjectRelease {
         private LinkedHashMap<ArtifactKey, ProjectDependency> deps = new LinkedHashMap<>();
 
         @Override
-        public ReleaseId id() {
+        public ScmRevision id() {
             return id;
         }
 
@@ -79,35 +79,35 @@ class ProjectReleaseImpl implements ProjectRelease {
 
         @Override
         public ProjectRelease build() {
-            ProjectReleaseImpl.this.deps = Collections.unmodifiableList(new ArrayList<>(deps.values()));
+            ProjectReleaseImpl.this.deps = List.copyOf(deps.values());
             return ProjectReleaseImpl.this;
         }
     }
 
-    public static Builder builder(ReleaseId id) {
+    public static Builder builder(ScmRevision id) {
         return new ProjectReleaseImpl(id).new Builder();
     }
 
-    public static ProjectRelease create(ReleaseId id, List<ProjectDependency> deps) {
-        return new ProjectReleaseImpl(id, deps == null ? Collections.emptyList() : Collections.unmodifiableList(deps));
+    public static ProjectRelease create(ScmRevision id, List<ProjectDependency> deps) {
+        return new ProjectReleaseImpl(id, deps == null ? List.of() : Collections.unmodifiableList(deps));
     }
 
-    protected final ReleaseId id;
+    protected final ScmRevision id;
     protected List<ProjectDependency> deps;
     protected final Set<String> artifactVersions = new HashSet<String>();
     protected final Set<String> groupIds = new HashSet<>(1);
 
-    private ProjectReleaseImpl(ReleaseId id) {
+    private ProjectReleaseImpl(ScmRevision id) {
         this(id, null);
     }
 
-    private ProjectReleaseImpl(ReleaseId id, List<ProjectDependency> deps) {
+    private ProjectReleaseImpl(ScmRevision id, List<ProjectDependency> deps) {
         this.id = id;
         this.deps = deps == null ? List.of() : deps;
     }
 
     @Override
-    public ReleaseId id() {
+    public ScmRevision id() {
         return id;
     }
 

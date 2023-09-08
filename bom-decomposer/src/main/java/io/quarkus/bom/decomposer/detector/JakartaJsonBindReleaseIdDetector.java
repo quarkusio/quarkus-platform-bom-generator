@@ -1,20 +1,18 @@
 package io.quarkus.bom.decomposer.detector;
 
 import io.quarkus.bom.decomposer.BomDecomposerException;
-import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.decomposer.ReleaseIdDetector;
-import io.quarkus.bom.decomposer.ReleaseIdFactory;
 import io.quarkus.bom.decomposer.ReleaseIdResolver;
-import io.quarkus.bom.decomposer.ReleaseVersion;
+import io.quarkus.domino.scm.ScmRevision;
 import org.eclipse.aether.artifact.Artifact;
 
 public class JakartaJsonBindReleaseIdDetector implements ReleaseIdDetector {
 
     @Override
-    public ReleaseId detectReleaseId(ReleaseIdResolver releaseResolver, Artifact artifact)
+    public ScmRevision detectReleaseId(ReleaseIdResolver releaseResolver, Artifact artifact)
             throws BomDecomposerException {
         if (artifact.getGroupId().equals("jakarta.json.bind")) {
-            ReleaseId releaseId = releaseResolver.defaultReleaseId(artifact);
+            var releaseId = releaseResolver.defaultReleaseId(artifact);
             if (artifact.getVersion().equals("3.0.0")) {
                 return releaseId;
             }
@@ -27,8 +25,7 @@ public class JakartaJsonBindReleaseIdDetector implements ReleaseIdDetector {
                 prefix = "1.0-";
                 suffix = "-RELEASE";
             }
-            return ReleaseIdFactory.create(releaseId.origin(),
-                    ReleaseVersion.Factory.tag(prefix + artifact.getVersion() + suffix));
+            return ScmRevision.tag(releaseId.getRepository(), prefix + artifact.getVersion() + suffix);
         }
         return null;
     }

@@ -1,6 +1,7 @@
 package io.quarkus.bom.decomposer;
 
 import io.quarkus.bom.decomposer.ProjectDependency.UpdateStatus;
+import io.quarkus.domino.scm.ScmRepository;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -155,7 +156,7 @@ public class DecomposedBomHtmlReportGenerator extends DecomposedBomReportFileWri
     }
 
     @Override
-    protected boolean writeStartReleaseOrigin(BufferedWriter writer, ReleaseOrigin releaseOrigin, int versions)
+    protected boolean writeStartReleaseOrigin(BufferedWriter writer, ScmRepository releaseOrigin, int versions)
             throws IOException {
         originReleaseVersions = versions;
         if (versions > 1) {
@@ -165,13 +166,13 @@ public class DecomposedBomHtmlReportGenerator extends DecomposedBomReportFileWri
     }
 
     @Override
-    protected void writeEndReleaseOrigin(BufferedWriter writer, ReleaseOrigin releaseOrigin) throws IOException {
+    protected void writeEndReleaseOrigin(BufferedWriter writer, ScmRepository releaseOrigin) throws IOException {
         offsetLine("<button class=\"accordion\">" + releaseOrigin
                 + (originReleaseVersions > 1 ? " (" + originReleaseVersions + ")" : "") + "</button>");
         offsetLine("<div class=\"panel\">");
 
         Collections.sort(releaseVersions);
-        final List<String> stringVersions = releaseVersions.stream().map(v -> v.toString()).collect(Collectors.toList());
+        final List<String> stringVersions = releaseVersions.stream().map(Object::toString).collect(Collectors.toList());
 
         openTag("table");
         int i = 1;
@@ -187,12 +188,12 @@ public class DecomposedBomHtmlReportGenerator extends DecomposedBomReportFileWri
                 writeTag("td", dep.artifact());
                 for (int j = 0; j < stringVersions.size(); ++j) {
                     final String version = stringVersions.get(j);
-                    if (dep.releaseId().version().asString().equals(version)) {
+                    if (dep.releaseId().getValue().equals(version)) {
                         writeTag("td",
                                 !dep.isUpdateAvailable() || j == stringVersions.size() - 1 ? "color:" + BLUE : "color:" + RED,
                                 version);
                     } else if (dep.isUpdateAvailable()
-                            && dep.availableUpdate().releaseId().version().asString().equals(version)) {
+                            && dep.availableUpdate().releaseId().getValue().equals(version)) {
                         writeTag("td", "color:" + GREEN, version);
                     } else {
                         emptyTag("td");
@@ -223,9 +224,9 @@ public class DecomposedBomHtmlReportGenerator extends DecomposedBomReportFileWri
     @Override
     protected void writeProjectRelease(BufferedWriter writer, ProjectRelease release) throws IOException {
         final Collection<ProjectDependency> deps = release.dependencies();
-        releaseVersions.add(new DefaultArtifactVersion(release.id().version().asString()));
+        releaseVersions.add(new DefaultArtifactVersion(release.id().getValue()));
         final Map<String, ProjectDependency> releaseDeps = new HashMap<>(deps.size());
-        allDeps.put(release.id().version().asString(), releaseDeps);
+        allDeps.put(release.id().getValue(), releaseDeps);
         for (ProjectDependency dep : deps) {
             releaseDeps.put(dep.key().toString(), dep);
         }

@@ -1,5 +1,6 @@
 package io.quarkus.bom.decomposer;
 
+import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.ArtifactKey;
 import java.util.Collection;
 import java.util.List;
@@ -9,15 +10,15 @@ import org.eclipse.aether.graph.Dependency;
 
 public interface ProjectRelease {
 
-    static Builder builder(ReleaseId id) {
+    static Builder builder(ScmRevision id) {
         return ProjectReleaseImpl.builder(id);
     }
 
-    public static ProjectRelease create(ReleaseId id, List<ProjectDependency> deps) {
+    public static ProjectRelease create(ScmRevision id, List<ProjectDependency> deps) {
         return ProjectReleaseImpl.create(id, deps);
     }
 
-    ReleaseId id();
+    ScmRevision id();
 
     Collection<ProjectDependency> dependencies();
 

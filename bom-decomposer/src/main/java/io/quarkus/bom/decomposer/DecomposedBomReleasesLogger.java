@@ -2,6 +2,7 @@ package io.quarkus.bom.decomposer;
 
 import io.quarkus.bom.decomposer.ProjectDependency.UpdateStatus;
 import io.quarkus.devtools.messagewriter.MessageWriter;
+import io.quarkus.domino.scm.ScmRepository;
 import org.eclipse.aether.artifact.Artifact;
 
 public class DecomposedBomReleasesLogger extends NoopDecomposedBomVisitor {
@@ -96,7 +97,7 @@ public class DecomposedBomReleasesLogger extends NoopDecomposedBomVisitor {
     }
 
     @Override
-    public boolean enterReleaseOrigin(ReleaseOrigin releaseOrigin, int versions) {
+    public boolean enterReleaseOrigin(ScmRepository releaseOrigin, int versions) {
         final boolean result = super.enterReleaseOrigin(releaseOrigin, versions);
         if (result) {
             if (versions > 1) {
@@ -110,7 +111,7 @@ public class DecomposedBomReleasesLogger extends NoopDecomposedBomVisitor {
     }
 
     @Override
-    public void leaveReleaseOrigin(ReleaseOrigin releaseOrigin) throws BomDecomposerException {
+    public void leaveReleaseOrigin(ScmRepository releaseOrigin) throws BomDecomposerException {
         super.leaveReleaseOrigin(releaseOrigin);
         conflict = Conflict.NONE;
     }
@@ -118,7 +119,7 @@ public class DecomposedBomReleasesLogger extends NoopDecomposedBomVisitor {
     @Override
     public void visitProjectRelease(ProjectRelease release) {
         ++releaseCounter;
-        log("  " + release.id().version());
+        log("  " + release.id().getValue());
         for (ProjectDependency dep : release.dependencies()) {
             this.artifactCounter++;
             final StringBuilder buf = buf();

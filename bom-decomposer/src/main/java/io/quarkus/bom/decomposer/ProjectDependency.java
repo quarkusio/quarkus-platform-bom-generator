@@ -1,5 +1,6 @@
 package io.quarkus.bom.decomposer;
 
+import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.ArtifactKey;
 import java.util.Objects;
 import org.eclipse.aether.artifact.Artifact;
@@ -13,15 +14,15 @@ public class ProjectDependency {
         UNAVAILABLE
     }
 
-    public static ProjectDependency create(ReleaseId releaseId, Artifact artifact) {
+    public static ProjectDependency create(ScmRevision releaseId, Artifact artifact) {
         return create(releaseId, new Dependency(artifact, null));
     }
 
-    public static ProjectDependency create(ReleaseId releaseId, Dependency dep) {
+    public static ProjectDependency create(ScmRevision releaseId, Dependency dep) {
         return new ProjectDependency(releaseId, dep);
     }
 
-    protected final ReleaseId releaseId;
+    protected final ScmRevision releaseId;
     protected final Artifact artifact;
     protected Dependency bomDependency;
     protected UpdateStatus updateStatus = UpdateStatus.UNKNOWN;
@@ -29,13 +30,13 @@ public class ProjectDependency {
     protected boolean preferredVersion;
     private ArtifactKey key;
 
-    private ProjectDependency(ReleaseId releaseId, Dependency dep) {
+    private ProjectDependency(ScmRevision releaseId, Dependency dep) {
         this.releaseId = Objects.requireNonNull(releaseId);
         this.bomDependency = Objects.requireNonNull(dep);
         this.artifact = Objects.requireNonNull(dep.getArtifact());
     }
 
-    public ReleaseId releaseId() {
+    public ScmRevision releaseId() {
         return releaseId;
     }
 

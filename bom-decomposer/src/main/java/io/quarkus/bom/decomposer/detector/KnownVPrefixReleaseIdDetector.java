@@ -1,11 +1,9 @@
 package io.quarkus.bom.decomposer.detector;
 
 import io.quarkus.bom.decomposer.BomDecomposerException;
-import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.decomposer.ReleaseIdDetector;
-import io.quarkus.bom.decomposer.ReleaseIdFactory;
 import io.quarkus.bom.decomposer.ReleaseIdResolver;
-import io.quarkus.bom.decomposer.ReleaseVersion;
+import io.quarkus.domino.scm.ScmRevision;
 import java.util.Set;
 import org.eclipse.aether.artifact.Artifact;
 
@@ -32,16 +30,16 @@ public class KnownVPrefixReleaseIdDetector implements ReleaseIdDetector {
             "org.scala-lang.modules");
 
     @Override
-    public ReleaseId detectReleaseId(ReleaseIdResolver idResolver, Artifact artifact) throws BomDecomposerException {
+    public ScmRevision detectReleaseId(ReleaseIdResolver idResolver, Artifact artifact) throws BomDecomposerException {
         if (!GROUP_IDS.contains(artifact.getGroupId())) {
             return null;
         }
 
-        final ReleaseId releaseId = idResolver.defaultReleaseId(artifact);
-        final String version = releaseId.version().asString();
+        var releaseId = idResolver.defaultReleaseId(artifact);
+        final String version = releaseId.getValue();
         if (version.charAt(0) == 'v') {
             return releaseId;
         }
-        return ReleaseIdFactory.create(releaseId.origin(), ReleaseVersion.Factory.version("v" + version));
+        return ScmRevision.tag(releaseId.getRepository(), "v" + version);
     }
 }

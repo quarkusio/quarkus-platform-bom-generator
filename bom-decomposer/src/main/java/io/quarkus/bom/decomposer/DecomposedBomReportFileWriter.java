@@ -1,5 +1,6 @@
 package io.quarkus.bom.decomposer;
 
+import io.quarkus.domino.scm.ScmRepository;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -28,7 +29,7 @@ public abstract class DecomposedBomReportFileWriter extends FileReportWriter imp
     protected abstract void writeStartBom(BufferedWriter writer, Artifact bomArtifact) throws IOException;
 
     @Override
-    public boolean enterReleaseOrigin(ReleaseOrigin releaseOrigin, int versions) {
+    public boolean enterReleaseOrigin(ScmRepository releaseOrigin, int versions) {
         try {
             return writeStartReleaseOrigin(writer(), releaseOrigin, versions);
         } catch (Exception e) {
@@ -37,11 +38,11 @@ public abstract class DecomposedBomReportFileWriter extends FileReportWriter imp
         }
     }
 
-    protected abstract boolean writeStartReleaseOrigin(BufferedWriter writer, ReleaseOrigin releaseOrigin, int versions)
+    protected abstract boolean writeStartReleaseOrigin(BufferedWriter writer, ScmRepository releaseOrigin, int versions)
             throws IOException;
 
     @Override
-    public void leaveReleaseOrigin(ReleaseOrigin releaseOrigin) {
+    public void leaveReleaseOrigin(ScmRepository releaseOrigin) {
         try {
             writeEndReleaseOrigin(writer(), releaseOrigin);
         } catch (Exception e) {
@@ -50,7 +51,7 @@ public abstract class DecomposedBomReportFileWriter extends FileReportWriter imp
         }
     }
 
-    protected abstract void writeEndReleaseOrigin(BufferedWriter writer, ReleaseOrigin releaseOrigin) throws IOException;
+    protected abstract void writeEndReleaseOrigin(BufferedWriter writer, ScmRepository releaseOrigin) throws IOException;
 
     @Override
     public void visitProjectRelease(ProjectRelease release) {

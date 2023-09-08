@@ -8,19 +8,18 @@ import io.quarkus.bom.decomposer.BomDecomposer;
 import io.quarkus.bom.decomposer.DecomposedBom;
 import io.quarkus.bom.decomposer.ProjectDependency;
 import io.quarkus.bom.decomposer.ProjectRelease;
-import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.resolver.ArtifactResolverProvider;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.util.IoUtils;
 import io.quarkus.devtools.messagewriter.MessageWriter;
+import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import org.eclipse.aether.artifact.Artifact;
@@ -88,11 +87,9 @@ public class ProjectInstallerTestSupport {
     }
 
     public static void assertEqualBoms(DecomposedBom expected, DecomposedBom actual) {
-        final Map<ReleaseId, ProjectRelease> expectedMap = asReleaseMap(expected);
-        final Map<ReleaseId, ProjectRelease> actualMap = asReleaseMap(actual);
-        final Iterator<ProjectRelease> expectedReleases = expectedMap.values().iterator();
-        while (expectedReleases.hasNext()) {
-            final ProjectRelease expectedRelease = expectedReleases.next();
+        final Map<ScmRevision, ProjectRelease> expectedMap = asReleaseMap(expected);
+        final Map<ScmRevision, ProjectRelease> actualMap = asReleaseMap(actual);
+        for (ProjectRelease expectedRelease : expectedMap.values()) {
             assertEqualReleases(expectedRelease, actualMap.remove(expectedRelease.id()));
         }
         if (!actualMap.isEmpty()) {
@@ -124,8 +121,8 @@ public class ProjectInstallerTestSupport {
         return set;
     }
 
-    private static Map<ReleaseId, ProjectRelease> asReleaseMap(DecomposedBom bom) {
-        final Map<ReleaseId, ProjectRelease> expectedMap = new HashMap<>();
+    private static Map<ScmRevision, ProjectRelease> asReleaseMap(DecomposedBom bom) {
+        final Map<ScmRevision, ProjectRelease> expectedMap = new HashMap<>();
         for (ProjectRelease r : bom.releases()) {
             expectedMap.put(r.id(), r);
         }

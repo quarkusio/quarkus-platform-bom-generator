@@ -1,5 +1,6 @@
 package io.quarkus.bom.decomposer;
 
+import io.quarkus.domino.scm.ScmRepository;
 import org.eclipse.aether.artifact.Artifact;
 
 public class NoopDecomposedBomVisitor implements DecomposedBomVisitor {
@@ -19,12 +20,12 @@ public class NoopDecomposedBomVisitor implements DecomposedBomVisitor {
     }
 
     @Override
-    public boolean enterReleaseOrigin(ReleaseOrigin releaseOrigin, int versions) {
+    public boolean enterReleaseOrigin(ScmRepository releaseOrigin, int versions) {
         return versions > 1 || !skipOriginsWithSingleRelease;
     }
 
     @Override
-    public void leaveReleaseOrigin(ReleaseOrigin releaseOrigin) throws BomDecomposerException {
+    public void leaveReleaseOrigin(ScmRepository releaseOrigin) throws BomDecomposerException {
     }
 
     @Override
