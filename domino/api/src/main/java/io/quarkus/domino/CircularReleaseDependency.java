@@ -1,6 +1,6 @@
 package io.quarkus.domino;
 
-import io.quarkus.bom.decomposer.ReleaseId;
+import io.quarkus.domino.scm.ScmRevision;
 import java.util.List;
 import java.util.Objects;
 
@@ -9,20 +9,20 @@ import java.util.Objects;
  */
 public class CircularReleaseDependency {
 
-    public static CircularReleaseDependency of(List<ReleaseId> chain) {
+    public static CircularReleaseDependency of(List<ScmRevision> chain) {
         return new CircularReleaseDependency(chain);
     }
 
-    private final List<ReleaseId> chain;
+    private final List<ScmRevision> chain;
 
-    private CircularReleaseDependency(List<ReleaseId> chain) {
+    private CircularReleaseDependency(List<ScmRevision> chain) {
         if (chain == null || chain.size() < 2) {
             throw new IllegalArgumentException("Invalid circular release dependency chain " + chain);
         }
         this.chain = List.copyOf(chain);
     }
 
-    public List<ReleaseId> getReleaseDependencyChain() {
+    public List<ScmRevision> getReleaseDependencyChain() {
         return chain;
     }
 

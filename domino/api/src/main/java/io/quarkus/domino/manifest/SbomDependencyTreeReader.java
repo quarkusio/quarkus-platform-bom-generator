@@ -2,8 +2,8 @@ package io.quarkus.domino.manifest;
 
 import com.github.packageurl.MalformedPackageURLException;
 import com.github.packageurl.PackageURL;
-import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.domino.DependencyTreeVisitor;
+import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.util.HashMap;
 import java.util.List;
@@ -103,7 +103,7 @@ class SbomDependencyTreeReader {
         }
 
         @Override
-        public ReleaseId getReleaseId() {
+        public ScmRevision getRevision() {
             throw new UnsupportedOperationException();
         }
 

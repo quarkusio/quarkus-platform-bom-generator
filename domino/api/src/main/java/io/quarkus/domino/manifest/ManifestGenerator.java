@@ -2,12 +2,12 @@ package io.quarkus.domino.manifest;
 
 import com.github.packageurl.MalformedPackageURLException;
 import com.github.packageurl.PackageURL;
-import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.resolver.EffectiveModelResolver;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.domino.ReleaseRepo;
+import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -138,7 +138,7 @@ public class ManifestGenerator {
     private void addComponent(Bom bom, ReleaseRepo release, ArtifactCoords coords, List<RemoteRepository> repos) {
         final Model model = effectiveModelResolver.resolveEffectiveModel(coords, repos);
         final Component c = new Component();
-        extractMetadata(release.id(), model, c);
+        extractMetadata(release.getRevision(), model, c);
         if (c.getPublisher() == null) {
             c.setPublisher("central");
         }
@@ -199,7 +199,7 @@ public class ManifestGenerator {
         return bom;
     }
 
-    static void extractMetadata(ReleaseId releaseId, Model project, Component component) {
+    static void extractMetadata(ScmRevision releaseId, Model project, Component component) {
         if (component.getPublisher() == null) {
             // If we don't already have publisher information, retrieve it.
             if (project.getOrganization() != null) {

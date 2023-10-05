@@ -1,6 +1,6 @@
 package io.quarkus.domino;
 
-import io.quarkus.bom.decomposer.ReleaseId;
+import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.util.Collection;
 import java.util.HashMap;
@@ -11,17 +11,17 @@ import org.eclipse.aether.repository.RemoteRepository;
 
 public class ReleaseRepo {
 
-    final ReleaseId id;
+    final ScmRevision revision;
     final Map<ArtifactCoords, List<RemoteRepository>> artifacts = new HashMap<>();
-    final Map<ReleaseId, ReleaseRepo> dependants = new HashMap<>();
-    final Map<ReleaseId, ReleaseRepo> dependencies = new LinkedHashMap<>();
+    final Map<ScmRevision, ReleaseRepo> dependants = new HashMap<>();
+    final Map<ScmRevision, ReleaseRepo> dependencies = new LinkedHashMap<>();
 
-    ReleaseRepo(ReleaseId release) {
-        this.id = release;
+    ReleaseRepo(ScmRevision revision) {
+        this.revision = revision;
     }
 
-    public ReleaseId id() {
-        return id;
+    public ScmRevision getRevision() {
+        return revision;
     }
 
     public Map<ArtifactCoords, List<RemoteRepository>> getArtifacts() {
@@ -34,8 +34,8 @@ public class ReleaseRepo {
 
     void addRepoDependency(ReleaseRepo repo) {
         if (repo != this) {
-            dependencies.putIfAbsent(repo.id(), repo);
-            repo.dependants.putIfAbsent(id(), this);
+            dependencies.putIfAbsent(repo.getRevision(), repo);
+            repo.dependants.putIfAbsent(getRevision(), this);
         }
     }
 

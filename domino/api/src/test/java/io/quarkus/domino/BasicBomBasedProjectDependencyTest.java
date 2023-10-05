@@ -2,9 +2,9 @@ package io.quarkus.domino;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.decomposer.ReleaseIdFactory;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
+import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.domino.test.repo.TestArtifactRepo;
 import io.quarkus.domino.test.repo.TestProject;
 import io.quarkus.maven.dependency.ArtifactCoords;
@@ -111,7 +111,7 @@ public class BasicBomBasedProjectDependencyTest {
         assertThat(release.getDependencies()).hasSize(1);
 
         release = release.getDependencies().iterator().next();
-        assertThat(release.id()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://bar.org/lib", "1.0"));
+        assertThat(release.getRevision()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://bar.org/lib", "1.0"));
         assertThat(release.getArtifacts()).hasSize(2);
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.pom("org.bar", "bar-parent", "1.0"));
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.bar", "bar-lib", "1.0"));
@@ -124,7 +124,7 @@ public class BasicBomBasedProjectDependencyTest {
         assertThat(release.getDependencies()).hasSize(1);
 
         release = release.getDependencies().iterator().next();
-        assertThat(release.id()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://baz.org/lib", "1.0"));
+        assertThat(release.getRevision()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://baz.org/lib", "1.0"));
         assertThat(release.getArtifacts()).hasSize(1);
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.baz", "baz-lib", "1.0"));
         assertThat(release.getDependencies()).isEmpty();
@@ -158,7 +158,7 @@ public class BasicBomBasedProjectDependencyTest {
         assertThat(release.getDependencies()).hasSize(1);
 
         release = release.getDependencies().iterator().next();
-        assertThat(release.id()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://bar.org/lib", "1.0"));
+        assertThat(release.getRevision()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://bar.org/lib", "1.0"));
         assertThat(release.getArtifacts()).hasSize(2);
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.pom("org.bar", "bar-parent", "1.0"));
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.bar", "bar-lib", "1.0"));
@@ -192,7 +192,7 @@ public class BasicBomBasedProjectDependencyTest {
         var release = roots.next();
         assertThat(roots).isExhausted();
 
-        assertThat(release.id()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://acme.org/lib", "1.0"));
+        assertThat(release.getRevision()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://acme.org/lib", "1.0"));
         assertThat(release.getArtifacts()).hasSize(4);
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.pom("org.acme", "acme-parent", "1.0"));
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.pom("org.acme", "acme-bom", "1.0"));
@@ -201,17 +201,17 @@ public class BasicBomBasedProjectDependencyTest {
         assertThat(release.getDependencies()).hasSize(1);
 
         release = release.getDependencies().iterator().next();
-        assertThat(release.id()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://bar.org/lib", "1.0"));
+        assertThat(release.getRevision()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://bar.org/lib", "1.0"));
         assertThat(release.getArtifacts()).hasSize(2);
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.pom("org.bar", "bar-parent", "1.0"));
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.bar", "bar-lib", "1.0"));
         assertThat(release.getDependencies()).isEmpty();
     }
 
-    private static Map<ReleaseId, ReleaseRepo> toMap(Iterable<ReleaseRepo> releases) {
-        var map = new HashMap<ReleaseId, ReleaseRepo>();
+    private static Map<ScmRevision, ReleaseRepo> toMap(Iterable<ReleaseRepo> releases) {
+        var map = new HashMap<ScmRevision, ReleaseRepo>();
         for (var r : releases) {
-            map.put(r.id(), r);
+            map.put(r.getRevision(), r);
         }
         return map;
     }

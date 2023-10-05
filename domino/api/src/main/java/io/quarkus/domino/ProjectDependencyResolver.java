@@ -303,8 +303,8 @@ public class ProjectDependencyResolver {
                     boolean logLatestPncBuilds = Boolean.getBoolean("logLatestPncBuilds");
                     AtomicInteger counter = new AtomicInteger();
                     for (ReleaseRepo e : sorted) {
-                        logComment("repo-url " + e.id().origin());
-                        logComment("tag " + e.id().version().asString());
+                        logComment("repo-url " + e.getRevision().getRepository());
+                        logComment("tag " + e.getRevision().getValue());
                         if (logLatestPncBuilds) {
                             logLatestPncBuilds(e);
                         } else {
@@ -402,7 +402,7 @@ public class ProjectDependencyResolver {
     }
 
     private void logLatestPncBuilds(ReleaseRepo e) {
-        log.info("Checking the latest PNC builds of " + e.id());
+        log.info("Checking the latest PNC builds of " + e.getRevision());
         var gavSet = new HashSet<io.quarkus.maven.dependency.GAV>(e.artifacts.size());
         var artifactSet = e.artifacts.keySet();
         for (var c : artifactSet) {
@@ -742,9 +742,9 @@ public class ProjectDependencyResolver {
         }
 
         for (ArtifactDependency d : artifactDeps.values()) {
-            final ReleaseRepo repo = getRepo(d.resolved.getReleaseId());
+            final ReleaseRepo repo = getRepo(d.resolved.getRevision());
             for (ArtifactDependency c : d.getAllDependencies()) {
-                repo.addRepoDependency(getRepo(c.resolved.getReleaseId()));
+                repo.addRepoDependency(getRepo(c.resolved.getRevision()));
             }
         }
     }
@@ -1008,7 +1008,7 @@ public class ProjectDependencyResolver {
         for (int i = 0; i < depth; ++i) {
             sb.append("  ");
         }
-        sb.append(repo.id().origin()).append(' ').append(repo.id().version());
+        sb.append(repo.getRevision().origin()).append(' ').append(repo.getRevision().version());
         logComment(sb.toString());
         for (ReleaseRepo child : repo.dependencies.values()) {
             logReleaseRepoDep(child, depth + 1);

@@ -1,6 +1,6 @@
 package io.quarkus.domino;
 
-import io.quarkus.bom.decomposer.ReleaseId;
+import io.quarkus.domino.scm.ScmRevision;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -16,7 +16,7 @@ public class ReleaseCollection implements Iterable<ReleaseRepo> {
     static List<ReleaseRepo> sort(Collection<ReleaseRepo> releaseRepos) {
         final int codeReposTotal = releaseRepos.size();
         final List<ReleaseRepo> sorted = new ArrayList<>(codeReposTotal);
-        final Set<ReleaseId> processedRepos = new HashSet<>(codeReposTotal);
+        final Set<ScmRevision> processedRepos = new HashSet<>(codeReposTotal);
         for (ReleaseRepo r : releaseRepos) {
             if (r.isRoot()) {
                 sort(r, processedRepos, sorted);
@@ -25,8 +25,8 @@ public class ReleaseCollection implements Iterable<ReleaseRepo> {
         return sorted;
     }
 
-    private static void sort(ReleaseRepo repo, Set<ReleaseId> processed, List<ReleaseRepo> sorted) {
-        if (!processed.add(repo.id)) {
+    private static void sort(ReleaseRepo repo, Set<ScmRevision> processed, List<ReleaseRepo> sorted) {
+        if (!processed.add(repo.revision)) {
             return;
         }
         for (ReleaseRepo d : repo.dependencies.values()) {
@@ -36,27 +36,27 @@ public class ReleaseCollection implements Iterable<ReleaseRepo> {
     }
 
     static Collection<CircularReleaseDependency> detectCircularDependencies(Collection<ReleaseRepo> releaseRepos) {
-        final Map<Set<ReleaseId>, CircularReleaseDependency> circularDeps = new HashMap<>();
+        final Map<Set<ScmRevision>, CircularReleaseDependency> circularDeps = new HashMap<>();
         for (ReleaseRepo r : releaseRepos) {
-            final List<ReleaseId> chain = new ArrayList<>();
+            final List<ScmRevision> chain = new ArrayList<>();
             detectCircularDeps(r, chain, circularDeps);
         }
         return circularDeps.values();
     }
 
-    private static void detectCircularDeps(ReleaseRepo r, List<ReleaseId> chain,
-            Map<Set<ReleaseId>, CircularReleaseDependency> circularDeps) {
-        final int i = chain.indexOf(r.id);
+    private static void detectCircularDeps(ReleaseRepo r, List<ScmRevision> chain,
+            Map<Set<ScmRevision>, CircularReleaseDependency> circularDeps) {
+        final int i = chain.indexOf(r.revision);
         if (i >= 0) {
-            final List<ReleaseId> loop = new ArrayList<>(chain.size() - i + 1);
+            final List<ScmRevision> loop = new ArrayList<>(chain.size() - i + 1);
             for (int j = i; j < chain.size(); ++j) {
                 loop.add(chain.get(j));
             }
-            loop.add(r.id);
+            loop.add(r.revision);
             circularDeps.computeIfAbsent(new HashSet<>(loop), k -> CircularReleaseDependency.of(loop));
             return;
         }
-        chain.add(r.id);
+        chain.add(r.revision);
         for (ReleaseRepo d : r.dependencies.values()) {
             detectCircularDeps(d, chain, circularDeps);
         }

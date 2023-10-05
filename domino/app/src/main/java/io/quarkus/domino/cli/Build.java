@@ -1,6 +1,5 @@
 package io.quarkus.domino.cli;
 
-import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
@@ -16,6 +15,7 @@ import io.quarkus.domino.processor.ExecutionContext;
 import io.quarkus.domino.processor.NodeProcessor;
 import io.quarkus.domino.processor.ParallelTreeProcessor;
 import io.quarkus.domino.processor.TaskResult;
+import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import java.io.BufferedWriter;
@@ -94,14 +94,14 @@ public class Build extends BaseDepsToBuildCommand {
             IoUtils.mkdirs(localMavenRepo);
         }
 
-        final Function<Collection<ReleaseRepo>, List<TaskResult<ReleaseId, ReleaseRepo, BuildResult>>> func = repos -> {
+        final Function<Collection<ReleaseRepo>, List<TaskResult<ScmRevision, ReleaseRepo, BuildResult>>> func = repos -> {
 
-            final ParallelTreeProcessor<ReleaseId, ReleaseRepo, BuildResult> treeProcessor = ParallelTreeProcessor
-                    .with(new NodeProcessor<ReleaseId, ReleaseRepo, BuildResult>() {
+            final ParallelTreeProcessor<ScmRevision, ReleaseRepo, BuildResult> treeProcessor = ParallelTreeProcessor
+                    .with(new NodeProcessor<>() {
 
                         @Override
-                        public ReleaseId getNodeId(ReleaseRepo node) {
-                            return node.id();
+                        public ScmRevision getNodeId(ReleaseRepo node) {
+                            return node.getRevision();
                         }
 
                         @Override
@@ -110,7 +110,7 @@ public class Build extends BaseDepsToBuildCommand {
                         }
 
                         @Override
-                        public Function<ExecutionContext<ReleaseId, ReleaseRepo, BuildResult>, TaskResult<ReleaseId, ReleaseRepo, BuildResult>> createFunction() {
+                        public Function<ExecutionContext<ScmRevision, ReleaseRepo, BuildResult>, TaskResult<ScmRevision, ReleaseRepo, BuildResult>> createFunction() {
                             return ctx -> {
                                 try {
                                     final Path projectDir = cloneRepo(ctx.getNode(), projectsDir, ctx);
@@ -184,10 +184,10 @@ public class Build extends BaseDepsToBuildCommand {
             return treeProcessor.schedule().join();
         };
 
-        final List<TaskResult<ReleaseId, ReleaseRepo, BuildResult>> results = depResolver.applyToSorted(func);
+        final List<TaskResult<ScmRevision, ReleaseRepo, BuildResult>> results = depResolver.applyToSorted(func);
         boolean failure = false;
         final Map<ArtifactKey, List<String>> builtVersions = new HashMap<>();
-        for (TaskResult<ReleaseId, ReleaseRepo, BuildResult> r : results) {
+        for (TaskResult<ScmRevision, ReleaseRepo, BuildResult> r : results) {
             final StringBuilder sb = new StringBuilder();
             sb.append(getBuildStatus(r)).append(" building ").append(r.getId());
             if (r.isFailure()) {
@@ -284,19 +284,19 @@ public class Build extends BaseDepsToBuildCommand {
     }
 
     private Path cloneRepo(ReleaseRepo release, Path codeReposDir,
-            ExecutionContext<ReleaseId, ReleaseRepo, BuildResult> ctx) {
-        log("Cloning " + release.id());
-        final String url = release.id().origin().toString();
+            ExecutionContext<ScmRevision, ReleaseRepo, BuildResult> ctx) {
+        log("Cloning " + release.getRevision());
+        final String url = release.getRevision().origin().toString();
         int i = url.lastIndexOf('/');
         Path projectDir = codeReposDir;
         if (i >= 0) {
             projectDir = codeReposDir.resolve(url.substring(i + 1));
         }
-        projectDir = projectDir.resolve(release.id().version().asString().replace('/', '_'));
+        projectDir = projectDir.resolve(release.getRevision().getValue().replace('/', '_'));
         try (Git git = Git.cloneRepository()
                 .setDirectory(projectDir.toFile())
                 .setURI(url)
-                .setBranch(release.id().version().asString())
+                .setBranch(release.getRevision().getValue())
                 .call()) {
         } catch (Exception e) {
             Map.Entry<ArtifactCoords, List<RemoteRepository>> artifact;
@@ -325,7 +325,7 @@ public class Build extends BaseDepsToBuildCommand {
                 throw new RuntimeException("Failed to clone " + url, e);
             }
         }
-        log("Cloned " + release.id() + " to " + projectDir);
+        log("Cloned " + release.getRevision() + " to " + projectDir);
         if (!Files.exists(projectDir.resolve("pom.xml"))) {
             final RuntimeException e = new RuntimeException(release + " cloned to " + projectDir + " is missing pom.xml");
             ctx.failure(e);
@@ -335,10 +335,10 @@ public class Build extends BaseDepsToBuildCommand {
     }
 
     private static BuildResult reversionMavenProject(Path projectDir,
-            ExecutionContext<ReleaseId, ReleaseRepo, BuildResult> ctx) {
+            ExecutionContext<ScmRevision, ReleaseRepo, BuildResult> ctx) {
 
         final Map<ArtifactKey, String> reversionedDeps = new HashMap<>();
-        for (ReleaseId id : ctx.getDependencies()) {
+        for (ScmRevision id : ctx.getDependencies()) {
             reversionedDeps.putAll(ctx.getDependencyResult(id).getOutcome().reversioned);
         }
 
@@ -490,7 +490,7 @@ public class Build extends BaseDepsToBuildCommand {
 
     private static void reversionDependency(Dependency d, String expectedProjectVersion, String newProjectVersion,
             LocalProject project, Map<ArtifactKey, String> reversionedDeps,
-            ExecutionContext<ReleaseId, ReleaseRepo, BuildResult> ctx) {
+            ExecutionContext<ScmRevision, ReleaseRepo, BuildResult> ctx) {
         String groupId = d.getGroupId();
         if ("${project.groupId}".equals(groupId)) {
             groupId = ModelUtils.getGroupId(project.getRawModel());

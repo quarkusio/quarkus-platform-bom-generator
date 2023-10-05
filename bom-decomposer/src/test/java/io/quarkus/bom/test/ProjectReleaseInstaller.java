@@ -2,7 +2,6 @@ package io.quarkus.bom.test;
 
 import io.quarkus.bom.decomposer.ProjectDependency;
 import io.quarkus.bom.decomposer.ProjectRelease;
-import io.quarkus.bom.decomposer.ReleaseOrigin;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.domino.scm.ScmRepository;
 import io.quarkus.domino.scm.ScmRevision;
@@ -19,15 +18,15 @@ import org.eclipse.aether.repository.LocalRepositoryManager;
 public class ProjectReleaseInstaller {
 
     public static ProjectReleaseInstaller forGa(String groupId, String artifact) {
-        return new ProjectReleaseInstaller(ReleaseOrigin.Factory.ga(groupId, artifact)).projectGroupId(groupId);
+        return new ProjectReleaseInstaller(ScmRepository.ofId(groupId + ":" + artifact)).projectGroupId(groupId);
     }
 
     public static ProjectReleaseInstaller forScm(String scm) {
-        return new ProjectReleaseInstaller(ReleaseOrigin.Factory.scmConnection(scm));
+        return new ProjectReleaseInstaller(ScmRepository.ofUrl(scm));
     }
 
     public static ProjectReleaseInstaller forScmAndTag(String scm, String tag) {
-        return new ProjectReleaseInstaller(ReleaseOrigin.Factory.scmConnection(scm)).tag(tag);
+        return new ProjectReleaseInstaller(ScmRepository.ofUrl(scm)).tag(tag);
     }
 
     public static ProjectReleaseInstaller forParentPom(String coordsString) {

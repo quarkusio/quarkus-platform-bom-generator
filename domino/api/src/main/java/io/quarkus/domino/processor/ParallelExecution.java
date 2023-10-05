@@ -1,7 +1,5 @@
 package io.quarkus.domino.processor;
 
-import io.quarkus.bom.decomposer.ReleaseId;
-import io.quarkus.bom.decomposer.ReleaseOrigin;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
@@ -9,6 +7,8 @@ import io.quarkus.bootstrap.util.IoUtils;
 import io.quarkus.domino.ProjectDependencyConfig;
 import io.quarkus.domino.ProjectDependencyResolver;
 import io.quarkus.domino.ReleaseRepo;
+import io.quarkus.domino.scm.ScmRepository;
+import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -64,7 +64,7 @@ public class ParallelExecution {
     private final Path localMavenRepo;
     private final Path projects;
     private MavenArtifactResolver resolver;
-    private final Map<ReleaseId, ProjectInfo> projectInfos = new HashMap<>();
+    private final Map<ScmRevision, ProjectInfo> projectInfos = new HashMap<>();
     private final Map<ArtifactCoords, ProjectInfo> artifactProjects = new HashMap<>();
 
     private final AtomicInteger projectsBuilt = new AtomicInteger();
@@ -103,7 +103,7 @@ public class ParallelExecution {
     private void buildInSequence(final Collection<ReleaseRepo> allRepos) throws Exception {
         final Map<String, String> versionProps = new HashMap<>();
         for (ReleaseRepo repo : allRepos) {
-            ProjectInfo project = this.projectInfos.get(repo.id());
+            ProjectInfo project = this.projectInfos.get(repo.getRevision());
             final String version = project.originalVersion + AUTOBUILD_SUFFIX + generateBuildNumber();
 
             final List<String> command = new ArrayList<>();
@@ -151,12 +151,12 @@ public class ParallelExecution {
     }
 
     private void buildInParallel(final Collection<ReleaseRepo> allRepos) {
-        final ParallelTreeProcessor<ReleaseId, ReleaseRepo, Map<String, String>> treeProcessor = ParallelTreeProcessor
-                .with(new NodeProcessor<ReleaseId, ReleaseRepo, Map<String, String>>() {
+        final ParallelTreeProcessor<ScmRevision, ReleaseRepo, Map<String, String>> treeProcessor = ParallelTreeProcessor
+                .with(new NodeProcessor<ScmRevision, ReleaseRepo, Map<String, String>>() {
 
                     @Override
-                    public ReleaseId getNodeId(ReleaseRepo node) {
-                        return node.id();
+                    public ScmRevision getNodeId(ReleaseRepo node) {
+                        return node.getRevision();
                     }
 
                     @Override
@@ -165,17 +165,17 @@ public class ParallelExecution {
                     }
 
                     @Override
-                    public Function<ExecutionContext<ReleaseId, ReleaseRepo, Map<String, String>>, TaskResult<ReleaseId, ReleaseRepo, Map<String, String>>> createFunction() {
+                    public Function<ExecutionContext<ScmRevision, ReleaseRepo, Map<String, String>>, TaskResult<ScmRevision, ReleaseRepo, Map<String, String>>> createFunction() {
                         return ctx -> {
-                            final ProjectInfo project = projectInfos.get(ctx.getNode().id());
+                            final ProjectInfo project = projectInfos.get(ctx.getNode().getRevision());
                             final String version = project.originalVersion + AUTOBUILD_SUFFIX + generateBuildNumber();
 
                             final List<String> command = new ArrayList<>();
                             command.add("mvn");
                             command.add("install");
                             command.add("-Drevision=" + version);
-                            for (ReleaseId dep : ctx.getDependencies()) {
-                                final TaskResult<ReleaseId, ReleaseRepo, Map<String, String>> result = ctx
+                            for (ScmRevision dep : ctx.getDependencies()) {
+                                final TaskResult<ScmRevision, ReleaseRepo, Map<String, String>> result = ctx
                                         .getDependencyResult(dep);
                                 if (result.isCanceled() || result.isFailure()) {
                                     return ctx.canceled(Map.of());
@@ -231,11 +231,11 @@ public class ParallelExecution {
             }
         }
 
-        final List<TaskResult<ReleaseId, ReleaseRepo, Map<String, String>>> results = treeProcessor.schedule().join();
+        final List<TaskResult<ScmRevision, ReleaseRepo, Map<String, String>>> results = treeProcessor.schedule().join();
     }
 
     private void generateProjectSources(Collection<ReleaseRepo> releaseRepos) throws Exception {
-        final Map<ReleaseOrigin, String> projectNames = new HashMap<>();
+        final Map<ScmRepository, String> projectNames = new HashMap<>();
         for (ReleaseRepo repo : releaseRepos) {
             initProjectInfo(repo, projectNames);
         }
@@ -245,16 +245,16 @@ public class ParallelExecution {
         }
     }
 
-    private void initProjectInfo(ReleaseRepo repo, Map<ReleaseOrigin, String> projectNames) {
-        final String projectName = deriveProjectName(repo.id().origin(), projectNames);
+    private void initProjectInfo(ReleaseRepo repo, Map<ScmRepository, String> projectNames) {
+        final String projectName = deriveProjectName(repo.getRevision().getRepository(), projectNames);
         final String projectVersion = repo.getArtifacts().keySet().iterator().next().getVersion();
         final Path projectDir = IoUtils.mkdirs(projects.resolve(projectName + "-" + projectVersion));
         final ProjectInfo info = new ProjectInfo(repo, projectVersion, projectDir, projectName);
-        projectInfos.put(info.release.id(), info);
+        projectInfos.put(info.release.getRevision(), info);
 
         for (ArtifactCoords c : repo.getArtifacts().keySet()) {
             if (!c.getVersion().equals(info.originalVersion)) {
-                log("WARN: inconsistent versioning detected in " + repo.id());
+                log("WARN: inconsistent versioning detected in " + repo.getRevision());
             }
             if (c.getType().equals(ArtifactCoords.TYPE_JAR) || c.getType().equals(ArtifactCoords.TYPE_POM)) {
                 artifactProjects.put(c, info);
@@ -449,7 +449,7 @@ public class ParallelExecution {
         plugin.addExecution(e);
     }
 
-    private static String deriveProjectName(ReleaseOrigin o, Map<ReleaseOrigin, String> projectNames) {
+    private static String deriveProjectName(ScmRepository o, Map<ScmRepository, String> projectNames) {
         String name = projectNames.get(o);
         if (name != null) {
             return name;

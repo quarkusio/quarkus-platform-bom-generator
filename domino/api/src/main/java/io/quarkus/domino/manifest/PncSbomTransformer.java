@@ -23,7 +23,7 @@ public class PncSbomTransformer implements SbomTransformer {
 
     private static final Logger log = Logger.getLogger(PncSbomTransformer.class);
 
-    private PncBuildInfoProvider pncInfoProvider = new PncBuildInfoProvider();
+    private final PncBuildInfoProvider pncInfoProvider = new PncBuildInfoProvider();
 
     @Override
     public Bom transform(SbomTransformContext ctx) {
