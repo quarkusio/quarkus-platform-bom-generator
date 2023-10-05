@@ -3,6 +3,7 @@ package io.quarkus.domino;
 import io.quarkus.bootstrap.resolver.AppModelResolverException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.SimpleDependencyGraphTransformationContext;
+import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.domino.gradle.GradleActionOutcome;
 import io.quarkus.domino.gradle.GradleDependency;
 import io.quarkus.domino.gradle.GradleModuleDependencies;
@@ -37,8 +38,8 @@ import org.gradle.tooling.ProjectConnection;
 public class GradleProjectReader {
 
     public static Map<ArtifactCoords, DependencyNode> resolveModuleDependencies(Path projectDir,
-            boolean java8, String javaHome, MavenArtifactResolver mavenResolver) {
-        final Collection<GradleModuleDependencies> modules = resolveDirtyTrees(projectDir, java8, javaHome);
+            boolean java8, String javaHome, MavenArtifactResolver mavenResolver, MessageWriter log) {
+        final Collection<GradleModuleDependencies> modules = resolveDirtyTrees(projectDir, java8, javaHome, log);
         final Map<ArtifactCoords, DependencyNode> result = new HashMap<>(modules.size());
         for (GradleModuleDependencies module : modules) {
             final DependencyNode moduleNode = createNode(new Dependency(
@@ -59,7 +60,11 @@ public class GradleProjectReader {
         return result;
     }
 
-    private static Collection<GradleModuleDependencies> resolveDirtyTrees(Path projectDir, boolean java8, String javaHome) {
+    private static Collection<GradleModuleDependencies> resolveDirtyTrees(Path projectDir,
+            boolean java8,
+            String javaHome,
+            MessageWriter log) {
+        log.debug("Loading project %s", projectDir);
         final ProjectConnection connection = GradleConnector.newConnector()
                 .forProjectDirectory(projectDir.toFile())
                 //.useGradleVersion(gradleVersion)
@@ -69,7 +74,8 @@ public class GradleProjectReader {
             final BuildActionExecuter<GradleProjectDependencies> actionExecuter = connection
                     .action(new GradleProjectDependencyResolver())
                     .withArguments("--init-script=" + dominoInitScript, "-PskipAndroid=true")
-                    .setStandardOutput(System.out);
+                    .setStandardOutput(log == null ? System.out : new MessageWriterOutputStream(log));
+
             if ((javaHome == null || javaHome.isEmpty()) && java8) {
                 javaHome = System.getenv("JAVA8_HOME");
                 if (javaHome == null) {
