@@ -52,7 +52,7 @@
     <commons-text.version>1.10.0</commons-text.version>
     <cyclonedx.version>7.3.2</cyclonedx.version>
     <gradle-tooling.version>8.1.1</gradle-tooling.version>
-    <quarkus.version>2.16.10.Final</quarkus.version>
+    <quarkus.version>2.16.11.Final</quarkus.version>
     <quarkus-jgit.version>2.3.2</quarkus-jgit.version>
     <jgit.version>6.4.0.202211300538-r</jgit.version>
     <json-unit-assertj.version>2.37.0</json-unit-assertj.version>
