@@ -60,7 +60,6 @@ public class GradleProjectReader {
     }
 
     private static Collection<GradleModuleDependencies> resolveDirtyTrees(Path projectDir, boolean java8, String javaHome) {
-        System.out.println("Connecting to " + projectDir);
         final ProjectConnection connection = GradleConnector.newConnector()
                 .forProjectDirectory(projectDir.toFile())
                 //.useGradleVersion(gradleVersion)
