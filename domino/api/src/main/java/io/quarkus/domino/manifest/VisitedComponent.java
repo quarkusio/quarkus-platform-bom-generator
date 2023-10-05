@@ -1,14 +1,14 @@
 package io.quarkus.domino.manifest;
 
 import com.github.packageurl.PackageURL;
-import io.quarkus.bom.decomposer.ReleaseId;
+import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.util.List;
 import org.eclipse.aether.repository.RemoteRepository;
 
 interface VisitedComponent {
 
-    ReleaseId getReleaseId();
+    ScmRevision getReleaseId();
 
     ArtifactCoords getArtifactCoords();
 

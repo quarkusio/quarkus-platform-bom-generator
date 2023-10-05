@@ -3,7 +3,7 @@ package io.quarkus.bom.decomposer.detector;
 import io.quarkus.bom.decomposer.BomDecomposerException;
 import io.quarkus.bom.decomposer.ReleaseIdDetector;
 import io.quarkus.bom.decomposer.ReleaseIdResolver;
-import io.quarkus.bom.decomposer.ReleaseOrigin;
+import io.quarkus.domino.scm.ScmRepository;
 import io.quarkus.domino.scm.ScmRevision;
 import org.eclipse.aether.artifact.Artifact;
 
@@ -16,7 +16,7 @@ public class SmallryeStorkReleaseIdDetector implements ReleaseIdDetector {
             var releaseId = releaseResolver.defaultReleaseId(artifact);
             if (releaseId.getRepository().getId().contains("smallrye-load-balancer")) {
                 return ScmRevision.tag(
-                        ReleaseOrigin.Factory.scmConnection(
+                        ScmRepository.ofUrl(
                                 releaseId.getRepository().getId().replace("smallrye-load-balancer", "smallrye-stork")),
                         releaseId.getValue());
             }

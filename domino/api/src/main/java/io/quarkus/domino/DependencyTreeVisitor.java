@@ -1,6 +1,6 @@
 package io.quarkus.domino;
 
-import io.quarkus.bom.decomposer.ReleaseId;
+import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.util.List;
 import org.eclipse.aether.repository.RemoteRepository;
@@ -9,7 +9,7 @@ public interface DependencyTreeVisitor {
 
     interface DependencyVisit {
 
-        ReleaseId getReleaseId();
+        ScmRevision getRevision();
 
         ArtifactCoords getCoords();
 

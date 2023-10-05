@@ -2,12 +2,12 @@ package io.quarkus.domino.manifest;
 
 import com.github.packageurl.MalformedPackageURLException;
 import com.github.packageurl.PackageURL;
-import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.domino.DependencyTreeVisitor;
 import io.quarkus.domino.processor.ExecutionContext;
 import io.quarkus.domino.processor.NodeProcessor;
 import io.quarkus.domino.processor.ParallelTreeProcessor;
 import io.quarkus.domino.processor.TaskResult;
+import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -173,7 +173,7 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
     private static class VisitedComponentImpl implements VisitedComponent {
         private final long index;
         private final VisitedComponentImpl parent;
-        private final ReleaseId releaseId;
+        private final ScmRevision releaseId;
         private final ArtifactCoords coords;
         private final List<RemoteRepository> repos;
         private final Map<ArtifactCoords, VisitedComponentImpl> children = new HashMap<>();
@@ -183,7 +183,7 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
         private VisitedComponentImpl(long index, VisitedComponentImpl parent, DependencyVisit visit) {
             this.index = index;
             this.parent = parent;
-            this.releaseId = visit.getReleaseId();
+            this.releaseId = visit.getRevision();
             this.coords = visit.getCoords();
             this.repos = visit.getRepositories();
         }
@@ -230,7 +230,7 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
         }
 
         @Override
-        public ReleaseId getReleaseId() {
+        public ScmRevision getReleaseId() {
             return releaseId;
         }
 

@@ -21,7 +21,7 @@ class ResolvedDependency implements DependencyTreeVisitor.DependencyVisit {
     }
 
     @Override
-    public ScmRevision getReleaseId() {
+    public ScmRevision getRevision() {
         return releaseId;
     }
 

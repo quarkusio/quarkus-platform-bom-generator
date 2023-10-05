@@ -3,9 +3,9 @@ package io.quarkus.domino;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
-import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.bom.decomposer.ReleaseIdFactory;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
+import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.domino.test.repo.TestArtifactRepo;
 import io.quarkus.domino.test.repo.TestProject;
 import io.quarkus.maven.dependency.ArtifactCoords;
@@ -23,7 +23,7 @@ public class NonCorePlatformMemberDependenciesTest {
     @TempDir
     static Path testRepoDir;
     static MavenArtifactResolver artifactResolver;
-    static Map<ReleaseId, Consumer<ReleaseRepo>> releaseAssertions;
+    static Map<ScmRevision, Consumer<ReleaseRepo>> releaseAssertions;
 
     @BeforeAll
     static void prepareRepo() {
@@ -87,10 +87,11 @@ public class NonCorePlatformMemberDependenciesTest {
                 .install(commonsIoProject)
                 .install(byteUtilsProject);
 
-        releaseAssertions = Map.<ReleaseId, Consumer<ReleaseRepo>> of(
+        releaseAssertions = Map.<ScmRevision, Consumer<ReleaseRepo>> of(
                 ReleaseIdFactory.forScmAndTag("https://quarkus.io/code", "1.0"),
                 release -> {
-                    assertThat(release.id()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://quarkus.io/code", "1.0"));
+                    assertThat(release.getRevision())
+                            .isEqualTo(ReleaseIdFactory.forScmAndTag("https://quarkus.io/code", "1.0"));
                     assertThat(release.getArtifacts()).hasSize(4);
                     assertThat(release.getArtifacts()).containsKey(ArtifactCoords.pom("io.quarkus", "quarkus-parent", "1.0"));
                     assertThat(release.getArtifacts()).containsKey(ArtifactCoords.pom("io.quarkus", "quarkus-bom", "1.0"));
@@ -101,7 +102,7 @@ public class NonCorePlatformMemberDependenciesTest {
                 },
                 ReleaseIdFactory.forScmAndTag("https://camel.org/code", "1.0"),
                 release -> {
-                    assertThat(release.id()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://camel.org/code", "1.0"));
+                    assertThat(release.getRevision()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://camel.org/code", "1.0"));
                     assertThat(release.getArtifacts()).hasSize(5);
                     assertThat(release.getArtifacts()).containsKey(ArtifactCoords.pom("org.camel", "camel-parent", "1.0"));
                     assertThat(release.getArtifacts()).containsKey(ArtifactCoords.pom("org.camel", "camel-bom", "1.0"));
@@ -113,26 +114,27 @@ public class NonCorePlatformMemberDependenciesTest {
                 },
                 ReleaseIdFactory.forScmAndTag("https://xml.org/code", "1.0"),
                 release -> {
-                    assertThat(release.id()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://xml.org/code", "1.0"));
+                    assertThat(release.getRevision()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://xml.org/code", "1.0"));
                     assertThat(release.getArtifacts()).hasSize(1);
                     assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.xml", "xml-lib", "1.0"));
                 },
                 ReleaseIdFactory.forScmAndTag("https://commons.org/code/io", "1.0"),
                 release -> {
-                    assertThat(release.id()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://commons.org/code/io", "1.0"));
+                    assertThat(release.getRevision())
+                            .isEqualTo(ReleaseIdFactory.forScmAndTag("https://commons.org/code/io", "1.0"));
                     assertThat(release.getArtifacts()).hasSize(1);
                     assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.commons.io", "commons-io", "1.0"));
                 },
                 ReleaseIdFactory.forScmAndTag("https://bytes.org/code", "1.0"),
                 release -> {
-                    assertThat(release.id()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://bytes.org/code", "1.0"));
+                    assertThat(release.getRevision()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://bytes.org/code", "1.0"));
                     assertThat(release.getArtifacts()).hasSize(1);
                     assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.bytes", "byte-utils", "1.0"));
                     assertThat(release.getDependencies()).isEmpty();
                 },
                 ReleaseIdFactory.forScmAndTag("https://files.org/code", "1.0"),
                 release -> {
-                    assertThat(release.id()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://files.org/code", "1.0"));
+                    assertThat(release.getRevision()).isEqualTo(ReleaseIdFactory.forScmAndTag("https://files.org/code", "1.0"));
                     assertThat(release.getArtifacts()).hasSize(1);
                     assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.files", "file-utils", "1.0"));
                     assertThat(release.getDependencies()).isEmpty();
@@ -163,7 +165,7 @@ public class NonCorePlatformMemberDependenciesTest {
                 .getReleaseCollection();
         assertThat(rc).isNotNull();
 
-        var releaseAssertions = new HashMap<ReleaseId, Consumer<ReleaseRepo>>();
+        var releaseAssertions = new HashMap<ScmRevision, Consumer<ReleaseRepo>>();
         releaseAssertions.computeIfAbsent(ReleaseIdFactory.forScmAndTag("https://quarkus.io/code", "1.0"),
                 k -> NonCorePlatformMemberDependenciesTest.releaseAssertions.get(k));
         releaseAssertions.computeIfAbsent(ReleaseIdFactory.forScmAndTag("https://camel.org/code", "1.0"),
@@ -191,7 +193,7 @@ public class NonCorePlatformMemberDependenciesTest {
                 .getReleaseCollection();
         assertThat(rc).isNotNull();
 
-        var releaseAssertions = new HashMap<ReleaseId, Consumer<ReleaseRepo>>();
+        var releaseAssertions = new HashMap<ScmRevision, Consumer<ReleaseRepo>>();
         releaseAssertions.computeIfAbsent(ReleaseIdFactory.forScmAndTag("https://quarkus.io/code", "1.0"),
                 k -> NonCorePlatformMemberDependenciesTest.releaseAssertions.get(k));
         releaseAssertions.computeIfAbsent(ReleaseIdFactory.forScmAndTag("https://camel.org/code", "1.0"),
@@ -209,11 +211,11 @@ public class NonCorePlatformMemberDependenciesTest {
     }
 
     private static void assertReleaseDependencies(ReleaseCollection rc,
-            HashMap<ReleaseId, Consumer<ReleaseRepo>> releaseAssertions) {
+            Map<ScmRevision, Consumer<ReleaseRepo>> releaseAssertions) {
         for (ReleaseRepo r : rc.getReleases()) {
-            var assertions = releaseAssertions.remove(r.id());
+            var assertions = releaseAssertions.remove(r.getRevision());
             if (assertions == null) {
-                fail("Unexpected release " + r.id());
+                fail("Unexpected release " + r.getRevision());
             } else {
                 assertions.accept(r);
             }
