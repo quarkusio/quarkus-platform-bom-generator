@@ -2,7 +2,7 @@ package io.quarkus.bom.decomposer.detector;
 
 import io.quarkus.bom.decomposer.BomDecomposerException;
 import io.quarkus.bom.decomposer.ReleaseIdDetector;
-import io.quarkus.bom.decomposer.ReleaseIdResolver;
+import io.quarkus.bom.decomposer.ScmRevisionResolver;
 import io.quarkus.bom.resolver.ArtifactNotFoundException;
 import io.quarkus.domino.scm.ScmRevision;
 import org.eclipse.aether.artifact.Artifact;
@@ -10,20 +10,20 @@ import org.eclipse.aether.artifact.Artifact;
 public class OpentelemetryReleaseIdDetector implements ReleaseIdDetector {
 
     @Override
-    public ScmRevision detectReleaseId(ReleaseIdResolver idResolver, Artifact artifact) throws BomDecomposerException {
+    public ScmRevision detectReleaseId(ScmRevisionResolver idResolver, Artifact artifact) throws BomDecomposerException {
         if (!artifact.getGroupId().startsWith("io.opentelemetry")) {
             return null;
         }
 
         ScmRevision releaseId = null;
         try {
-            releaseId = idResolver.defaultReleaseId(artifact);
+            releaseId = idResolver.readRevisionFromPom(artifact);
         } catch (ArtifactNotFoundException e) {
             // prod may strip the -alpha qualifier
             if (artifact.getVersion().endsWith("-alpha")) {
                 throw e;
             }
-            releaseId = idResolver.defaultReleaseId(artifact.setVersion(artifact.getVersion() + "-alpha"));
+            releaseId = idResolver.readRevisionFromPom(artifact.setVersion(artifact.getVersion() + "-alpha"));
         }
         String version = releaseId.getValue();
         if (version.endsWith("-alpha")) {

@@ -124,7 +124,7 @@ public class BomDecomposer {
                             releaseDetectors.add(d);
                         });
             }
-            releaseIdResolver = new ReleaseIdResolver(artifactResolver(), releaseDetectors);
+            revisionResolver = new ScmRevisionResolver(artifactResolver(), releaseDetectors);
             return BomDecomposer.this.decompose();
         }
     }
@@ -142,7 +142,7 @@ public class BomDecomposer {
     private List<ReleaseIdDetector> releaseDetectors = new ArrayList<>();
     private DecomposedBomBuilder decomposedBuilder;
     private DecomposedBomTransformer transformer;
-    private ReleaseIdResolver releaseIdResolver;
+    private ScmRevisionResolver revisionResolver;
 
     private ArtifactResolver artifactResolver() {
         try {
@@ -173,7 +173,7 @@ public class BomDecomposer {
                         !classifier.equals("javadoc")) {
                     resolve(artifact);
                 } else if (ArtifactCoords.TYPE_JAR.equals(artifact.getExtension())) {
-                    final Model model = releaseIdResolver.model(artifact);
+                    final Model model = revisionResolver.readPom(artifact);
                     if (ArtifactCoords.TYPE_POM.equals(model.getPackaging())) {
                         // if an artifact has type JAR but the packaging is POM then check whether the artifact is resolvable
                         try {
@@ -188,7 +188,7 @@ public class BomDecomposer {
                         }
                     }
                 }
-                bomBuilder.bomDependency(releaseIdResolver.releaseId(artifact, List.of()), dep);
+                bomBuilder.bomDependency(revisionResolver.resolveRevision(artifact, List.of()), dep);
             } catch (BomDecomposerException e) {
                 throw e;
             } catch (ArtifactNotFoundException | UnresolvableModelException e) {

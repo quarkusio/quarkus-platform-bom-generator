@@ -2,7 +2,7 @@ package io.quarkus.bom.decomposer.detector;
 
 import io.quarkus.bom.decomposer.BomDecomposerException;
 import io.quarkus.bom.decomposer.ReleaseIdDetector;
-import io.quarkus.bom.decomposer.ReleaseIdResolver;
+import io.quarkus.bom.decomposer.ScmRevisionResolver;
 import io.quarkus.domino.scm.ScmRepository;
 import io.quarkus.domino.scm.ScmRevision;
 import org.eclipse.aether.artifact.Artifact;
@@ -10,7 +10,7 @@ import org.eclipse.aether.artifact.Artifact;
 public class JUnitPlatformReleaseDetector implements ReleaseIdDetector {
 
     @Override
-    public ScmRevision detectReleaseId(ReleaseIdResolver idResolver, Artifact artifact) throws BomDecomposerException {
+    public ScmRevision detectReleaseId(ScmRevisionResolver idResolver, Artifact artifact) throws BomDecomposerException {
         if (artifact.getGroupId().startsWith("org.junit")) {
             if (artifact.getVersion().startsWith("5.")) {
                 return ScmRevision.tag(ScmRepository.ofUrl("https://github.com/junit-team/junit5"),

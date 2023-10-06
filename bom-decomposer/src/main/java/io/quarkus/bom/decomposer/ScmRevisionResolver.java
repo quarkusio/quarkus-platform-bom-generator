@@ -25,7 +25,7 @@ import org.apache.maven.model.resolution.UnresolvableModelException;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.repository.RemoteRepository;
 
-public class ReleaseIdResolver {
+public class ScmRevisionResolver {
 
     private final MessageWriter log;
     private final ArtifactResolver resolver;
@@ -35,31 +35,32 @@ public class ReleaseIdResolver {
     private HttpClient httpClient;
     private final Map<GAV, ScmRevision> releaseIdCache = new WeakHashMap<>();
 
-    public ReleaseIdResolver(MavenArtifactResolver resolver) {
+    public ScmRevisionResolver(MavenArtifactResolver resolver) {
         this(ArtifactResolverProvider.get(resolver));
     }
 
-    public ReleaseIdResolver(MavenArtifactResolver resolver, Collection<ReleaseIdDetector> releaseDetectors) {
+    public ScmRevisionResolver(MavenArtifactResolver resolver, Collection<ReleaseIdDetector> releaseDetectors) {
         this(ArtifactResolverProvider.get(resolver), releaseDetectors);
     }
 
-    public ReleaseIdResolver(MavenArtifactResolver resolver, Collection<ReleaseIdDetector> releaseDetectors, MessageWriter log,
+    public ScmRevisionResolver(MavenArtifactResolver resolver, Collection<ReleaseIdDetector> releaseDetectors,
+            MessageWriter log,
             boolean validateRepoTag) {
         this(ArtifactResolverProvider.get(resolver), releaseDetectors, log, validateRepoTag);
     }
 
-    public ReleaseIdResolver(ArtifactResolver resolver) {
+    public ScmRevisionResolver(ArtifactResolver resolver) {
         this(resolver, List.of());
     }
 
-    public ReleaseIdResolver(ArtifactResolver resolver, Collection<ReleaseIdDetector> releaseDetectors) {
+    public ScmRevisionResolver(ArtifactResolver resolver, Collection<ReleaseIdDetector> releaseDetectors) {
         this.resolver = Objects.requireNonNull(resolver);
         this.releaseDetectors = releaseDetectors;
         this.validateRepoTag = false;
         this.log = MessageWriter.info();
     }
 
-    public ReleaseIdResolver(ArtifactResolver resolver, Collection<ReleaseIdDetector> releaseDetectors, MessageWriter log,
+    public ScmRevisionResolver(ArtifactResolver resolver, Collection<ReleaseIdDetector> releaseDetectors, MessageWriter log,
             boolean validateRepoTag) {
         this.resolver = Objects.requireNonNull(resolver);
         this.releaseDetectors = releaseDetectors;
@@ -67,7 +68,7 @@ public class ReleaseIdResolver {
         this.log = log;
     }
 
-    public ScmRevision releaseId(Artifact artifact, List<RemoteRepository> repos)
+    public ScmRevision resolveRevision(Artifact artifact, List<RemoteRepository> repos)
             throws BomDecomposerException, UnresolvableModelException {
         var gav = new GAV(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion());
         var releaseId = releaseIdCache.get(gav);
@@ -79,7 +80,7 @@ public class ReleaseIdResolver {
                 }
             }
             if (releaseId == null) {
-                releaseId = defaultReleaseId(artifact, repos);
+                releaseId = readRevisionFromPom(artifact, repos);
             }
             if (validateRepoTag) {
                 validateTag(releaseId);
@@ -89,11 +90,11 @@ public class ReleaseIdResolver {
         return releaseId;
     }
 
-    public ScmRevision defaultReleaseId(Artifact artifact) throws BomDecomposerException {
-        return defaultReleaseId(artifact, List.of());
+    public ScmRevision readRevisionFromPom(Artifact artifact) throws BomDecomposerException {
+        return readRevisionFromPom(artifact, List.of());
     }
 
-    public ScmRevision defaultReleaseId(Artifact artifact, List<RemoteRepository> repos) throws BomDecomposerException {
+    public ScmRevision readRevisionFromPom(Artifact artifact, List<RemoteRepository> repos) throws BomDecomposerException {
         /* @formatter:off
         final ModelSource ms = modelResolver.resolveModel(artifact.getGroupId(), artifact.getArtifactId(),
                 artifact.getVersion());
@@ -110,7 +111,7 @@ public class ReleaseIdResolver {
         }
         @formatter:on */
 
-        Model model = model(artifact, repos);
+        Model model = readPom(artifact, repos);
         Model tmp;
         while (!hasScmInfo(model) && (tmp = workspaceParent(model, repos)) != null) {
             model = tmp;
@@ -173,7 +174,7 @@ public class ReleaseIdResolver {
             return null;
         }
 
-        final Model parentModel = model(Util.parentArtifact(model), repos);
+        final Model parentModel = readPom(Util.parentArtifact(model), repos);
 
         if (Util.getScmOrigin(model) != null) {
             return Util.getScmOrigin(model).equals(Util.getScmOrigin(parentModel))
@@ -203,11 +204,11 @@ public class ReleaseIdResolver {
         return null;
     }
 
-    public Model model(Artifact artifact) throws BomDecomposerException {
+    public Model readPom(Artifact artifact) throws BomDecomposerException {
         return Util.model(resolver.resolve(Util.pom(artifact)).getArtifact().getFile());
     }
 
-    public Model model(Artifact artifact, List<RemoteRepository> repos) throws BomDecomposerException {
+    public Model readPom(Artifact artifact, List<RemoteRepository> repos) throws BomDecomposerException {
         return Util.model(resolver.resolve(Util.pom(artifact), repos).getArtifact().getFile());
     }
 }

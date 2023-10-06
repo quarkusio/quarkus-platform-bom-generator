@@ -5,5 +5,5 @@ import org.eclipse.aether.artifact.Artifact;
 
 public interface ReleaseIdDetector {
 
-    ScmRevision detectReleaseId(ReleaseIdResolver releaseResolver, Artifact artifact) throws BomDecomposerException;
+    ScmRevision detectReleaseId(ScmRevisionResolver releaseResolver, Artifact artifact) throws BomDecomposerException;
 }
