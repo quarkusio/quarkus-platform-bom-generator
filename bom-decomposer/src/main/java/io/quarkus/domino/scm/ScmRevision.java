@@ -89,6 +89,6 @@ public class ScmRevision implements ReleaseVersion, ReleaseId {
 
     @Override
     public String toString() {
-        return repo.getId() + "@" + kind.name() + ":" + value;
+        return repo.getId() + "#" + value;
     }
 }
