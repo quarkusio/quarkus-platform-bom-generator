@@ -173,7 +173,7 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
     private static class VisitedComponentImpl implements VisitedComponent {
         private final long index;
         private final VisitedComponentImpl parent;
-        private final ScmRevision releaseId;
+        private final ScmRevision revision;
         private final ArtifactCoords coords;
         private final List<RemoteRepository> repos;
         private final Map<ArtifactCoords, VisitedComponentImpl> children = new HashMap<>();
@@ -183,7 +183,7 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
         private VisitedComponentImpl(long index, VisitedComponentImpl parent, DependencyVisit visit) {
             this.index = index;
             this.parent = parent;
-            this.releaseId = visit.getRevision();
+            this.revision = visit.getRevision();
             this.coords = visit.getCoords();
             this.repos = visit.getRepositories();
         }
@@ -230,8 +230,8 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
         }
 
         @Override
-        public ScmRevision getReleaseId() {
-            return releaseId;
+        public ScmRevision getRevision() {
+            return revision;
         }
 
         @Override

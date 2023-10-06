@@ -178,7 +178,7 @@ public class SbomGenerator {
         final Model model = effectiveModelResolver.resolveEffectiveModel(visited.getArtifactCoords(),
                 visited.getRepositories());
         final Component c = new Component();
-        ManifestGenerator.extractMetadata(visited.getReleaseId(), model, c);
+        ManifestGenerator.extractMetadata(visited.getRevision(), model, c);
         if (c.getPublisher() == null) {
             c.setPublisher("central");
         }

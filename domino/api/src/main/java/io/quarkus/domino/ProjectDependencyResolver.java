@@ -211,7 +211,7 @@ public class ProjectDependencyResolver {
     private final ScmRevisionResolver revisionResolver;
 
     private Map<ArtifactCoords, DependencyNode> preResolvedRootArtifacts = Map.of();
-    private ScmRevision projectReleaseId;
+    private ScmRevision projectRevision;
     private Set<GAV> projectGavs;
 
     private ProjectDependencyResolver(Builder builder) {
@@ -233,7 +233,7 @@ public class ProjectDependencyResolver {
         } else {
             treeVisitors = builder.visitors;
         }
-        revisionResolver = newReleaseIdResolver(resolver, log, config);
+        revisionResolver = newRevisionResolver(resolver, log, config);
     }
 
     public Path getOutputFile() {
@@ -604,11 +604,11 @@ public class ProjectDependencyResolver {
                 try (Git git = Git.open(config.getProjectDir().toFile())) {
                     final Repository gitRepo = git.getRepository();
                     final String repoUrl = gitRepo.getConfig().getString("remote", "origin", "url");
-                    projectReleaseId = ReleaseIdFactory.forScmAndTag(repoUrl, gitRepo.getBranch());
+                    projectRevision = ReleaseIdFactory.forScmAndTag(repoUrl, gitRepo.getBranch());
                 } catch (IOException e) {
                     log.warn("Failed to determine the Git repository URL: ", e.getLocalizedMessage());
                     final ArtifactCoords a = result.iterator().next();
-                    projectReleaseId = ReleaseIdFactory.forGav(a.getGroupId(), a.getArtifactId(), a.getVersion());
+                    projectRevision = ReleaseIdFactory.forGav(a.getGroupId(), a.getArtifactId(), a.getVersion());
                 }
             } else {
                 throw new IllegalStateException("Unrecognized build tool " + buildTool);
@@ -749,22 +749,22 @@ public class ProjectDependencyResolver {
         }
     }
 
-    private ScmRevision getReleaseId(ArtifactCoords coords, List<RemoteRepository> repos) {
-        final ScmRevision releaseId;
+    private ScmRevision getRevision(ArtifactCoords coords, List<RemoteRepository> repos) {
+        final ScmRevision revision;
         if (this.preResolvedRootArtifacts.containsKey(coords)) {
-            releaseId = projectReleaseId;
+            revision = projectRevision;
         } else {
             try {
-                releaseId = revisionResolver.resolveRevision(toAetherArtifact(coords), repos);
+                revision = revisionResolver.resolveRevision(toAetherArtifact(coords), repos);
             } catch (Exception e) {
                 throw new RuntimeException("Failed to resolve release id for " + coords, e);
             }
         }
-        getOrCreateRepo(releaseId).artifacts.put(coords, repos);
-        return releaseId;
+        getOrCreateRepo(revision).artifacts.put(coords, repos);
+        return revision;
     }
 
-    private static ScmRevisionResolver newReleaseIdResolver(MavenArtifactResolver artifactResolver, MessageWriter log,
+    private static ScmRevisionResolver newRevisionResolver(MavenArtifactResolver artifactResolver, MessageWriter log,
             ProjectDependencyConfig config) {
 
         if (config.isLegacyScmLocator()) {
@@ -1118,7 +1118,7 @@ public class ProjectDependencyResolver {
                 || coords.getType().equals(ArtifactCoords.TYPE_POM)
                         && (!config.isExcludeParentPoms()
                                 || projectGavs.contains(toGav(coords)))) {
-            ResolvedDependency resolved = new ResolvedDependency(getReleaseId(coords, repos), coords, repos, managed);
+            ResolvedDependency resolved = new ResolvedDependency(getRevision(coords, repos), coords, repos, managed);
             if (!config.isExcludeParentPoms()) {
                 addImportedBomsAndParentPomToBuild(resolved);
             }

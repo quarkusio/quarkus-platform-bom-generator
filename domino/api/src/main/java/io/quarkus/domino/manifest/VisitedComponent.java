@@ -8,7 +8,7 @@ import org.eclipse.aether.repository.RemoteRepository;
 
 interface VisitedComponent {
 
-    ScmRevision getReleaseId();
+    ScmRevision getRevision();
 
     ArtifactCoords getArtifactCoords();
 

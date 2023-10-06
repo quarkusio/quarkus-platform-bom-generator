@@ -8,13 +8,13 @@ import org.eclipse.aether.repository.RemoteRepository;
 
 class ResolvedDependency implements DependencyTreeVisitor.DependencyVisit {
 
-    private final ScmRevision releaseId;
+    private final ScmRevision revision;
     private final ArtifactCoords coords;
     private final List<RemoteRepository> repos;
     private final boolean managed;
 
-    ResolvedDependency(ScmRevision releaseId, ArtifactCoords coords, List<RemoteRepository> repos, boolean managed) {
-        this.releaseId = Objects.requireNonNull(releaseId, "Release ID is null");
+    ResolvedDependency(ScmRevision revision, ArtifactCoords coords, List<RemoteRepository> repos, boolean managed) {
+        this.revision = Objects.requireNonNull(revision, "Release ID is null");
         this.coords = Objects.requireNonNull(coords, "Artifact coordinates are null");
         this.repos = Objects.requireNonNull(repos, "Remote repositories are null");
         this.managed = managed;
@@ -22,7 +22,7 @@ class ResolvedDependency implements DependencyTreeVisitor.DependencyVisit {
 
     @Override
     public ScmRevision getRevision() {
-        return releaseId;
+        return revision;
     }
 
     @Override
