@@ -2,7 +2,7 @@ package io.quarkus.domino;
 
 import io.quarkus.bom.decomposer.BomDecomposerException;
 import io.quarkus.bom.decomposer.ReleaseIdDetector;
-import io.quarkus.bom.decomposer.ReleaseIdResolver;
+import io.quarkus.bom.decomposer.ScmRevisionResolver;
 import io.quarkus.domino.manifest.PncArtifactBuildInfo;
 import io.quarkus.domino.manifest.PncArtifactBuildInfo.Build;
 import io.quarkus.domino.manifest.PncArtifactBuildInfo.Content;
@@ -19,7 +19,7 @@ public class PncReleaseIdDetector implements ReleaseIdDetector {
     }
 
     @Override
-    public ScmRevision detectReleaseId(ReleaseIdResolver releaseResolver, Artifact artifact)
+    public ScmRevision detectReleaseId(ScmRevisionResolver releaseResolver, Artifact artifact)
             throws BomDecomposerException {
         var pncInfo = pncInfoProvider
                 .getBuildInfo(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion());

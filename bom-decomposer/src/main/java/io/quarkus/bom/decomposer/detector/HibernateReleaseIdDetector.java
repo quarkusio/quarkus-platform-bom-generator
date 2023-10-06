@@ -2,18 +2,18 @@ package io.quarkus.bom.decomposer.detector;
 
 import io.quarkus.bom.decomposer.BomDecomposerException;
 import io.quarkus.bom.decomposer.ReleaseIdDetector;
-import io.quarkus.bom.decomposer.ReleaseIdResolver;
+import io.quarkus.bom.decomposer.ScmRevisionResolver;
 import io.quarkus.domino.scm.ScmRevision;
 import org.eclipse.aether.artifact.Artifact;
 
 public class HibernateReleaseIdDetector implements ReleaseIdDetector {
 
     @Override
-    public ScmRevision detectReleaseId(ReleaseIdResolver idResolver, Artifact artifact) throws BomDecomposerException {
+    public ScmRevision detectReleaseId(ScmRevisionResolver idResolver, Artifact artifact) throws BomDecomposerException {
         if (!artifact.getGroupId().startsWith("org.hibernate")) {
             return null;
         }
-        var releaseId = idResolver.defaultReleaseId(artifact);
+        var releaseId = idResolver.readRevisionFromPom(artifact);
         final String repo = releaseId.getRepository().toString();
         final String version = releaseId.getValue();
         if (!repo.endsWith("hibernate-orm") && !repo.endsWith("hibernate-reactive")

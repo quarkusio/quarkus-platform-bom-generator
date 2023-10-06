@@ -2,7 +2,7 @@ package io.quarkus.bom.decomposer.detector;
 
 import io.quarkus.bom.decomposer.BomDecomposerException;
 import io.quarkus.bom.decomposer.ReleaseIdDetector;
-import io.quarkus.bom.decomposer.ReleaseIdResolver;
+import io.quarkus.bom.decomposer.ScmRevisionResolver;
 import io.quarkus.domino.scm.ScmRepository;
 import io.quarkus.domino.scm.ScmRevision;
 import org.eclipse.aether.artifact.Artifact;
@@ -12,14 +12,14 @@ public class ApacheCommonsReleaseIdDetector implements ReleaseIdDetector {
     private static final String GITBOX_APACHE_ORG_REPOS_ASF = "https://gitbox.apache.org/repos/asf/";
 
     @Override
-    public ScmRevision detectReleaseId(ReleaseIdResolver releaseResolver, Artifact artifact)
+    public ScmRevision detectReleaseId(ScmRevisionResolver releaseResolver, Artifact artifact)
             throws BomDecomposerException {
         final String artifactId = artifact.getArtifactId();
         if (artifact.getGroupId().equals("org.apache.commons")
                 && (artifact.getArtifactId().equals("commons-lang3")
                         || artifact.getArtifactId().equals("commons-text")
                         || artifactId.equals("commons-compress"))) {
-            var releaseId = releaseResolver.defaultReleaseId(artifact);
+            var releaseId = releaseResolver.readRevisionFromPom(artifact);
             String repoUrl = releaseId.getRepository().toString();
             if (releaseId.getRepository().hasUrl()
                     && !releaseId.getRepository().getUrl().startsWith(GITBOX_APACHE_ORG_REPOS_ASF)) {
