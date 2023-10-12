@@ -1,13 +1,8 @@
 package io.quarkus.domino.cli.repo;
 
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
-import java.util.Collection;
-import java.util.List;
-import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.collection.DependencyCollectionException;
-import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.DependencyNode;
-import org.eclipse.aether.graph.Exclusion;
 
 public class NonResolvingDependencyTreeBuilder extends DependencyTreeBuilder {
 
@@ -16,14 +11,14 @@ public class NonResolvingDependencyTreeBuilder extends DependencyTreeBuilder {
     }
 
     @Override
-    public DependencyNode doBuildTree(Artifact a, List<Dependency> constraints, Collection<Exclusion> exclusions) {
+    public DependencyNode doBuildTree(DependencyTreeRoot root) {
         try {
             return resolver.getSystem().collectDependencies(
                     resolver.getSession(),
-                    createCollectRequest(a, exclusions, constraints))
+                    createCollectRequest(root))
                     .getRoot();
         } catch (DependencyCollectionException e) {
-            throw new RuntimeException("Failed to collect dependencies of " + a, e);
+            throw new RuntimeException("Failed to collect dependencies of " + root.getArtifact(), e);
         }
     }
 }

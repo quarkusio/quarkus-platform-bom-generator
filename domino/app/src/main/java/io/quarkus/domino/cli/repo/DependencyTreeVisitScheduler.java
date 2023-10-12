@@ -22,18 +22,17 @@ public interface DependencyTreeVisitScheduler {
         return new BaseDependencyTreeProcessScheduler<>(processor, log, treesTotal) {
 
             @Override
-            public void scheduleProcessing(Artifact rootArtifact, List<Dependency> constraints,
-                    Collection<Exclusion> exclusions) {
-                final DependencyNode root;
+            public void scheduleProcessing(DependencyTreeRoot root) {
+                final DependencyNode rootNode;
                 try {
-                    root = treeBuilder.buildTree(rootArtifact, constraints, exclusions);
-                    log.info(getResolvedTreeMessage(rootArtifact));
+                    rootNode = treeBuilder.buildTree(root);
+                    log.info(getResolvedTreeMessage(rootNode.getArtifact()));
                 } catch (Exception e) {
-                    resolutionFailures.add(rootArtifact);
+                    resolutionFailures.add(root.getArtifact());
                     log.error(e.getLocalizedMessage());
                     return;
                 }
-                ctx.root = root;
+                ctx.root = rootNode;
                 processor.visitTree(ctx);
             }
 
@@ -50,26 +49,26 @@ public interface DependencyTreeVisitScheduler {
 
         return new BaseDependencyTreeProcessScheduler<E>(processor, log, treesTotal) {
 
-            final ParallelTreeProcessor<String, DependencyTreeRequest, DependencyNode> treeProcessor = ParallelTreeProcessor
+            final ParallelTreeProcessor<String, DependencyTreeRoot, DependencyNode> treeProcessor = ParallelTreeProcessor
                     .with(new NodeProcessor<>() {
 
                         @Override
-                        public String getNodeId(DependencyTreeRequest request) {
+                        public String getNodeId(DependencyTreeRoot request) {
                             return request.getId();
                         }
 
                         @Override
-                        public Iterable<DependencyTreeRequest> getChildren(DependencyTreeRequest node) {
+                        public Iterable<DependencyTreeRoot> getChildren(DependencyTreeRoot node) {
                             return List.of();
                         }
 
                         @Override
-                        public Function<ExecutionContext<String, DependencyTreeRequest, DependencyNode>, TaskResult<String, DependencyTreeRequest, DependencyNode>> createFunction() {
+                        public Function<ExecutionContext<String, DependencyTreeRoot, DependencyNode>, TaskResult<String, DependencyTreeRoot, DependencyNode>> createFunction() {
                             return ctx -> {
                                 var request = ctx.getNode();
                                 try {
-                                    var node = treeBuilder.buildTree(request.root, request.constraints, request.exclusions);
-                                    log.info(getResolvedTreeMessage(request.root));
+                                    var node = treeBuilder.buildTree(request);
+                                    log.info(getResolvedTreeMessage(request.getArtifact()));
                                     return ctx.success(node);
                                 } catch (Exception e) {
                                     return ctx.failure(e);
@@ -81,10 +80,9 @@ public interface DependencyTreeVisitScheduler {
             int scheduledTotal = 0;
 
             @Override
-            public void scheduleProcessing(Artifact rootArtifact, List<Dependency> constraints,
-                    Collection<Exclusion> exclusions) {
+            public void scheduleProcessing(DependencyTreeRoot root) {
                 ++scheduledTotal;
-                treeProcessor.addRoot(new DependencyTreeRequest(rootArtifact, constraints, exclusions));
+                treeProcessor.addRoot(root);
             }
 
             @Override
@@ -92,7 +90,7 @@ public interface DependencyTreeVisitScheduler {
                 var results = treeProcessor.schedule().join();
                 for (var r : results) {
                     if (r.isFailure()) {
-                        resolutionFailures.add(r.getNode().root);
+                        resolutionFailures.add(r.getNode().getArtifact());
                         log.error("Failed to resolve dependencies of " + r.getId());
                         //if (r.getException() != null) {
                         //    r.getException().printStackTrace();
@@ -106,7 +104,11 @@ public interface DependencyTreeVisitScheduler {
         };
     }
 
-    void scheduleProcessing(Artifact rootArtifact, List<Dependency> constraints, Collection<Exclusion> exclusions);
+    default void scheduleProcessing(Artifact rootArtifact, List<Dependency> constraints, Collection<Exclusion> exclusions) {
+        scheduleProcessing(new DependencyTreeRoot(rootArtifact, constraints, exclusions));
+    }
+
+    void scheduleProcessing(DependencyTreeRoot root);
 
     void waitForCompletion();
 
@@ -117,20 +119,4 @@ public interface DependencyTreeVisitScheduler {
         void handleResult(R result, MessageWriter log);
     }
 
-    public static class DependencyTreeRequest {
-
-        private final Artifact root;
-        private final List<Dependency> constraints;
-        private final Collection<Exclusion> exclusions;
-
-        public DependencyTreeRequest(Artifact root, List<Dependency> constraints, Collection<Exclusion> exclusions) {
-            this.root = root;
-            this.constraints = constraints;
-            this.exclusions = exclusions;
-        }
-
-        public String getId() {
-            return root.toString();
-        }
-    }
 }
