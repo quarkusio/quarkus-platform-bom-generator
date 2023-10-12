@@ -6,14 +6,17 @@ import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.options.BootstrapMavenOptions;
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.domino.cli.repo.DependencyTreeBuilder;
+import io.quarkus.domino.cli.repo.DependencyTreeRoot;
 import io.quarkus.domino.cli.repo.DependencyTreeVisitScheduler;
 import io.quarkus.domino.cli.repo.DependencyTreeVisitor;
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.graph.Dependency;
+import org.eclipse.aether.graph.Exclusion;
 
 public class DependencyTreeProcessor {
 
@@ -30,7 +33,7 @@ public class DependencyTreeProcessor {
     private DependencyTreeVisitor<?> treeVisitor;
     private boolean parallelProcessing;
     private MessageWriter log;
-    private List<Dependency> constraints = List.of();
+    private List<DependencyTreeRoot> roots = new ArrayList<>();
 
     private DependencyTreeProcessor() {
     }
@@ -65,12 +68,20 @@ public class DependencyTreeProcessor {
         return this;
     }
 
-    public DependencyTreeProcessor setConstraints(List<Dependency> constraints) {
-        this.constraints = constraints;
+    public DependencyTreeProcessor addRoot(Artifact artifact) {
+        return addRoot(artifact, List.of(), List.of());
+    }
+
+    public DependencyTreeProcessor addRoot(Artifact artifact, List<Dependency> constraints) {
+        return addRoot(artifact, constraints, List.of());
+    }
+
+    public DependencyTreeProcessor addRoot(Artifact artifact, List<Dependency> constraints, Collection<Exclusion> exclusions) {
+        this.roots.add(new DependencyTreeRoot(artifact, constraints, exclusions));
         return this;
     }
 
-    public void process(Collection<Dependency> dependencies) {
+    public void process() {
 
         if (resolver == null) {
             var config = BootstrapMavenContext.config()
@@ -123,13 +134,11 @@ public class DependencyTreeProcessor {
         }
 
         var scheduler = parallelProcessing
-                ? DependencyTreeVisitScheduler.parallel(treeBuilder, treeVisitor, log,
-                        dependencies.size())
-                : DependencyTreeVisitScheduler.sequencial(treeBuilder, treeVisitor, log,
-                        dependencies.size());
+                ? DependencyTreeVisitScheduler.parallel(treeBuilder, treeVisitor, log, roots.size())
+                : DependencyTreeVisitScheduler.sequencial(treeBuilder, treeVisitor, log, roots.size());
 
-        for (var d : dependencies) {
-            scheduler.scheduleProcessing(d.getArtifact(), constraints, d.getExclusions());
+        for (var r : roots) {
+            scheduler.scheduleProcessing(r);
         }
         scheduler.waitForCompletion();
         if (!scheduler.getResolutionFailures().isEmpty()) {

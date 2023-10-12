@@ -1,7 +1,6 @@
 package io.quarkus.domino.cli.repo;
 
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
-import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import org.eclipse.aether.artifact.Artifact;
@@ -9,7 +8,6 @@ import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.collection.CollectRequest;
 import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.DependencyNode;
-import org.eclipse.aether.graph.Exclusion;
 import org.eclipse.aether.util.artifact.JavaScopes;
 
 public abstract class DependencyTreeBuilder {
@@ -30,27 +28,26 @@ public abstract class DependencyTreeBuilder {
         this.resolver = Objects.requireNonNull(resolver);
     }
 
-    public DependencyNode buildTree(Artifact a, List<Dependency> constraints, Collection<Exclusion> exclusions) {
-        var root = doBuildTree(a, constraints, exclusions);
-        if (root.getChildren().size() != 1) {
-            throw new RuntimeException("Expected a single child node but got " + root.getChildren());
+    public DependencyNode buildTree(DependencyTreeRoot root) {
+        var rootNode = doBuildTree(root);
+        if (rootNode.getChildren().size() != 1) {
+            throw new RuntimeException("Expected a single child node but got " + rootNode.getChildren());
         }
-        return root.getChildren().get(0);
+        return rootNode.getChildren().get(0);
     }
 
-    public abstract DependencyNode doBuildTree(Artifact a, List<Dependency> constraints, Collection<Exclusion> exclusions);
+    public abstract DependencyNode doBuildTree(DependencyTreeRoot root);
 
-    protected CollectRequest createCollectRequest(Artifact a, Collection<Exclusion> exclusions,
-            List<Dependency> constraints) {
+    protected CollectRequest createCollectRequest(DependencyTreeRoot root) {
         return new CollectRequest()
-                .setRootArtifact(root)
+                .setRootArtifact(DependencyTreeBuilder.root)
                 .setDependencies(List.of(
                         new Dependency(
-                                a,
+                                root.getArtifact(),
                                 JavaScopes.RUNTIME,
                                 false,
-                                exclusions)))
-                .setManagedDependencies(constraints)
+                                root.getExclusions())))
+                .setManagedDependencies(root.getConstraints())
                 .setRepositories(resolver.getRepositories());
     }
 }

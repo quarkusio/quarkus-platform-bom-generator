@@ -18,9 +18,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.regex.Pattern;
 import org.eclipse.aether.artifact.Artifact;
@@ -33,11 +33,15 @@ import picocli.CommandLine;
 public class Dependency implements Callable<Integer> {
 
     @CommandLine.Option(names = {
-            "--bom" }, description = "Maven BOM dependency constraints of which should be resolved including their dependencies.", required = true)
+            "--bom" }, description = "Maven BOM dependency constraints of which should be resolved including their dependencies.", required = false)
     protected String bom;
 
     @CommandLine.Option(names = {
-            "--versions" }, description = "Limit artifact versions to those matching specified glob patterns")
+            "--roots" }, description = "Maven artifacts whose dependencies should be resolved", required = false, split = ",")
+    protected List<String> roots = List.of();
+
+    @CommandLine.Option(names = {
+            "--versions" }, description = "Limit artifact versions to those matching specified glob patterns", split = ",")
     protected List<String> versions = List.of();
     private List<Pattern> versionPatterns;
 
@@ -67,7 +71,7 @@ public class Dependency implements Callable<Integer> {
     public boolean parallelProcessing;
 
     @CommandLine.Option(names = {
-            "--trace" }, description = "Trace artifacts matching specified glob patterns as dependencies")
+            "--trace" }, description = "Trace artifacts matching specified glob patterns as dependencies", split = ",")
     protected List<String> trace = List.of();
 
     protected MessageWriter log = MessageWriter.info();
@@ -75,27 +79,7 @@ public class Dependency implements Callable<Integer> {
     @Override
     public Integer call() throws Exception {
 
-        var coords = ArtifactCoords.fromString(bom);
-        coords = ArtifactCoords.pom(coords.getGroupId(), coords.getArtifactId(), coords.getVersion());
-
-        var aetherBom = getAetherPom(coords);
-
         var resolver = getResolver();
-        var descriptor = resolver.resolveDescriptor(aetherBom);
-        if (descriptor.getManagedDependencies().isEmpty()) {
-            throw new RuntimeException(
-                    coords.toCompactCoords() + " either does not include dependency constraints or failed to resolve");
-        }
-
-        // make sure there are no duplicates, which may happen with test-jar and tests classifier
-        final Map<String, org.eclipse.aether.graph.Dependency> roots = new HashMap<>(
-                descriptor.getManagedDependencies().size());
-        for (var d : descriptor.getManagedDependencies()) {
-            var a = d.getArtifact();
-            if (isVersionSelected(a.getVersion())) {
-                roots.put(d.getArtifact().toString(), d);
-            }
-        }
 
         final ArtifactSet tracePattern;
         if (trace != null && !trace.isEmpty()) {
@@ -108,6 +92,7 @@ public class Dependency implements Callable<Integer> {
             tracePattern = null;
         }
 
+        final Set<String> invalidArtifacts = invalidArtifactsReport == null ? Set.of() : new HashSet<>();
         var treeVisitor = new DependencyTreeVisitor<List<Artifact>>() {
 
             @Override
@@ -142,7 +127,6 @@ public class Dependency implements Callable<Integer> {
             @Override
             public void handleResolutionFailures(Collection<Artifact> artifacts) {
                 if (invalidArtifactsReport != null) {
-                    var list = new ArrayList<String>(artifacts.size());
                     for (var a : artifacts) {
                         var sb = new StringBuilder();
                         sb.append(a.getGroupId()).append(":").append(a.getArtifactId()).append(":");
@@ -156,38 +140,77 @@ public class Dependency implements Callable<Integer> {
                             sb.append(a.getExtension()).append(":");
                         }
                         sb.append(a.getVersion());
-                        list.add(sb.toString());
-                    }
-                    Collections.sort(list);
-                    invalidArtifactsReport = invalidArtifactsReport.normalize().toAbsolutePath();
-                    var dir = invalidArtifactsReport.getParent();
-                    if (dir != null) {
-                        try {
-                            Files.createDirectories(dir);
-                        } catch (IOException e) {
-                            throw new UncheckedIOException(e);
-                        }
-                    }
-                    try (BufferedWriter writer = Files.newBufferedWriter(invalidArtifactsReport)) {
-                        for (var s : list) {
-                            writer.write(s);
-                            writer.newLine();
-                        }
-                    } catch (IOException e) {
-                        throw new UncheckedIOException(e);
+                        invalidArtifacts.add(sb.toString());
                     }
                 }
             }
         };
 
-        DependencyTreeProcessor.configure()
+        var treeProcessor = DependencyTreeProcessor.configure()
                 .setArtifactResolver(resolver)
                 .setResolveDependencies(resolve)
                 .setParallelProcessing(parallelProcessing)
-                .setConstraints(descriptor.getManagedDependencies())
-                .setTreeVisitor(treeVisitor)
-                .process(roots.values());
+                .setTreeVisitor(treeVisitor);
 
+        if (bom != null) {
+            var coords = ArtifactCoords.fromString(bom);
+            coords = ArtifactCoords.pom(coords.getGroupId(), coords.getArtifactId(), coords.getVersion());
+
+            var aetherBom = getAetherPom(coords);
+
+            var descriptor = resolver.resolveDescriptor(aetherBom);
+            if (descriptor.getManagedDependencies().isEmpty()) {
+                throw new RuntimeException(
+                        coords.toCompactCoords() + " either does not include dependency constraints or failed to resolve");
+            }
+
+            // make sure there are no duplicates, which may happen with test-jar and tests classifier
+            final Set<String> managedRoots = new HashSet<>(descriptor.getManagedDependencies().size());
+            var constraints = descriptor.getManagedDependencies();
+            for (var d : descriptor.getManagedDependencies()) {
+                var a = d.getArtifact();
+                if (isVersionSelected(a.getVersion()) && managedRoots.add(d.getArtifact().toString())) {
+                    treeProcessor.addRoot(d.getArtifact(), constraints, d.getExclusions());
+                }
+            }
+        } else if (this.roots.isEmpty()) {
+            throw new IllegalArgumentException("Neither --bom nor --roots have been provided");
+        }
+
+        if (!roots.isEmpty()) {
+            for (var root : this.roots) {
+                var coords = ArtifactCoords.fromString(root);
+                var a = new DefaultArtifact(coords.getGroupId(), coords.getArtifactId(), coords.getClassifier(),
+                        coords.getType(), coords.getVersion());
+                if (isVersionSelected(a.getVersion())) {
+                    treeProcessor.addRoot(a);
+                }
+            }
+        }
+
+        treeProcessor.process();
+
+        if (!invalidArtifacts.isEmpty() && invalidArtifactsReport != null) {
+            var list = new ArrayList<>(invalidArtifacts);
+            Collections.sort(list);
+            invalidArtifactsReport = invalidArtifactsReport.normalize().toAbsolutePath();
+            var dir = invalidArtifactsReport.getParent();
+            if (dir != null) {
+                try {
+                    Files.createDirectories(dir);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            }
+            try (BufferedWriter writer = Files.newBufferedWriter(invalidArtifactsReport)) {
+                for (var s : list) {
+                    writer.write(s);
+                    writer.newLine();
+                }
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        }
         return 0;
     }
 
