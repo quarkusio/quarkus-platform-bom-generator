@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
 import org.apache.maven.artifact.versioning.ArtifactVersion;
 import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
 
-public class VersionConstraintComparator implements Comparator<ArtifactVersion> {
+public class VersionConstraintComparator implements Comparator<String> {
 
     private final Collection<Pattern> versionPreferences;
 
@@ -17,22 +17,22 @@ public class VersionConstraintComparator implements Comparator<ArtifactVersion> 
     }
 
     @Override
-    public int compare(ArtifactVersion o1, ArtifactVersion o2) {
+    public int compare(String v1, String v2) {
         if (versionPreferences.isEmpty()) {
-            return o1.compareTo(o2);
+            return new DefaultArtifactVersion(v1).compareTo(new DefaultArtifactVersion(v2));
         }
         for (Pattern preference : versionPreferences) {
-            if (preference.matcher(o1.toString()).matches()) {
-                if (preference.matcher(o2.toString()).matches()) {
-                    return o1.compareTo(o2);
+            if (preference.matcher(v1).matches()) {
+                if (preference.matcher(v2).matches()) {
+                    return new DefaultArtifactVersion(v1).compareTo(new DefaultArtifactVersion(v2));
                 }
                 return 1;
             }
-            if (preference.matcher(o2.toString()).matches()) {
+            if (preference.matcher(v2).matches()) {
                 return -1;
             }
         }
-        return o1.compareTo(o2);
+        return new DefaultArtifactVersion(v1).compareTo(new DefaultArtifactVersion(v2));
     }
 
     public boolean hasVersionPreferences() {
