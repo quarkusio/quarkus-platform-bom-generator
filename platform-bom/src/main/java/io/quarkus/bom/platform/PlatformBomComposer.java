@@ -459,13 +459,8 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             final Map<ArtifactKey, ProjectDependency> preferredReleaseDeps = new HashMap<>();
             for (ProjectRelease release : releases) {
                 for (ProjectDependency dep : release.dependencies()) {
-                    preferredReleaseDeps.merge(dep.key(), dep, (current, other) -> {
-                        if (versionConstraintComparator().compare(new DefaultArtifactVersion(current.artifact().getVersion()),
-                                new DefaultArtifactVersion(other.artifact().getVersion())) > 0) {
-                            return current;
-                        }
-                        return other;
-                    });
+                    preferredReleaseDeps.merge(dep.key(), dep, (current, other) -> versionConstraintComparator()
+                            .compare(current.artifact().getVersion(), other.artifact().getVersion()) > 0 ? current : other);
                 }
             }
 
@@ -706,9 +701,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         }
         final ProjectDependency currentDep = externalExtensionDeps.get(dep.key());
         if (currentDep != null) {
-            final ArtifactVersion currentVersion = new DefaultArtifactVersion(currentDep.artifact().getVersion());
-            final ArtifactVersion newVersion = new DefaultArtifactVersion(dep.artifact().getVersion());
-            if (versionConstraintComparator().compare(currentVersion, newVersion) < 0) {
+            if (versionConstraintComparator().compare(currentDep.artifact().getVersion(), dep.artifact().getVersion()) < 0) {
                 externalExtensionDeps.put(dep.key(), dep);
             }
         } else {
@@ -750,16 +743,8 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
             final ProjectRelease.Builder releaseBuilder = extReleaseCollector.getOrCreateReleaseBuilder(release.id(),
                     memberBeingProcessed);
             for (ProjectDependency dep : release.dependencies()) {
-                releaseBuilder.add(dep, (dep1, dep2) -> {
-                    final VersionConstraintComparator vc = versionConstraintComparator();
-                    if (!vc.hasVersionPreferences()) {
-                        return null;
-                    }
-                    if (vc.isPreferredVersion(dep1)) {
-                        return vc.isPreferredVersion(dep2) ? null : dep1;
-                    }
-                    return vc.isPreferredVersion(dep2) ? dep2 : null;
-                });
+                releaseBuilder.add(dep, (dep1, dep2) -> versionConstraintComparator().compare(dep1.artifact().getVersion(),
+                        dep2.artifact().getVersion()) > 0 ? dep1 : dep2);
             }
             return;
         }
@@ -892,23 +877,18 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
     }
 
     private LinkedHashMap<String, ScmRevision> preferredVersions(Collection<ProjectRelease> releases) {
-        final TreeMap<ArtifactVersion, ScmRevision> treeMap = new TreeMap<>(
+        final TreeMap<String, ScmRevision> treeMap = new TreeMap<>(
                 Collections.reverseOrder(versionConstraintComparator()));
         for (ProjectRelease release : releases) {
             for (String versionStr : release.artifactVersions()) {
-                final DefaultArtifactVersion version = new DefaultArtifactVersion(versionStr);
-                final ScmRevision prevReleaseId = treeMap.put(version, release.id());
+                final ScmRevision prevReleaseId = treeMap.put(versionStr, release.id());
                 if (prevReleaseId != null && new DefaultArtifactVersion(prevReleaseId.getValue())
                         .compareTo(new DefaultArtifactVersion(release.id().getValue())) > 0) {
-                    treeMap.put(version, prevReleaseId);
+                    treeMap.put(versionStr, prevReleaseId);
                 }
             }
         }
-        final LinkedHashMap<String, ScmRevision> result = new LinkedHashMap<>(treeMap.size());
-        for (Map.Entry<ArtifactVersion, ScmRevision> entry : treeMap.entrySet()) {
-            result.put(entry.getKey().toString(), entry.getValue());
-        }
-        return result;
+        return new LinkedHashMap<>(treeMap);
     }
 
     private Collection<Dependency> getOriginalConstraints(PlatformMember member, boolean filtered)

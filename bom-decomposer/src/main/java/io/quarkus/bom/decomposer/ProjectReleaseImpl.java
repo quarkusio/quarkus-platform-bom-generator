@@ -37,8 +37,9 @@ class ProjectReleaseImpl implements ProjectRelease {
                     throw new IllegalArgumentException(
                             "Failed to add " + dep + " since the release already includes " + existing);
                 }
-                dep = conflictResolver.apply(dep, existing);
-                if (dep == existing) {
+                var preferred = conflictResolver.apply(dep, existing);
+                if (preferred == existing) {
+                    dep = existing;
                     deps.put(dep.key(), dep);
                 }
             }
