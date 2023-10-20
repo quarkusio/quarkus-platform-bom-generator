@@ -79,7 +79,12 @@ public class ProjectManifestingTest {
             ProjectDependencyResolver.builder()
                     .setArtifactResolver(artifactResolver)
                     .setDependencyConfig(config)
-                    .addDependencyTreeVisitor(new SbomGeneratingDependencyVisitor(artifactResolver, output, config, false))
+                    .addDependencyTreeVisitor(new SbomGeneratingDependencyVisitor(
+                            SbomGenerator.builder()
+                                    .setArtifactResolver(artifactResolver)
+                                    .setOutputFile(output)
+                                    .setEnableTransformers(false),
+                            config))
                     .build()
                     .resolveDependencies();
 

@@ -83,6 +83,12 @@ public class SbomGenerator {
             return this;
         }
 
+        public Builder setRecordDependencies(boolean recordDependencies) {
+            ensureNotBuilt();
+            SbomGenerator.this.recordDependencies = recordDependencies;
+            return this;
+        }
+
         public Builder setTopComponents(List<VisitedComponent> topComponents) {
             ensureNotBuilt();
             SbomGenerator.this.topComponents = topComponents;
@@ -123,6 +129,7 @@ public class SbomGenerator {
     private ProductInfo productInfo;
     private boolean enableTransformers;
     private List<VisitedComponent> topComponents;
+    private boolean recordDependencies = true;
 
     private Bom bom;
     private Set<String> addedBomRefs;
@@ -205,12 +212,16 @@ public class SbomGenerator {
 
         List<VisitedComponent> dependencies = visited.getDependencies();
         if (!dependencies.isEmpty()) {
-            final Dependency d = new Dependency(c.getBomRef());
+            final Dependency d = recordDependencies ? new Dependency(c.getBomRef()) : null;
             for (VisitedComponent child : sortAlphabetically(dependencies)) {
-                d.addDependency(new Dependency(child.getBomRef()));
+                if (d != null) {
+                    d.addDependency(new Dependency(child.getBomRef()));
+                }
                 addComponent(child);
             }
-            bom.addDependency(d);
+            if (d != null) {
+                bom.addDependency(d);
+            }
         }
     }
 
@@ -408,7 +419,7 @@ public class SbomGenerator {
     }
 
     private static List<VisitedComponent> sortAlphabetically(List<VisitedComponent> col) {
-        Collections.sort(col, (o1, o2) -> {
+        col.sort((o1, o2) -> {
             var coords1 = o1.getArtifactCoords();
             var coords2 = o2.getArtifactCoords();
             int i = coords1.getGroupId().compareTo(coords2.getGroupId());

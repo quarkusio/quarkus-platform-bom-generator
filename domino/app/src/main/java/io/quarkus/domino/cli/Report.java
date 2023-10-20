@@ -3,8 +3,8 @@ package io.quarkus.domino.cli;
 import io.quarkus.domino.DominoInfo;
 import io.quarkus.domino.ProjectDependencyConfig;
 import io.quarkus.domino.ProjectDependencyResolver;
-import io.quarkus.domino.manifest.ManifestGenerator;
 import io.quarkus.domino.manifest.SbomGeneratingDependencyVisitor;
+import io.quarkus.domino.manifest.SbomGenerator;
 import java.nio.file.Path;
 import picocli.CommandLine;
 
@@ -25,7 +25,7 @@ public class Report extends BaseDepsToBuildCommand {
 
     @Override
     protected Path getConfigDir() {
-        if (manifest) {
+        if (manifest || flatManifest) {
             return (projectDir == null ? Path.of(DominoInfo.CONFIG_DIR_NAME)
                     : projectDir.toPath().resolve(DominoInfo.CONFIG_DIR_NAME))
                             .resolve("manifest");
@@ -49,25 +49,23 @@ public class Report extends BaseDepsToBuildCommand {
         super.initResolver(resolverBuilder);
         var outputFile = resolverBuilder.getLogOutputFile();
         if (manifest || flatManifest) {
-            resolverBuilder.setLogOutputFile(null);
-        }
-        if (manifest) {
-            resolverBuilder.addDependencyTreeVisitor(
-                    new SbomGeneratingDependencyVisitor(getArtifactResolver(),
-                            outputFile, resolverBuilder.getDependencyConfig().getProductInfo(), enableSbomTransformers));
+            resolverBuilder.setLogOutputFile(null)
+                    .addDependencyTreeVisitor(
+                            new SbomGeneratingDependencyVisitor(
+                                    SbomGenerator.builder()
+                                            .setArtifactResolver(getArtifactResolver())
+                                            .setOutputFile(outputFile)
+                                            .setProductInfo(resolverBuilder.getDependencyConfig().getProductInfo())
+                                            .setEnableTransformers(enableSbomTransformers)
+                                            .setRecordDependencies(!flatManifest),
+                                    resolverBuilder.getDependencyConfig()));
         }
     }
 
     @Override
     protected Integer process(ProjectDependencyResolver depResolver) {
-        if (manifest) {
+        if (manifest || flatManifest) {
             depResolver.resolveDependencies();
-        } else if (flatManifest) {
-            ManifestGenerator.builder()
-                    .setArtifactResolver(getArtifactResolver())
-                    .setOutputFile(depResolver.getOutputFile())
-                    .build().toConsumer()
-                    .accept(depResolver.getReleaseRepos());
         } else {
             depResolver.log();
         }
