@@ -9,8 +9,8 @@ import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.domino.ProjectDependencyConfig;
 import io.quarkus.domino.ProjectDependencyResolver;
 import io.quarkus.domino.RhVersionPattern;
-import io.quarkus.domino.manifest.ManifestGenerator;
 import io.quarkus.domino.manifest.SbomGeneratingDependencyVisitor;
+import io.quarkus.domino.manifest.SbomGenerator;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.paths.PathTree;
 import io.quarkus.registry.catalog.Extension;
@@ -329,17 +329,16 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 .setAppendOutput(appendOutput)
                 .setDependencyConfig(dependencyConfig);
 
-        if (manifest) {
-            var sbomGenerator = new SbomGeneratingDependencyVisitor(resolver,
-                    outputFile == null ? null : outputFile.toPath(),
-                    dependencyConfig,
-                    true);
+        if (manifest || flatManifest) {
+            var sbomGenerator = new SbomGeneratingDependencyVisitor(
+                    SbomGenerator.builder()
+                            .setArtifactResolver(resolver)
+                            .setOutputFile(outputFile == null ? null : outputFile.toPath())
+                            .setEnableTransformers(false)
+                            .setRecordDependencies(!flatManifest)
+                            .setProductInfo(dependencyConfig.getProductInfo()),
+                    dependencyConfig);
             depsResolver.addDependencyTreeVisitor(sbomGenerator).build().resolveDependencies();
-        } else if (flatManifest) {
-            depsResolver.build().consumeSorted(ManifestGenerator.builder()
-                    .setArtifactResolver(resolver)
-                    .setOutputFile(outputFile == null ? null : outputFile.toPath())
-                    .build().toConsumer());
         } else {
             depsResolver.build().log();
         }

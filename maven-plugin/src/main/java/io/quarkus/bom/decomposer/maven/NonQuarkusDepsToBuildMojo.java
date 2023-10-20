@@ -6,6 +6,7 @@ import io.quarkus.domino.ProductInfoImpl;
 import io.quarkus.domino.ProjectDependencyConfig;
 import io.quarkus.domino.ProjectDependencyResolver;
 import io.quarkus.domino.manifest.SbomGeneratingDependencyVisitor;
+import io.quarkus.domino.manifest.SbomGenerator;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import java.io.File;
@@ -253,8 +254,12 @@ public class NonQuarkusDepsToBuildMojo extends AbstractMojo {
                         .setRecipeRepos(this.recipeRepos == null ? List.of() : this.recipeRepos));
         if (manifest) {
             builder.addDependencyTreeVisitor(
-                    new SbomGeneratingDependencyVisitor(resolver, outputFile == null ? null : outputFile.toPath(), productInfo,
-                            true))
+                    new SbomGeneratingDependencyVisitor(
+                            SbomGenerator.builder()
+                                    .setArtifactResolver(resolver)
+                                    .setOutputFile(outputFile == null ? null : outputFile.toPath())
+                                    .setProductInfo(productInfo)
+                                    .setEnableTransformers(false)))
                     .build().resolveDependencies();
         } else {
             builder.build().log();

@@ -1,12 +1,10 @@
 package io.quarkus.domino.manifest;
 
-import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
 import io.quarkus.domino.DependencyTreeVisitor;
 import io.quarkus.domino.ProductInfo;
 import io.quarkus.domino.ProjectDependencyConfig;
 import io.quarkus.maven.dependency.ArtifactCoords;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -26,24 +24,13 @@ public class SbomGeneratingDependencyVisitor implements DependencyTreeVisitor {
     private final TreeRecorder validatingTreeRecorder = validateSbomTrees ? new TreeRecorder() : null;
     private final ProjectDependencyConfig config;
 
-    public SbomGeneratingDependencyVisitor(MavenArtifactResolver resolver, Path outputFile, ProjectDependencyConfig config,
-            boolean enableSbomTransformers) {
-        sbomGenerator = SbomGenerator.builder()
-                .setArtifactResolver(resolver)
-                .setOutputFile(outputFile);
-        if (config.getProductInfo() != null) {
-            sbomGenerator.setProductInfo(config.getProductInfo());
-        }
-        this.config = config;
+    public SbomGeneratingDependencyVisitor(SbomGenerator.Builder sbomBuilder) {
+        this(sbomBuilder, null);
     }
 
-    public SbomGeneratingDependencyVisitor(MavenArtifactResolver resolver, Path outputFile, ProductInfo productInfo,
-            boolean enableSbomTransformers) {
-        sbomGenerator = SbomGenerator.builder()
-                .setArtifactResolver(resolver)
-                .setOutputFile(outputFile)
-                .setProductInfo(productInfo);
-        config = null;
+    public SbomGeneratingDependencyVisitor(SbomGenerator.Builder sbomBuilder, ProjectDependencyConfig config) {
+        this.sbomGenerator = sbomBuilder;
+        this.config = config;
     }
 
     @Override
