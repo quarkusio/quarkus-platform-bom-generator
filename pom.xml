@@ -50,7 +50,7 @@
 
     <assertj.version>3.24.2</assertj.version>
     <commons-text.version>1.10.0</commons-text.version>
-    <cyclonedx.version>7.3.2</cyclonedx.version>
+    <cyclonedx.version>8.0.1</cyclonedx.version>
     <gradle-tooling.version>8.1.1</gradle-tooling.version>
     <quarkus.version>2.16.12.Final</quarkus.version>
     <quarkus-jgit.version>2.3.2</quarkus-jgit.version>
