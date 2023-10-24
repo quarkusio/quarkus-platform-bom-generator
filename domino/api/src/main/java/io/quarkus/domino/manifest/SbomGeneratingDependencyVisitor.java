@@ -154,6 +154,14 @@ public class SbomGeneratingDependencyVisitor implements DependencyTreeVisitor {
     }
 
     @Override
+    public void linkDependency(ArtifactCoords coords) {
+        treeBuilder.linkDependency(coords);
+        if (validatingTreeRecorder != null) {
+            validatingTreeRecorder.linkDependency(coords);
+        }
+    }
+
+    @Override
     public void leaveDependency(DependencyVisit visit) {
         treeBuilder.leaveDependency(visit);
         if (validatingTreeRecorder != null) {

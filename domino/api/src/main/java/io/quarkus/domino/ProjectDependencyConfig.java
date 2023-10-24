@@ -105,6 +105,14 @@ public interface ProjectDependencyConfig {
     int getLevel();
 
     /**
+     * Whether verbose dependency graphs should be enabled in the underlying dependency resolver.
+     * This means exposing information about winning nodes during conflict resolution.
+     *
+     * @return whether verbose dependency graphs are enabled in the resolver
+     */
+    boolean isVerboseGraphs();
+
+    /**
      * Whether to log the coordinates of the artifacts captured down to the depth specified. The default is true.
      * 
      * @return whether to log complete artifacts coordinates
@@ -305,6 +313,8 @@ public interface ProjectDependencyConfig {
         Mutable setExcludeBomImports(boolean excludeBomImports);
 
         Mutable setLevel(int level);
+
+        Mutable setVerboseGraphs(boolean verboseGraphs);
 
         Mutable setLogArtifactsToBuild(boolean logArtifactsToBuild);
 

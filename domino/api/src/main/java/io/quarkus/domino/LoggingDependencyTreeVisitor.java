@@ -73,6 +73,20 @@ public class LoggingDependencyTreeVisitor implements DependencyTreeVisitor {
     }
 
     @Override
+    public void linkDependency(ArtifactCoords coords) {
+        if (!loggingEnabled) {
+            return;
+        }
+        final StringBuilder sb = new StringBuilder();
+        for (int i = 0; i <= level; ++i) {
+            sb.append("  ");
+        }
+        sb.append(coords.toCompactCoords());
+        sb.append(" [linked]");
+        logComment(sb.toString());
+    }
+
+    @Override
     public void leaveDependency(DependencyVisit visit) {
         if (!loggingEnabled) {
             return;

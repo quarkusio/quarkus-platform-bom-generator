@@ -28,6 +28,17 @@ public interface DependencyTreeVisitor {
 
     void enterDependency(DependencyVisit visit);
 
+    /**
+     * In case the Maven artifact resolver was configured to return verbose dependency graphs,
+     * this method will be called to indicate the current dependency graph node has a dependency
+     * on another node with the passed in coordinates whose dependencies will be walked over
+     * in a different branch of the graph.
+     *
+     * @param coords artifact coordinates of a dependency
+     */
+    default void linkDependency(ArtifactCoords coords) {
+    }
+
     void leaveDependency(DependencyVisit visit);
 
     void enterParentPom(DependencyVisit visit);

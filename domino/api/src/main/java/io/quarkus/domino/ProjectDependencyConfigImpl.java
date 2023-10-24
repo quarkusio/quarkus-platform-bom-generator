@@ -8,6 +8,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
+import org.eclipse.aether.util.artifact.JavaScopes;
 
 @JsonInclude(JsonInclude.Include.NON_DEFAULT)
 public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
@@ -27,6 +29,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     private final boolean excludeParentPoms;
     private final boolean excludeBomImports;
     private final int level;
+    private final boolean verboseGraphs;
     private final boolean logArtifactsToBuild;
     private final boolean logModulesToBuild;
     private final boolean logTrees;
@@ -65,6 +68,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         excludeParentPoms = other.isExcludeParentPoms();
         excludeBomImports = other.isExcludeBomImports();
         level = other.getLevel();
+        verboseGraphs = other.isVerboseGraphs();
         logArtifactsToBuild = other.isLogArtifactsToBuild();
         logModulesToBuild = other.isLogModulesToBuild();
         logTrees = other.isLogTrees();
@@ -157,6 +161,11 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     @JsonInclude(value = JsonInclude.Include.CUSTOM, valueFilter = ProjectDependencyConfigLevelFilter.class)
     public int getLevel() {
         return level;
+    }
+
+    @Override
+    public boolean isVerboseGraphs() {
+        return verboseGraphs;
     }
 
     @Override
@@ -263,11 +272,12 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         private Collection<ArtifactCoords> includeArtifacts = new ArrayList<>();
         private Collection<ArtifactCoords> includePatterns = new ArrayList<>();
         private Collection<ArtifactCoords> excludePatterns = new ArrayList<>();
-        private Collection<String> excludeScopes = List.of("provided", "test");
+        private Collection<String> excludeScopes = Set.of(JavaScopes.PROVIDED, JavaScopes.TEST);
         private boolean includeNonManaged = true;
         private boolean excludeParentPoms;
         private boolean excludeBomImports;
         private int level = -1;
+        private boolean verboseGraphs;
         private boolean logArtifactsToBuild;
         private boolean logModulesToBuild;
         private boolean logTrees;
@@ -304,6 +314,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
             excludeParentPoms = other.isExcludeParentPoms();
             excludeBomImports = other.isExcludeBomImports();
             level = other.getLevel();
+            verboseGraphs = other.isVerboseGraphs();
             logArtifactsToBuild = other.isLogArtifactsToBuild();
             logModulesToBuild = other.isLogModulesToBuild();
             logTrees = other.isLogTrees();
@@ -392,6 +403,11 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         @Override
         public int getLevel() {
             return level;
+        }
+
+        @Override
+        public boolean isVerboseGraphs() {
+            return verboseGraphs;
         }
 
         @Override
@@ -578,6 +594,12 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         @Override
         public Mutable setLevel(int level) {
             this.level = level;
+            return this;
+        }
+
+        @Override
+        public Mutable setVerboseGraphs(boolean verboseGraphs) {
+            this.verboseGraphs = verboseGraphs;
             return this;
         }
 

@@ -193,6 +193,20 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     @Parameter(required = false, property = "manifest")
     boolean manifest;
 
+    /**
+     * Indicates whether to record artifact dependencies in the manifest and if so, which strategy to use.
+     * Supported values are:
+     * <li>none - do not record dependencies at all</li>
+     * <li>tree - record default (conflicts resolved) dependency trees returned by Maven artifact resolver (the default)</li>
+     * <li>graph - record all direct dependencies of each artifact</li>
+     */
+    @Parameter(required = false, property = "manifestDependencies", defaultValue = "tree")
+    String manifestDependencies;
+
+    /**
+     * @deprecated in favor of {@link #manifestDependencies}
+     */
+    @Deprecated(forRemoval = true)
     @Parameter(required = false, property = "flatManifest")
     boolean flatManifest;
 
@@ -320,6 +334,14 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 .setWarnOnMissingScm(warnOnMissingScm);
         if (includeNonManaged != null) {
             depsConfigBuilder.setIncludeNonManaged(includeNonManaged);
+        }
+        if ("none".equals(manifestDependencies)) {
+            flatManifest = true;
+        } else if (manifestDependencies.equals("graph")) {
+            depsConfigBuilder.setVerboseGraphs(true);
+        } else if (!manifestDependencies.equals("tree")) {
+            throw new MojoExecutionException("Unrecognized value '" + manifestDependencies
+                    + "' for parameter manifestDependencies. Supported values include graph, tree, none");
         }
         final ProjectDependencyConfig dependencyConfig = depsConfigBuilder.build();
         final ProjectDependencyResolver.Builder depsResolver = ProjectDependencyResolver.builder()

@@ -9,6 +9,7 @@ import io.quarkus.bom.decomposer.BomDecomposerException;
 import io.quarkus.bom.decomposer.ReleaseIdDetector;
 import io.quarkus.bom.decomposer.ReleaseIdFactory;
 import io.quarkus.bom.decomposer.ScmRevisionResolver;
+import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
@@ -18,6 +19,7 @@ import io.quarkus.domino.pnc.PncVersionProvider;
 import io.quarkus.domino.scm.ScmRepository;
 import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.ArtifactCoords;
+import io.quarkus.maven.dependency.ArtifactKey;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
@@ -49,12 +51,15 @@ import org.apache.maven.model.DependencyManagement;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Parent;
 import org.apache.maven.model.Profile;
+import org.eclipse.aether.DefaultRepositorySystemSession;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.resolution.ArtifactDescriptorResult;
+import org.eclipse.aether.util.graph.manager.DependencyManagerUtils;
+import org.eclipse.aether.util.graph.transformer.ConflictResolver;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.lib.Repository;
 
@@ -155,14 +160,55 @@ public class ProjectDependencyResolver {
         private MavenArtifactResolver getInitializedResolver() {
             if (resolver == null) {
                 try {
+                    var mvnConfig = BootstrapMavenContext.config();
                     if (depConfig == null || depConfig.getProjectDir() == null) {
-                        return MavenArtifactResolver.builder().setWorkspaceDiscovery(false).build();
+                        mvnConfig.setWorkspaceDiscovery(false);
+                    } else {
+                        mvnConfig.setCurrentProject(depConfig.getProjectDir().toString())
+                                .setEffectiveModelBuilder(true)
+                                .setPreferPomsFromWorkspace(true);
                     }
-                    return MavenArtifactResolver.builder()
-                            .setCurrentProject(depConfig.getProjectDir().toString())
-                            .setEffectiveModelBuilder(true)
-                            .setPreferPomsFromWorkspace(true)
-                            .build();
+                    var mvnCtx = new BootstrapMavenContext(mvnConfig);
+
+                    if (depConfig.isVerboseGraphs()) {
+                        var session = new DefaultRepositorySystemSession(mvnCtx.getRepositorySystemSession());
+                        session.setConfigProperty(ConflictResolver.CONFIG_PROP_VERBOSE, true);
+                        session.setConfigProperty(DependencyManagerUtils.CONFIG_PROP_VERBOSE, true);
+
+                        mvnConfig.setRepositorySystemSession(session)
+                                .setRepositorySystem(mvnCtx.getRepositorySystem())
+                                .setRemoteRepositoryManager(mvnCtx.getRemoteRepositoryManager())
+                                .setRemoteRepositories(mvnCtx.getRemoteRepositories())
+                                .setCurrentProject(mvnCtx.getCurrentProject());
+
+                        mvnCtx = new BootstrapMavenContext(mvnConfig);
+                    }
+
+                    return new MavenArtifactResolver(mvnCtx);
+                } catch (BootstrapMavenException e) {
+                    throw new IllegalStateException("Failed to initialize the Maven artifact resolver", e);
+                }
+            } else if (depConfig != null
+                    && depConfig.isVerboseGraphs()
+                    && (Boolean.FALSE.equals(
+                            resolver.getSession().getConfigProperties()
+                                    .getOrDefault(ConflictResolver.CONFIG_PROP_VERBOSE, false))
+                            || Boolean.FALSE.equals(resolver.getSession().getConfigProperties()
+                                    .getOrDefault(DependencyManagerUtils.CONFIG_PROP_VERBOSE, false)))) {
+                var mvnCtx = resolver.getMavenContext();
+                try {
+                    var session = new DefaultRepositorySystemSession(mvnCtx.getRepositorySystemSession());
+                    session.setConfigProperty(ConflictResolver.CONFIG_PROP_VERBOSE, true);
+                    session.setConfigProperty(DependencyManagerUtils.CONFIG_PROP_VERBOSE, true);
+
+                    mvnCtx = new BootstrapMavenContext(
+                            BootstrapMavenContext.config().setRepositorySystemSession(session)
+                                    .setRepositorySystem(mvnCtx.getRepositorySystem())
+                                    .setRemoteRepositoryManager(mvnCtx.getRemoteRepositoryManager())
+                                    .setRemoteRepositories(mvnCtx.getRemoteRepositories())
+                                    .setCurrentProject(mvnCtx.getCurrentProject()));
+
+                    return new MavenArtifactResolver(mvnCtx);
                 } catch (BootstrapMavenException e) {
                     throw new IllegalStateException("Failed to initialize the Maven artifact resolver", e);
                 }
@@ -682,9 +728,39 @@ public class ProjectDependencyResolver {
 
         try {
             final Artifact a = toAetherArtifact(coords);
+            var descr = resolver.resolveDescriptor(a);
+            final List<Dependency> constraints;
+            if (descr.getManagedDependencies().isEmpty()) {
+                constraints = managedDeps;
+            } else {
+                final Map<ArtifactKey, Dependency> map = new LinkedHashMap<>();
+                constraints = new ArrayList<>(managedDeps.size());
+                for (var d : managedDeps) {
+                    var art = d.getArtifact();
+                    map.put(ArtifactKey.of(art.getGroupId(), art.getArtifactId(), art.getClassifier(), art.getExtension()), d);
+                    constraints.add(d);
+                }
+                for (var d : descr.getManagedDependencies()) {
+                    var art = d.getArtifact();
+                    if (!map.containsKey(
+                            ArtifactKey.of(art.getGroupId(), art.getArtifactId(), art.getClassifier(), art.getExtension()))) {
+                        constraints.add(d);
+                    }
+                }
+            }
+            final List<Dependency> directDeps = new ArrayList<>(descr.getDependencies().size());
+            for (var d : descr.getDependencies()) {
+                if (excludeScopes.contains(d.getScope())
+                        || d.isOptional() && !config.isIncludeOptionalDeps()) {
+                    continue;
+                }
+                directDeps.add(d);
+            }
+            var aggregatedRepos = resolver.aggregateRepositories(resolver.getRepositories(),
+                    resolver.newResolutionRepositories(descr.getRepositories()));
+
             root = resolver.getSystem().collectDependencies(resolver.getSession(),
-                    resolver.newCollectManagedRequest(a, List.of(), managedDeps, List.of(), List.of(),
-                            excludeScopes))
+                    MavenArtifactResolver.newCollectRequest(a, directDeps, managedDeps, List.of(), aggregatedRepos))
                     .getRoot();
             // if the dependencies are not found, make sure the artifact actually exists
             if (root.getChildren().isEmpty()) {
@@ -1068,6 +1144,17 @@ public class ProjectDependencyResolver {
     }
 
     private void processNodes(DependencyNode node, int level, boolean remaining) {
+
+        // in case the resolver was configured to return verbose trees, check whether this node survived conflict resolution
+        final DependencyNode winner = (DependencyNode) node.getData().get(ConflictResolver.NODE_DATA_WINNER);
+        if (winner != null) {
+            final ArtifactCoords coords = toCoords(winner.getArtifact());
+            for (DependencyTreeVisitor v : treeVisitors) {
+                v.linkDependency(coords);
+            }
+            return;
+        }
+
         final ArtifactCoords coords = toCoords(node.getArtifact());
         if (isExcluded(coords)) {
             return;
