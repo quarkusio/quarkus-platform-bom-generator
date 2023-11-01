@@ -1,5 +1,6 @@
 package io.quarkus.domino;
 
+import io.quarkus.maven.dependency.ArtifactCoords;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -210,6 +211,16 @@ public class ArtifactSet {
         return false;
     }
 
+    private static boolean matches(ArtifactCoords coords,
+            List<ArtifactCoordsPattern> patterns) {
+        for (ArtifactCoordsPattern pattern : patterns) {
+            if (pattern.matches(coords)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private final List<ArtifactCoordsPattern> excludes;
     private final int hashcode;
 
@@ -243,6 +254,7 @@ public class ArtifactSet {
     }
 
     /**
+     * Whether this artifact set includes an artifact with the given coordinates
      *
      * @param groupId groupId
      * @param artifactId artifactId
@@ -254,6 +266,16 @@ public class ArtifactSet {
     public boolean contains(String groupId, String artifactId, String type, String classifier, String version) {
         return matches(groupId, artifactId, type, classifier, version, includes)
                 && !matches(groupId, artifactId, type, classifier, version, excludes);
+    }
+
+    /**
+     * Whether this artifact set includes an artifact with the given coordinates
+     *
+     * @param coords artifact coordinates
+     * @return {@code true} if the given GAV triple is a member of this {@link ArtifactSet} and {@code false} otherwise
+     */
+    public boolean contains(ArtifactCoords coords) {
+        return matches(coords, includes) && !matches(coords, excludes);
     }
 
     @Override

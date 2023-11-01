@@ -37,8 +37,7 @@ public class LoggingDependencyTreeVisitor implements DependencyTreeVisitor {
     @Override
     public void enterRootArtifact(DependencyVisit visit) {
         final ArtifactCoords coords = visit.getCoords();
-        loggingEnabled = logTreesFor == null || logTreesFor.contains(coords.getGroupId(), coords.getArtifactId(),
-                coords.getClassifier(), coords.getType(), coords.getVersion());
+        loggingEnabled = logTreesFor == null || logTreesFor.contains(coords);
         if (!loggingEnabled) {
             return;
         }

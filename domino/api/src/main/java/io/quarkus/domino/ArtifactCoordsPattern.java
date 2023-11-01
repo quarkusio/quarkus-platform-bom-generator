@@ -188,29 +188,11 @@ public class ArtifactCoordsPattern {
     }
 
     private static final char DELIMITER = ':';
-    private static final String DELIMITER_STRING;
-    private static final ArtifactCoordsPattern MATCH_ALL;
-    private static final ArtifactCoordsPattern MATCH_SNAPSHOTS;
-    static final String MULTI_WILDCARD;
-    static final String MULTI_WILDCARD_CHAR = "*";
+    private static final String DELIMITER_STRING = String.valueOf(DELIMITER);
+    private static volatile ArtifactCoordsPattern matchAll;
+    private static volatile ArtifactCoordsPattern matchSnapshots;
+    static final String MULTI_WILDCARD = "*";
     private static final String SNAPSHOT_SUFFIX = "-SNAPSHOT";
-
-    static {
-        MULTI_WILDCARD = String.valueOf(MULTI_WILDCARD_CHAR);
-        DELIMITER_STRING = String.valueOf(DELIMITER);
-        MATCH_ALL = new ArtifactCoordsPattern(
-                ArtifactCoordsSegmentPattern.MATCH_ALL,
-                ArtifactCoordsSegmentPattern.MATCH_ALL,
-                ArtifactCoordsSegmentPattern.MATCH_ALL,
-                ArtifactCoordsSegmentPattern.MATCH_ALL,
-                ArtifactCoordsSegmentPattern.MATCH_ALL);
-        MATCH_SNAPSHOTS = new ArtifactCoordsPattern(
-                ArtifactCoordsSegmentPattern.MATCH_ALL,
-                ArtifactCoordsSegmentPattern.MATCH_ALL,
-                ArtifactCoordsSegmentPattern.MATCH_ALL,
-                ArtifactCoordsSegmentPattern.MATCH_ALL,
-                new ArtifactCoordsSegmentPattern(MULTI_WILDCARD + SNAPSHOT_SUFFIX));
-    }
 
     /**
      * @return a new {@link Builder}
@@ -223,14 +205,30 @@ public class ArtifactCoordsPattern {
      * @return a singleton that matches all possible GAVs
      */
     public static ArtifactCoordsPattern matchAll() {
-        return MATCH_ALL;
+        if (matchAll == null) {
+            matchAll = new ArtifactCoordsPattern(
+                    ArtifactCoordsSegmentPattern.MATCH_ALL,
+                    ArtifactCoordsSegmentPattern.MATCH_ALL,
+                    ArtifactCoordsSegmentPattern.MATCH_ALL,
+                    ArtifactCoordsSegmentPattern.MATCH_ALL,
+                    ArtifactCoordsSegmentPattern.MATCH_ALL);
+        }
+        return matchAll;
     }
 
     /**
      * @return a singleton that matches any GAV that has a version ending with {@value #SNAPSHOT_SUFFIX}
      */
     public static ArtifactCoordsPattern matchSnapshots() {
-        return MATCH_SNAPSHOTS;
+        if (matchSnapshots == null) {
+            matchSnapshots = new ArtifactCoordsPattern(
+                    ArtifactCoordsSegmentPattern.MATCH_ALL,
+                    ArtifactCoordsSegmentPattern.MATCH_ALL,
+                    ArtifactCoordsSegmentPattern.MATCH_ALL,
+                    ArtifactCoordsSegmentPattern.MATCH_ALL,
+                    new ArtifactCoordsSegmentPattern(MULTI_WILDCARD + SNAPSHOT_SUFFIX));
+        }
+        return matchSnapshots;
     }
 
     /**
@@ -381,6 +379,21 @@ public class ArtifactCoordsPattern {
     @Override
     public int hashCode() {
         return this.source.hashCode();
+    }
+
+    /**
+     * Matches the given {@code groupId}, {@code artifactId}, {@code type}, {@code classifier}, {@code version}
+     * quintuple against this {@link ArtifactCoordsPattern}.
+     *
+     * @param coords artifact coordinates
+     * @return {@code true} if this {@link ArtifactCoordsPattern} matches the given coordinates, otherwise - false
+     */
+    public boolean matches(ArtifactCoords coords) {
+        return groupIdPattern.matches(coords.getGroupId()) &&
+                artifactIdPattern.matches(coords.getArtifactId()) &&
+                classifierPattern.matches(coords.getClassifier()) &&
+                typePattern.matches(coords.getType()) &&
+                versionPattern.matches(coords.getVersion());
     }
 
     /**
