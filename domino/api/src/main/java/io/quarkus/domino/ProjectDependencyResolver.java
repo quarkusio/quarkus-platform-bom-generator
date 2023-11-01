@@ -1267,9 +1267,7 @@ public class ProjectDependencyResolver {
 
     private boolean isExcluded(ArtifactCoords coords) {
         for (ArtifactCoordsPattern pattern : excludeSet) {
-            boolean matches = pattern.matches(coords.getGroupId(), coords.getArtifactId(), coords.getClassifier(),
-                    coords.getType(),
-                    coords.getVersion());
+            boolean matches = pattern.matches(coords);
             if (matches) {
                 return true;
             }
@@ -1279,8 +1277,7 @@ public class ProjectDependencyResolver {
 
     private boolean isIncluded(ArtifactCoords coords) {
         for (ArtifactCoordsPattern pattern : includeSet) {
-            if (pattern.matches(coords.getGroupId(), coords.getArtifactId(), coords.getClassifier(), coords.getType(),
-                    coords.getVersion())) {
+            if (pattern.matches(coords)) {
                 return true;
             }
         }
