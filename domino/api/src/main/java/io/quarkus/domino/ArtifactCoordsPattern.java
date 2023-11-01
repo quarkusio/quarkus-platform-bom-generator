@@ -1,10 +1,10 @@
 package io.quarkus.domino;
 
 import io.quarkus.maven.dependency.ArtifactCoords;
+import io.quarkus.util.GlobUtil;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.StringTokenizer;
 import java.util.regex.Pattern;
 
 /**
@@ -22,30 +22,6 @@ import java.util.regex.Pattern;
  * @author <a href="https://github.com/ppalaga">Peter Palaga</a>
  */
 public class ArtifactCoordsPattern {
-
-    public static ArtifactCoordsPattern of(ArtifactCoords c) {
-        final ArtifactCoordsPattern.Builder pattern = ArtifactCoordsPattern.builder();
-        pattern.groupIdPattern(c.getGroupId());
-        pattern.artifactIdPattern(c.getArtifactId());
-        if (c.getClassifier() != null && !c.getClassifier().isEmpty()) {
-            pattern.classifierPattern(c.getClassifier());
-        }
-        if (c.getType() != null && !c.getType().isEmpty()) {
-            pattern.typePattern(c.getType());
-        }
-        return pattern.versionPattern(c.getVersion()).build();
-    }
-
-    public static List<ArtifactCoordsPattern> toPatterns(Collection<ArtifactCoords> coords) {
-        if (coords.isEmpty()) {
-            return List.of();
-        }
-        final List<ArtifactCoordsPattern> result = new ArrayList<>(coords.size());
-        for (ArtifactCoords c : coords) {
-            result.add(of(c));
-        }
-        return result;
-    }
 
     /**
      * A {@link ArtifactCoordsPattern} builder.
@@ -71,7 +47,7 @@ public class ArtifactCoordsPattern {
          * @param wildcardPattern a pattern that can contain string literals and asterisk {@code *} wildcards
          * @return this {@link Builder}
          */
-        public Builder groupIdPattern(String wildcardPattern) {
+        public Builder setGroupId(String wildcardPattern) {
             this.groupIdPattern = new ArtifactCoordsSegmentPattern(wildcardPattern);
             return this;
         }
@@ -82,7 +58,7 @@ public class ArtifactCoordsPattern {
          * @param wildcardPattern a pattern that can contain string literals and asterisk {@code *} wildcards
          * @return this {@link Builder}
          */
-        public Builder artifactIdPattern(String wildcardPattern) {
+        public Builder setArtifactId(String wildcardPattern) {
             this.artifactIdPattern = new ArtifactCoordsSegmentPattern(wildcardPattern);
             return this;
         }
@@ -93,12 +69,12 @@ public class ArtifactCoordsPattern {
          * @param wildcardPattern a pattern that can contain string literals and asterisk {@code *} wildcards
          * @return this {@link Builder}
          */
-        public Builder classifierPattern(String wildcardPattern) {
+        public Builder setClassifier(String wildcardPattern) {
             this.classifierPattern = new ArtifactCoordsSegmentPattern(wildcardPattern);
             return this;
         }
 
-        public Builder typePattern(String wildcardPattern) {
+        public Builder setType(String wildcardPattern) {
             this.typePattern = new ArtifactCoordsSegmentPattern(wildcardPattern);
             return this;
         }
@@ -109,7 +85,7 @@ public class ArtifactCoordsPattern {
          * @param wildcardPattern a pattern that can contain string literals and asterisk {@code *} wildcards
          * @return this {@link Builder}
          */
-        public Builder versionPattern(String wildcardPattern) {
+        public Builder setVersion(String wildcardPattern) {
             this.versionPattern = new ArtifactCoordsSegmentPattern(wildcardPattern);
             return this;
         }
@@ -122,24 +98,13 @@ public class ArtifactCoordsPattern {
     static class ArtifactCoordsSegmentPattern {
         private static final ArtifactCoordsSegmentPattern MATCH_ALL = new ArtifactCoordsSegmentPattern(
                 ArtifactCoordsPattern.MULTI_WILDCARD);
-        private static final String MATCH_ALL_PATTERN_SOURCE = ".*";
 
         private final Pattern pattern;
         private final String source;
 
         ArtifactCoordsSegmentPattern(String wildcardSource) {
             super();
-            final StringBuilder sb = new StringBuilder(wildcardSource.length() + 2);
-            final StringTokenizer st = new StringTokenizer(wildcardSource, ArtifactCoordsPattern.MULTI_WILDCARD, true);
-            while (st.hasMoreTokens()) {
-                String token = st.nextToken();
-                if (ArtifactCoordsPattern.MULTI_WILDCARD.equals(token)) {
-                    sb.append(MATCH_ALL_PATTERN_SOURCE);
-                } else {
-                    sb.append(Pattern.quote(token));
-                }
-            }
-            this.pattern = Pattern.compile(sb.toString());
+            this.pattern = Pattern.compile(GlobUtil.toRegexPattern(wildcardSource));
             this.source = wildcardSource;
         }
 
@@ -199,6 +164,30 @@ public class ArtifactCoordsPattern {
      */
     public static Builder builder() {
         return new Builder();
+    }
+
+    public static ArtifactCoordsPattern of(ArtifactCoords c) {
+        final ArtifactCoordsPattern.Builder pattern = ArtifactCoordsPattern.builder();
+        pattern.setGroupId(c.getGroupId());
+        pattern.setArtifactId(c.getArtifactId());
+        if (c.getClassifier() != null && !c.getClassifier().isEmpty()) {
+            pattern.setClassifier(c.getClassifier());
+        }
+        if (c.getType() != null && !c.getType().isEmpty()) {
+            pattern.setType(c.getType());
+        }
+        return pattern.setVersion(c.getVersion()).build();
+    }
+
+    public static List<ArtifactCoordsPattern> toPatterns(Collection<ArtifactCoords> coords) {
+        if (coords.isEmpty()) {
+            return List.of();
+        }
+        final List<ArtifactCoordsPattern> result = new ArrayList<>(coords.size());
+        for (ArtifactCoords c : coords) {
+            result.add(of(c));
+        }
+        return result;
     }
 
     /**
@@ -273,46 +262,35 @@ public class ArtifactCoordsPattern {
      * @return a new {@link ArtifactCoordsPattern}
      */
     public static ArtifactCoordsPattern of(String wildcardPattern) {
-        final ArtifactCoordsSegmentPattern groupIdPattern;
-        StringTokenizer st = new StringTokenizer(wildcardPattern, DELIMITER_STRING);
-        if (st.hasMoreTokens()) {
-            groupIdPattern = new ArtifactCoordsSegmentPattern(st.nextToken());
-        } else {
-            groupIdPattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
-        }
-        final ArtifactCoordsSegmentPattern artifactIdPattern;
-        if (st.hasMoreTokens()) {
-            artifactIdPattern = new ArtifactCoordsSegmentPattern(st.nextToken());
-        } else {
-            artifactIdPattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
-        }
-        final ArtifactCoordsSegmentPattern typePattern;
-        final ArtifactCoordsSegmentPattern classifierPattern;
-        final ArtifactCoordsSegmentPattern versionPattern;
-        if (st.hasMoreTokens()) {
-            final String third = st.nextToken();
-            if (st.hasMoreTokens()) {
-                final String fourth = st.nextToken();
-                if (st.hasMoreTokens()) {
-                    final String fifth = st.nextToken();
-                    classifierPattern = new ArtifactCoordsSegmentPattern(third);
-                    typePattern = new ArtifactCoordsSegmentPattern(fourth);
-                    versionPattern = new ArtifactCoordsSegmentPattern(fifth);
-                } else {
-                    throw new IllegalStateException(
-                            ArtifactCoordsSegmentPattern.class.getName()
-                                    + ".of() expects groupId:artifactId:version or groupId:artifactId:classifier:type:version; found: "
-                                    + wildcardPattern);
+        var groupIdPattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
+        var artifactIdPattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
+        var typePattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
+        var classifierPattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
+        var versionPattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
+        var parts = wildcardPattern.split(DELIMITER_STRING);
+        if (parts.length > 0) {
+            groupIdPattern = new ArtifactCoordsSegmentPattern(parts[0]);
+            if (parts.length > 1) {
+                artifactIdPattern = new ArtifactCoordsSegmentPattern(parts[1]);
+                if (parts.length > 2) {
+                    final String third = parts[2];
+                    if (parts.length > 3) {
+                        final String fourth = parts[3];
+                        if (parts.length > 4) {
+                            classifierPattern = new ArtifactCoordsSegmentPattern(third);
+                            typePattern = new ArtifactCoordsSegmentPattern(fourth);
+                            versionPattern = new ArtifactCoordsSegmentPattern(parts[4]);
+                        } else {
+                            throw new IllegalStateException(
+                                    ArtifactCoordsSegmentPattern.class.getName()
+                                            + ".of() expects groupId:artifactId:version or groupId:artifactId:classifier:type:version; found: "
+                                            + wildcardPattern);
+                        }
+                    } else {
+                        versionPattern = new ArtifactCoordsSegmentPattern(third);
+                    }
                 }
-            } else {
-                classifierPattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
-                typePattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
-                versionPattern = new ArtifactCoordsSegmentPattern(third);
             }
-        } else {
-            classifierPattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
-            typePattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
-            versionPattern = ArtifactCoordsSegmentPattern.MATCH_ALL;
         }
         return new ArtifactCoordsPattern(groupIdPattern, artifactIdPattern, classifierPattern, typePattern, versionPattern);
     }
