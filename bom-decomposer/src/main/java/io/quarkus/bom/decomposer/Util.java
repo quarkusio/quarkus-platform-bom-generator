@@ -47,12 +47,11 @@ public class Util {
         if (scm == null) {
             return null;
         }
-        if (scm.getConnection() != null) {
-            String s = resolveModelValue(model, scm.getConnection());
-            s = scmToHttps(s);
-            return s;
+        String url = resolveModelValue(model, scm.getConnection());
+        if (url != null && !url.isEmpty()) {
+            return scmToHttps(url);
         }
-        String url = resolveModelValue(model, model.getUrl());
+        url = resolveModelValue(model, model.getUrl());
         if (url != null && url.startsWith("https://github.com/")) {
             return scmToHttps(url);
         }
@@ -74,11 +73,10 @@ public class Util {
             s = s.replace("http://", "https://");
         } else if (!s.startsWith("https://")) {
             s = s.replace(':', '/');
-            if (s.startsWith("github.com:")) {
-                s = s.replace(':', '/');
-            }
             if (s.startsWith("//")) {
                 s = "https:" + s;
+            } else if (s.charAt(0) == '/') {
+                s = "https:/" + s;
             } else {
                 s = "https://" + s;
             }

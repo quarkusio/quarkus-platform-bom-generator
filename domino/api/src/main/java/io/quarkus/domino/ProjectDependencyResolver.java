@@ -812,48 +812,48 @@ public class ProjectDependencyResolver {
                 .setGitCloneBaseDir(cloneBaseDir)
                 .setCacheRepoTags(true)
                 .setCloneLocalRecipeRepos(false)
-                .setFallback(new ScmLocator() {
-                    @Override
-                    public TagInfo resolveTagInfo(GAV gav) {
+                .setFallback(gav -> {
 
-                        var pomArtifact = new DefaultArtifact(gav.getGroupId(), gav.getArtifactId(), ArtifactCoords.TYPE_POM,
-                                gav.getVersion());
+                    var pomArtifact = new DefaultArtifact(gav.getGroupId(), gav.getArtifactId(), ArtifactCoords.TYPE_POM,
+                            gav.getVersion());
 
-                        ScmRevision releaseId = null;
-                        for (ReleaseIdDetector rd : releaseDetectors) {
-                            try {
-                                var rid = rd.detectReleaseId(ref.get(), pomArtifact);
-                                if (rid != null && rid.getRepository().hasUrl()
-                                        && rid.getRepository().getUrl().contains("git")) {
-                                    releaseId = rid;
-                                    break;
-                                }
-                            } catch (BomDecomposerException e) {
-                                log.warn("Failed to determine SCM for " + gav.getGroupId() + ":" + gav.getArtifactId() + ":"
-                                        + gav.getVersion() + ": " + e.getLocalizedMessage());
+                    ScmRevision releaseId = null;
+                    for (ReleaseIdDetector rd : releaseDetectors) {
+                        try {
+                            var rid = rd.detectReleaseId(ref.get(), pomArtifact);
+                            if (rid != null && rid.getRepository().hasUrl()
+                                    && rid.getRepository().getUrl().contains("git")) {
+                                releaseId = rid;
+                                break;
                             }
+                        } catch (BomDecomposerException e) {
+                            log.warn("Failed to determine SCM for " + gav.getGroupId() + ":" + gav.getArtifactId() + ":"
+                                    + gav.getVersion() + ": " + e.getLocalizedMessage());
                         }
-
-                        if (releaseId == null) {
-                            try {
-                                releaseId = ref.get().readRevisionFromPom(pomArtifact);
-                            } catch (BomDecomposerException e) {
-                                log.warn("Failed to determine SCM for " + gav.getGroupId() + ":" + gav.getArtifactId() + ":"
-                                        + gav.getVersion() + " from POM metadata: "
-                                        + e.getLocalizedMessage());
-                            }
-                        }
-
-                        if (releaseId != null && releaseId.getRepository().hasUrl()
-                                && releaseId.getRepository().getUrl().contains("git")) {
-                            log.warn("The SCM recipe database is missing an entry for " + gav.getGroupId() + ":"
-                                    + gav.getArtifactId() + ":" + gav.getVersion() + ", " + releaseId
-                                    + " will be used as a fallback");
-                            return new TagInfo(new RepositoryInfo("git", releaseId.getRepository().getUrl()),
-                                    releaseId.getValue(), null);
-                        }
-                        return null;
                     }
+
+                    if (releaseId == null) {
+                        try {
+                            releaseId = ref.get().readRevisionFromPom(pomArtifact);
+                        } catch (BomDecomposerException e) {
+                            log.warn("Failed to determine SCM for " + gav.getGroupId() + ":" + gav.getArtifactId() + ":"
+                                    + gav.getVersion() + " from POM metadata: "
+                                    + e.getLocalizedMessage());
+                        }
+                    }
+
+                    if (releaseId != null && releaseId.getRepository().toString().contains(".git")) {
+                        throw new IllegalStateException(releaseId.toString());
+                    }
+                    if (releaseId != null && releaseId.getRepository().hasUrl()
+                            && releaseId.getRepository().getUrl().contains("git")) {
+                        log.warn("The SCM recipe database is missing an entry for " + gav.getGroupId() + ":"
+                                + gav.getArtifactId() + ":" + gav.getVersion() + ", " + releaseId
+                                + " will be used as a fallback");
+                        return new TagInfo(new RepositoryInfo("git", releaseId.getRepository().getUrl()),
+                                releaseId.getValue(), null);
+                    }
+                    return null;
                 })
                 .build();
 
@@ -875,7 +875,12 @@ public class ProjectDependencyResolver {
                     final TagInfo tag = scmLocator.resolveTagInfo(gav);
                     if (tag != null) {
                         ++succeeded;
-                        return ScmRevision.tag(ScmRepository.ofUrl(tag.getRepoInfo().getUri()), tag.getTag());
+                        var uri = tag.getRepoInfo().getUri();
+                        if (uri.endsWith(".git")) {
+                            // strip .git at the end
+                            uri = uri.substring(0, uri.length() - 4);
+                        }
+                        return ScmRevision.tag(ScmRepository.ofUrl(uri), tag.getTag());
                     }
                 } catch (Exception e) {
                     error = e;
