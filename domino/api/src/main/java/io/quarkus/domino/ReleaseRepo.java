@@ -1,5 +1,6 @@
 package io.quarkus.domino;
 
+import io.quarkus.bom.decomposer.ReleaseId;
 import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.util.Collection;
@@ -18,6 +19,16 @@ public class ReleaseRepo {
 
     ReleaseRepo(ScmRevision revision) {
         this.revision = revision;
+    }
+
+    /**
+     * @deprecated for removal in favor of {@link #getRevision()}
+     *
+     * @return release id
+     */
+    @Deprecated(forRemoval = true)
+    public ReleaseId id() {
+        return revision;
     }
 
     public ScmRevision getRevision() {

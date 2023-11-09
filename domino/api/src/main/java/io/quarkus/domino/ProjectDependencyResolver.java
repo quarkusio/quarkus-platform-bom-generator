@@ -367,7 +367,7 @@ public class ProjectDependencyResolver {
                         int i = 0;
                         while (chains.hasNext()) {
                             logComment("  Chain #" + ++i + ":");
-                            chains.next().getReleaseDependencyChain().forEach(id -> logComment("    " + id));
+                            chains.next().getDependencyChain().forEach(id -> logComment("    " + id));
                             logComment("");
                         }
                     }
