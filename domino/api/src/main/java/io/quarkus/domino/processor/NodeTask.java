@@ -86,7 +86,7 @@ public class NodeTask<I, N, O> {
             for (NodeTask<I, N, O> t : dependencies.values()) {
                 deps[ti++] = t.schedule();
             }
-            return cf = CompletableFuture.allOf(deps).<TaskResult<I, N, O>> thenApplyAsync((v) -> {
+            return cf = CompletableFuture.allOf(deps).thenApplyAsync((v) -> {
                 final Map<I, TaskResult<I, N, O>> dependencyResults = new HashMap<>(deps.length);
                 for (int i = 0; i < deps.length; ++i) {
                     final TaskResult<I, N, O> depResult = deps[i].getNow(null);

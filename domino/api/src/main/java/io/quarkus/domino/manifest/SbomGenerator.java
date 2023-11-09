@@ -368,23 +368,27 @@ public class SbomGenerator {
         }
         tool.setName(sb.append("SBOM Generator").toString());
 
-        final byte[] bytes;
-        try {
-            bytes = Files.readAllBytes(toolLocation);
-        } catch (IOException e) {
-            log.warn("Failed to read the tool's binary", e);
-            return;
-        }
-
-        final List<Hash> hashes = new ArrayList<>(HASH_ALGS.size());
-        for (String alg : HASH_ALGS) {
-            var hash = getHash(alg, bytes);
-            if (hash != null) {
-                hashes.add(hash);
+        if (!Files.isDirectory(toolLocation)) {
+            final byte[] bytes;
+            try {
+                bytes = Files.readAllBytes(toolLocation);
+            } catch (IOException e) {
+                log.warn("Failed to read the tool's binary", e);
+                return;
             }
-        }
-        if (hashes != null) {
-            tool.setHashes(hashes);
+
+            final List<Hash> hashes = new ArrayList<>(HASH_ALGS.size());
+            for (String alg : HASH_ALGS) {
+                var hash = getHash(alg, bytes);
+                if (hash != null) {
+                    hashes.add(hash);
+                }
+            }
+            if (!hashes.isEmpty()) {
+                tool.setHashes(hashes);
+            }
+        } else {
+            log.warn("skipping tool hashing because " + toolLocation + " appears to be a directory");
         }
     }
 

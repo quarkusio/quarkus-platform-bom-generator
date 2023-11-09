@@ -11,6 +11,10 @@ import picocli.CommandLine;
 @CommandLine.Command(name = "report")
 public class Report extends BaseDepsToBuildCommand {
 
+    private static final String MANIFEST_DEPS_NONE = "none";
+    private static final String MANIFEST_DEPS_TREE = "tree";
+    private static final String MANIFEST_DEPS_GRAPH = "graph";
+
     @CommandLine.Option(names = {
             "--manifest" }, description = "Generate an SBOM with dependency trees", defaultValue = "false")
     public boolean manifest;
@@ -18,6 +22,10 @@ public class Report extends BaseDepsToBuildCommand {
     @CommandLine.Option(names = {
             "--flat-manifest" }, description = "Generate an SBOM without dependency tree information", defaultValue = "false")
     public boolean flatManifest;
+
+    @CommandLine.Option(names = {
+            "--manifest-dependencies" }, description = "Strategy to manifest dependencies: none, tree (the default, based on the default conflict free dependency trees returned by the Maven resolver), graph (records all direct dependencies of each artifact)", defaultValue = "false")
+    public String manifestDependencies;
 
     @CommandLine.Option(names = {
             "--enable-sbom-transformers" }, description = "Apply SBOM transformers found on the classpath", defaultValue = "false")
@@ -41,6 +49,9 @@ public class Report extends BaseDepsToBuildCommand {
             if (excludeParentPoms == null) {
                 config.setExcludeParentPoms(true);
             }
+            if (!flatManifest) {
+                config.setVerboseGraphs(MANIFEST_DEPS_GRAPH.equals(manifestDependencies));
+            }
         }
     }
 
@@ -57,7 +68,8 @@ public class Report extends BaseDepsToBuildCommand {
                                             .setOutputFile(outputFile)
                                             .setProductInfo(resolverBuilder.getDependencyConfig().getProductInfo())
                                             .setEnableTransformers(enableSbomTransformers)
-                                            .setRecordDependencies(!flatManifest),
+                                            .setRecordDependencies(
+                                                    !(flatManifest || MANIFEST_DEPS_NONE.equals(manifestDependencies))),
                                     resolverBuilder.getDependencyConfig()));
         }
     }

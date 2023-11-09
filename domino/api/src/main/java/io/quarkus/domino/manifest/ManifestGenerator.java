@@ -310,7 +310,7 @@ public class ManifestGenerator {
     }
 
     static Version schemaVersion() {
-        return Version.VERSION_14;
+        return Version.VERSION_15;
     }
 
     private static boolean doesComponentHaveExternalReference(final Component component, final ExternalReference.Type type) {
