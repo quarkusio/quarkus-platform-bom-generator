@@ -246,19 +246,30 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
 
         private void resolveLinkedDependencies(Map<ArtifactCoords, VisitedComponentImpl> treeComponents) {
             if (linkedDeps != null) {
-                log.debugf("Resolving linked dependencies of %s", coords.toCompactCoords());
+                log.debugf("Resolving linked dependencies of %s", coords);
+                // check for circular dependencies
+                for (var linked : linkedDeps) {
+                    if (isCyclicDependency(linked)) {
+                        log.debugf("- %s skipped to avoid a circular dependency", linked);
+                        return;
+                    }
+                }
                 for (var linked : linkedDeps) {
                     var c = treeComponents.get(linked);
                     if (c == null) {
                         throw new IllegalStateException("Failed to resolve linked dependency " + linked.toCompactCoords()
                                 + " of " + this.coords.toCompactCoords() + " among " + treeComponents.keySet());
                     }
-                    log.debugf("- %s", c.coords.toCompactCoords());
+                    log.debugf("- %s", c.coords);
                     addChild(c);
                     c.linkParent(this);
                 }
                 linkedDeps = null;
             }
+        }
+
+        private boolean isCyclicDependency(ArtifactCoords coords) {
+            return isSameGav(this.coords, coords) || parent != null && parent.isCyclicDependency(coords);
         }
 
         private void swap(VisitedComponentImpl other) {
@@ -375,6 +386,12 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
         public String toString() {
             return coords.toString();
         }
+    }
+
+    private static boolean isSameGav(ArtifactCoords c1, ArtifactCoords c2) {
+        return c1.getArtifactId().equals(c2.getArtifactId())
+                && c1.getVersion().equals(c2.getVersion())
+                && c1.getGroupId().equals(c2.getGroupId());
     }
 
     static PackageURL getPurl(ArtifactCoords coords) {
