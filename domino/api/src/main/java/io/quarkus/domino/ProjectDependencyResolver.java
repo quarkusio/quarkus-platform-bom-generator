@@ -729,17 +729,17 @@ public class ProjectDependencyResolver {
         try {
             final Artifact a = toAetherArtifact(coords);
             var descr = resolver.resolveDescriptor(a);
+            final Map<ArtifactKey, Dependency> map = new LinkedHashMap<>();
+            for (var d : managedDeps) {
+                var art = d.getArtifact();
+                map.put(ArtifactKey.of(art.getGroupId(), art.getArtifactId(), art.getClassifier(), art.getExtension()), d);
+            }
             final List<Dependency> constraints;
             if (descr.getManagedDependencies().isEmpty()) {
                 constraints = managedDeps;
             } else {
-                final Map<ArtifactKey, Dependency> map = new LinkedHashMap<>();
                 constraints = new ArrayList<>(managedDeps.size());
-                for (var d : managedDeps) {
-                    var art = d.getArtifact();
-                    map.put(ArtifactKey.of(art.getGroupId(), art.getArtifactId(), art.getClassifier(), art.getExtension()), d);
-                    constraints.add(d);
-                }
+                constraints.addAll(managedDeps);
                 for (var d : descr.getManagedDependencies()) {
                     var art = d.getArtifact();
                     if (!map.containsKey(
@@ -754,13 +754,16 @@ public class ProjectDependencyResolver {
                         || d.isOptional() && !config.isIncludeOptionalDeps()) {
                     continue;
                 }
-                directDeps.add(d);
+                var da = d.getArtifact();
+                var constraint = map
+                        .get(ArtifactKey.of(da.getGroupId(), da.getArtifactId(), da.getClassifier(), da.getExtension()));
+                directDeps.add(constraint == null ? d : constraint);
             }
             var aggregatedRepos = resolver.aggregateRepositories(resolver.getRepositories(),
                     resolver.newResolutionRepositories(descr.getRepositories()));
 
             root = resolver.getSystem().collectDependencies(resolver.getSession(),
-                    MavenArtifactResolver.newCollectRequest(a, directDeps, managedDeps, List.of(), aggregatedRepos))
+                    MavenArtifactResolver.newCollectRequest(a, directDeps, constraints, List.of(), aggregatedRepos))
                     .getRoot();
             // if the dependencies are not found, make sure the artifact actually exists
             if (root.getChildren().isEmpty()) {
