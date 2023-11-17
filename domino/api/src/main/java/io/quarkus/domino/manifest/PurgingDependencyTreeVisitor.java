@@ -50,8 +50,8 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
     }
 
     private void purge() {
-        log.infof("Roots total: %s", roots.size());
-        log.infof("Nodes total: %s", nodesTotal);
+        //log.infof("Roots total: %s", roots.size());
+        //log.infof("Nodes total: %s", nodesTotal);
 
         for (VisitedComponentImpl root : roots) {
             // we want to process each tree separately due to possible variations across different trees
@@ -84,8 +84,8 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
                 }
             }
         }
-        log.infof("Unique roots total: %s", roots.size());
-        log.infof("Unique nodes total: %s", uniqueNodesTotal);
+        //log.infof("Unique roots total: %s", roots.size());
+        //log.infof("Unique nodes total: %s", uniqueNodesTotal);
     }
 
     private ParallelTreeProcessor<Long, VisitedComponentImpl, VisitedComponentImpl> newTreeProcessor() {
