@@ -3,10 +3,12 @@ package io.quarkus.domino.test.repo;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.model.DependencyManagement;
 import org.apache.maven.model.Model;
@@ -26,6 +28,7 @@ public class TestModule {
     private List<TestModule> modules = List.of();
     private Map<String, List<ArtifactCoords>> dependenciesByScope = Map.of();
     private Map<String, List<ArtifactCoords>> constraintsByScope = Map.of();
+    private Set<String> publishedClassifiers = Set.of();
 
     TestModule(TestProject project, String artifactId) {
         this.project = Objects.requireNonNull(project);
@@ -134,6 +137,10 @@ public class TestModule {
         return addDependency(ArtifactCoords.jar(groupId, artifactId, version), JavaScopes.COMPILE);
     }
 
+    public TestModule addDependency(ArtifactCoords coords) {
+        return addDependency(coords, JavaScopes.COMPILE);
+    }
+
     public TestModule addDependency(ArtifactCoords coords, String scope) {
         if (dependenciesByScope.isEmpty()) {
             dependenciesByScope = new LinkedHashMap<>();
@@ -183,6 +190,14 @@ public class TestModule {
         return addVersionConstraint(ArtifactCoords.pom(groupId, artifactId, version), "import");
     }
 
+    public TestModule addClassifier(String classifier) {
+        if (publishedClassifiers.isEmpty()) {
+            publishedClassifiers = new HashSet<>();
+        }
+        publishedClassifiers.add(classifier);
+        return this;
+    }
+
     public Model getModel() {
         var model = new Model();
         model.setModelVersion("4.0.0");
@@ -222,6 +237,23 @@ public class TestModule {
             model.setScm(scm);
         }
         return model;
+    }
+
+    public Collection<ArtifactCoords> getPublishedArtifacts() {
+        var artifacts = new ArrayList<ArtifactCoords>(1
+                + (ArtifactCoords.TYPE_JAR.equals(packaging) ? 1 : 0)
+                + publishedClassifiers.size());
+        var groupId = getGroupId();
+        var artifactId = getArtifactId();
+        var version = getVersion();
+        artifacts.add(ArtifactCoords.pom(groupId, artifactId, version));
+        if (ArtifactCoords.TYPE_JAR.equals(packaging)) {
+            artifacts.add(ArtifactCoords.jar(groupId, artifactId, version));
+        }
+        for (var classifier : publishedClassifiers) {
+            artifacts.add(ArtifactCoords.jar(groupId, artifactId, classifier, version));
+        }
+        return artifacts;
     }
 
     private static List<Dependency> toModelDeps(Map<String, List<ArtifactCoords>> deps) {

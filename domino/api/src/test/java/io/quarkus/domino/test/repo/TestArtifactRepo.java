@@ -58,18 +58,29 @@ public class TestArtifactRepo {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        try {
-            ModelUtils.persistModel(
-                    artifactDir.resolve(module.getArtifactId() + "-" + module.getVersion() + "." + ArtifactCoords.TYPE_POM),
-                    module.getModel());
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        if (ArtifactCoords.TYPE_JAR.equals(module.getPackaging())) {
-            try (var fs = ZipUtils.newZip(
-                    artifactDir.resolve(module.getArtifactId() + "-" + module.getVersion() + "." + ArtifactCoords.TYPE_JAR))) {
-            } catch (IOException e) {
-                throw new RuntimeException(e);
+        for (var a : module.getPublishedArtifacts()) {
+            if (ArtifactCoords.TYPE_JAR.equals(a.getType())) {
+                var name = new StringBuilder();
+                name.append(module.getArtifactId()).append("-").append(module.getVersion());
+                if (!a.getClassifier().isEmpty()) {
+                    name.append("-").append(a.getClassifier());
+                }
+                name.append(".").append(ArtifactCoords.TYPE_JAR);
+                try (var fs = ZipUtils.newZip(artifactDir.resolve(name.toString()))) {
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            } else if (ArtifactCoords.TYPE_POM.equals(a.getType())) {
+                try {
+                    ModelUtils.persistModel(
+                            artifactDir.resolve(
+                                    module.getArtifactId() + "-" + module.getVersion() + "." + ArtifactCoords.TYPE_POM),
+                            module.getModel());
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            } else {
+                throw new IllegalStateException("Unsupported artifact type " + a);
             }
         }
         for (TestModule m : module.getModules()) {
