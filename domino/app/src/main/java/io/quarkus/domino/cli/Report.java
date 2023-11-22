@@ -24,7 +24,7 @@ public class Report extends BaseDepsToBuildCommand {
     public boolean flatManifest;
 
     @CommandLine.Option(names = {
-            "--manifest-dependencies" }, description = "Strategy to manifest dependencies: none, tree (the default, based on the default conflict free dependency trees returned by the Maven resolver), graph (records all direct dependencies of each artifact)", defaultValue = "false")
+            "--manifest-dependencies" }, description = "Strategy to manifest dependencies: none, tree (the default, based on the default conflict free dependency trees returned by the Maven resolver), graph (records all direct dependencies of each artifact)", defaultValue = MANIFEST_DEPS_GRAPH)
     public String manifestDependencies;
 
     @CommandLine.Option(names = {
