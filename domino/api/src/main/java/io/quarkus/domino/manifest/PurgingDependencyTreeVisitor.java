@@ -15,7 +15,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.jboss.logging.Logger;
@@ -28,7 +31,7 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
     private final AtomicLong uniqueNodesTotal = new AtomicLong();
     private List<VisitedComponentImpl> roots;
     private ArrayDeque<VisitedComponentImpl> branch;
-    private Map<ArtifactCoords, List<VisitedComponentImpl>> nodeVariations;
+    private Map<ArtifactCoords, ComponentVariations> nodeVariations;
     private Map<ArtifactCoords, VisitedComponentImpl> treeComponents;
 
     @Override
@@ -37,7 +40,7 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
         uniqueNodesTotal.set(0);
         roots = new ArrayList<>();
         branch = new ArrayDeque<>();
-        nodeVariations = new HashMap<>();
+        nodeVariations = new ConcurrentHashMap<>();
     }
 
     @Override
@@ -53,9 +56,9 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
         //log.infof("Roots total: %s", roots.size());
         //log.infof("Nodes total: %s", nodesTotal);
 
+        var treeProcessor = newTreeProcessor();
         for (VisitedComponentImpl root : roots) {
             // we want to process each tree separately due to possible variations across different trees
-            var treeProcessor = newTreeProcessor();
             treeProcessor.addRoot(root);
             var results = treeProcessor.schedule().join();
             boolean failures = false;
@@ -78,7 +81,7 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
             var i = roots.iterator();
             while (i.hasNext()) {
                 var current = i.next();
-                VisitedComponent previous = ids.put(current.getBomRef(), current);
+                var previous = ids.put(current.getBomRef(), current);
                 if (previous != null) {
                     i.remove();
                 }
@@ -103,31 +106,8 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
             @Override
             public Function<ExecutionContext<Long, VisitedComponentImpl, VisitedComponentImpl>, TaskResult<Long, VisitedComponentImpl, VisitedComponentImpl>> createFunction() {
                 return ctx -> {
-                    VisitedComponentImpl currentNode = ctx.getNode();
-                    final List<VisitedComponentImpl> variations = nodeVariations.get(currentNode.getArtifactCoords());
-                    long processedVariations = 0;
-                    if (variations.size() > 1) {
-                        for (VisitedComponentImpl variation : variations) {
-                            if (!variation.hasBomRefsSet()) {
-                                continue;
-                            }
-                            processedVariations++;
-                            if (variation.hasMatchingDirectDeps(currentNode)) {
-                                if (currentNode.isRoot()) {
-                                    currentNode.setBomRef(variation.getBomRef());
-                                } else {
-                                    currentNode.swap(variation);
-                                    currentNode = variation;
-                                }
-                                break;
-                            }
-                        }
-                    }
-                    if (currentNode.getBomRef() == null) {
-                        uniqueNodesTotal.incrementAndGet();
-                        currentNode.initializeBomRef(processedVariations);
-                    }
-                    return ctx.success(currentNode);
+                    final VisitedComponentImpl currentNode = ctx.getNode();
+                    return ctx.success(nodeVariations.get(currentNode.getArtifactCoords()).setBomRef(currentNode));
                 };
             }
         });
@@ -185,7 +165,7 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
     private VisitedComponentImpl enterNode(DependencyVisit visit) {
         var parent = branch.peek();
         var current = new VisitedComponentImpl(nodesTotal.getAndIncrement(), parent, visit);
-        nodeVariations.computeIfAbsent(visit.getCoords(), k -> new ArrayList<>()).add(current);
+        nodeVariations.computeIfAbsent(visit.getCoords(), k -> new ComponentVariations()).add(current);
         if (parent != null) {
             parent.addChild(current);
         }
@@ -204,11 +184,12 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
         private final ScmRevision revision;
         private final ArtifactCoords coords;
         private final List<RemoteRepository> repos;
-        private final Map<ArtifactCoords, VisitedComponentImpl> children = new HashMap<>();
+        private final Map<ArtifactCoords, VisitedComponentImpl> children = new ConcurrentHashMap<>();
         private List<ArtifactCoords> linkedDeps;
         private List<VisitedComponentImpl> linkedParents;
         private String bomRef;
         private PackageURL purl;
+        private boolean purged;
 
         private VisitedComponentImpl(long index, VisitedComponentImpl parent, DependencyVisit visit) {
             this.index = index;
@@ -284,6 +265,7 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
                     p.addChild(other);
                 }
             }
+            purged = true;
         }
 
         private boolean hasMatchingDirectDeps(VisitedComponentImpl other) {
@@ -348,18 +330,6 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
             this.bomRef = bomRef;
         }
 
-        private boolean hasBomRefsSet() {
-            if (bomRef == null) {
-                return false;
-            }
-            for (var c : children.values()) {
-                if (c.bomRef == null) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
         private void initializeBomRef(long processedVariations) {
             if (processedVariations == 0) {
                 bomRef = getPurl().toString();
@@ -385,6 +355,49 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
         @Override
         public String toString() {
             return coords.toString();
+        }
+    }
+
+    private class ComponentVariations {
+        private final List<VisitedComponentImpl> variations = new ArrayList<>();
+        private final ReadWriteLock lock = new ReentrantReadWriteLock();
+
+        private void add(VisitedComponentImpl variation) {
+            variations.add(variation);
+        }
+
+        private VisitedComponentImpl setBomRef(VisitedComponentImpl currentNode) {
+            if (currentNode.bomRef != null) {
+                return currentNode;
+            }
+            lock.readLock().lock();
+            try {
+                int processedVariations = 0;
+                if (variations.size() > 1) {
+                    for (var variation : variations) {
+                        if (variation.purged || variation.bomRef == null) {
+                            continue;
+                        }
+                        processedVariations++;
+                        if (variation.hasMatchingDirectDeps(currentNode)) {
+                            if (currentNode.isRoot()) {
+                                currentNode.setBomRef(variation.getBomRef());
+                            } else {
+                                currentNode.swap(variation);
+                                currentNode = variation;
+                            }
+                            break;
+                        }
+                    }
+                }
+                if (currentNode.bomRef == null) {
+                    uniqueNodesTotal.incrementAndGet();
+                    currentNode.initializeBomRef(processedVariations);
+                }
+            } finally {
+                lock.readLock().unlock();
+            }
+            return currentNode;
         }
     }
 

@@ -200,7 +200,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
      * <li>tree - record default (conflicts resolved) dependency trees returned by Maven artifact resolver (the default)</li>
      * <li>graph - record all direct dependencies of each artifact</li>
      */
-    @Parameter(required = false, property = "manifestDependencies", defaultValue = "tree")
+    @Parameter(required = false, property = "manifestDependencies", defaultValue = "graph")
     String manifestDependencies;
 
     /**
@@ -335,13 +335,17 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         if (includeNonManaged != null) {
             depsConfigBuilder.setIncludeNonManaged(includeNonManaged);
         }
-        if ("none".equals(manifestDependencies)) {
-            flatManifest = true;
-        } else if (manifestDependencies.equals("graph")) {
-            depsConfigBuilder.setVerboseGraphs(true);
-        } else if (!manifestDependencies.equals("tree")) {
-            throw new MojoExecutionException("Unrecognized value '" + manifestDependencies
-                    + "' for parameter manifestDependencies. Supported values include graph, tree, none");
+        if (manifest) {
+            if ("none".equals(manifestDependencies)) {
+                flatManifest = true;
+            } else if (manifestDependencies.equals("tree")) {
+                depsConfigBuilder.setVerboseGraphs(false);
+            } else if (!manifestDependencies.equals("graph")) {
+                throw new MojoExecutionException("Unrecognized value '" + manifestDependencies
+                        + "' for parameter manifestDependencies. Supported values include graph, tree, none");
+            } else {
+                depsConfigBuilder.setVerboseGraphs(true);
+            }
         }
         final ProjectDependencyConfig dependencyConfig = depsConfigBuilder.build();
         final ProjectDependencyResolver.Builder depsResolver = ProjectDependencyResolver.builder()
