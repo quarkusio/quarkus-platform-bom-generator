@@ -1,4 +1,4 @@
-package io.quarkus.domino.cli.repo;
+package io.quarkus.domino.tree;
 
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.domino.processor.ExecutionContext;
@@ -47,7 +47,7 @@ public interface DependencyTreeVisitScheduler {
             MessageWriter log,
             int treesTotal) {
 
-        return new BaseDependencyTreeProcessScheduler<E>(processor, log, treesTotal) {
+        return new BaseDependencyTreeProcessScheduler<>(processor, log, treesTotal) {
 
             final ParallelTreeProcessor<String, DependencyTreeRoot, DependencyNode> treeProcessor = ParallelTreeProcessor
                     .with(new NodeProcessor<>() {

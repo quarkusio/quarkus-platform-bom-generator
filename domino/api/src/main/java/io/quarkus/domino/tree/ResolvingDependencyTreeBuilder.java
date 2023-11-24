@@ -1,4 +1,4 @@
-package io.quarkus.domino.cli.repo;
+package io.quarkus.domino.tree;
 
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import org.eclipse.aether.graph.DependencyNode;

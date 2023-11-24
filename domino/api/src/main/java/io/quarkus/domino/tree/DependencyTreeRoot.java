@@ -1,4 +1,4 @@
-package io.quarkus.domino.cli.repo;
+package io.quarkus.domino.tree;
 
 import java.util.Collection;
 import java.util.List;

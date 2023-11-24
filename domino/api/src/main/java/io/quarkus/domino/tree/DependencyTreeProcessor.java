@@ -1,14 +1,10 @@
-package io.quarkus.domino.cli;
+package io.quarkus.domino.tree;
 
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.options.BootstrapMavenOptions;
 import io.quarkus.devtools.messagewriter.MessageWriter;
-import io.quarkus.domino.cli.repo.DependencyTreeBuilder;
-import io.quarkus.domino.cli.repo.DependencyTreeRoot;
-import io.quarkus.domino.cli.repo.DependencyTreeVisitScheduler;
-import io.quarkus.domino.cli.repo.DependencyTreeVisitor;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
