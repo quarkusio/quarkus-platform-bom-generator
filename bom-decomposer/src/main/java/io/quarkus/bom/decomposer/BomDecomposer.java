@@ -10,6 +10,7 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
 import io.quarkus.devtools.messagewriter.MessageWriter;
+import io.quarkus.domino.scm.ScmRevisionResolver;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.nio.file.Path;
 import java.util.ArrayList;

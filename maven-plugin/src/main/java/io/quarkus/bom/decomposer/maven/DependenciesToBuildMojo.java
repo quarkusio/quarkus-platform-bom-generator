@@ -168,13 +168,6 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     @Parameter(required = false)
     ProjectDependencyFilterConfig dependenciesToBuild;
 
-    /**
-     * @deprecated Deprecated in favor of the HACBS SCM locator that performs validation
-     */
-    @Deprecated(since = "0.0.78")
-    @Parameter(required = false, property = "validateCodeRepoTags")
-    boolean validateCodeRepoTags;
-
     @Parameter(required = false, property = "legacyScmLocator")
     boolean legacyScmLocator;
 
@@ -328,7 +321,6 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 .setLogTrees(logTrees)
                 .setLogTreesFor(logTreesFor)
                 .setIncludeAlreadyBuilt(includeAlreadyBuilt)
-                .setValidateCodeRepoTags(validateCodeRepoTags)
                 .setLegacyScmLocator(legacyScmLocator)
                 .setRecipeRepos(recipeRepos)
                 .setWarnOnMissingScm(warnOnMissingScm);

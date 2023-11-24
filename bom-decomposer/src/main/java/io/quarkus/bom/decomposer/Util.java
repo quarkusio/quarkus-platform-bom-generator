@@ -81,14 +81,16 @@ public class Util {
                 s = "https://" + s;
             }
         }
+        if (s.startsWith("https://github.com:")) {
+            s = s.replace("https://github.com:", HTTPS_GITHUB_COM);
+        }
         if (s.startsWith(HTTPS_GITHUB_COM)) {
             var tmp = s.substring(HTTPS_GITHUB_COM.length());
             final String[] parts = tmp.split("/");
             if (parts.length > 2) {
-                s = HTTPS_GITHUB_COM + parts[0] + "/" + parts[1];
+                s = HTTPS_GITHUB_COM + parts[0].replace(":", "") + "/" + parts[1];
             }
         }
-
         return s;
     }
 

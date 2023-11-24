@@ -1,11 +1,14 @@
-package io.quarkus.bom.decomposer;
+package io.quarkus.domino.scm;
 
+import io.quarkus.bom.decomposer.BomDecomposerException;
+import io.quarkus.bom.decomposer.ReleaseIdDetector;
+import io.quarkus.bom.decomposer.ReleaseIdFactory;
+import io.quarkus.bom.decomposer.Util;
 import io.quarkus.bom.resolver.ArtifactResolver;
 import io.quarkus.bom.resolver.ArtifactResolverProvider;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.devtools.messagewriter.MessageWriter;
-import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.GAV;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -14,6 +17,7 @@ import java.net.http.HttpResponse.BodySubscribers;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -30,10 +34,9 @@ public class ScmRevisionResolver {
     private final MessageWriter log;
     private final ArtifactResolver resolver;
     private final Collection<ReleaseIdDetector> releaseDetectors;
-    private final boolean validateRepoTag;
     private Set<ScmRevision> validatedReleaseIds;
     private HttpClient httpClient;
-    private final Map<GAV, ScmRevision> releaseIdCache = new WeakHashMap<>();
+    private final ScmRevisionCache cache = new ScmRevisionCache();
 
     public ScmRevisionResolver(MavenArtifactResolver resolver) {
         this(ArtifactResolverProvider.get(resolver));
@@ -44,9 +47,8 @@ public class ScmRevisionResolver {
     }
 
     public ScmRevisionResolver(MavenArtifactResolver resolver, Collection<ReleaseIdDetector> releaseDetectors,
-            MessageWriter log,
-            boolean validateRepoTag) {
-        this(ArtifactResolverProvider.get(resolver), releaseDetectors, log, validateRepoTag);
+            MessageWriter log) {
+        this(ArtifactResolverProvider.get(resolver), releaseDetectors, log);
     }
 
     public ScmRevisionResolver(ArtifactResolver resolver) {
@@ -56,38 +58,42 @@ public class ScmRevisionResolver {
     public ScmRevisionResolver(ArtifactResolver resolver, Collection<ReleaseIdDetector> releaseDetectors) {
         this.resolver = Objects.requireNonNull(resolver);
         this.releaseDetectors = releaseDetectors;
-        this.validateRepoTag = false;
         this.log = MessageWriter.info();
     }
 
-    public ScmRevisionResolver(ArtifactResolver resolver, Collection<ReleaseIdDetector> releaseDetectors, MessageWriter log,
-            boolean validateRepoTag) {
+    public ScmRevisionResolver(ArtifactResolver resolver, Collection<ReleaseIdDetector> releaseDetectors, MessageWriter log) {
         this.resolver = Objects.requireNonNull(resolver);
         this.releaseDetectors = releaseDetectors;
-        this.validateRepoTag = validateRepoTag;
         this.log = log;
     }
 
     public ScmRevision resolveRevision(Artifact artifact, List<RemoteRepository> repos)
             throws BomDecomposerException, UnresolvableModelException {
         var gav = new GAV(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion());
-        var releaseId = releaseIdCache.get(gav);
-        if (releaseId == null) {
+        var revision = cache.get(gav);
+        if (revision == null) {
             for (ReleaseIdDetector releaseDetector : releaseDetectors) {
-                releaseId = releaseDetector.detectReleaseId(this, artifact);
-                if (releaseId != null) {
+                revision = releaseDetector.detectReleaseId(this, artifact);
+                if (revision != null) {
                     break;
                 }
             }
-            if (releaseId == null) {
-                releaseId = readRevisionFromPom(artifact, repos);
+            if (revision == null) {
+                revision = readRevisionFromPom(artifact, repos);
+                var cachedGroupIdRevision = cache.groupIdRevisions.get(artifact.getGroupId());
+                if (cachedGroupIdRevision != null && cachedGroupIdRevision.getRepository().isUrl()) {
+                    if (!revision.getRepository().isUrl()) {
+                        revision = cachedGroupIdRevision;
+                    } else if (revision.getKind().equals(ScmRevision.Kind.VERSION)
+                            && !cachedGroupIdRevision.getKind().equals(ScmRevision.Kind.VERSION)
+                            && revision.getValue().equals(cachedGroupIdRevision.getValue())) {
+                        revision = cachedGroupIdRevision;
+                    }
+                }
             }
-            if (validateRepoTag) {
-                validateTag(releaseId);
-            }
-            releaseIdCache.put(gav, releaseId);
+            cache.put(gav, revision);
         }
-        return releaseId;
+        return revision;
     }
 
     public ScmRevision readRevisionFromPom(Artifact artifact) throws BomDecomposerException {
@@ -176,9 +182,11 @@ public class ScmRevisionResolver {
 
         final Model parentModel = readPom(Util.parentArtifact(model), repos);
 
-        if (Util.getScmOrigin(model) != null) {
-            return Util.getScmOrigin(model).equals(Util.getScmOrigin(parentModel))
-                    && Util.getScmTag(model).equals(Util.getScmTag(parentModel)) ? parentModel : null;
+        final String scmOrigin = Util.getScmOrigin(model);
+        if (scmOrigin != null) {
+            final String scmTag = Util.getScmTag(model);
+            return scmOrigin.equals(Util.getScmOrigin(parentModel))
+                    && scmTag == null || scmTag.equals(Util.getScmTag(parentModel)) ? parentModel : null;
         }
 
         if (model.getParent().getRelativePath().isEmpty()) {
@@ -210,5 +218,19 @@ public class ScmRevisionResolver {
 
     public Model readPom(Artifact artifact, List<RemoteRepository> repos) throws BomDecomposerException {
         return Util.model(resolver.resolve(Util.pom(artifact), repos).getArtifact().getFile());
+    }
+
+    private static class ScmRevisionCache {
+        private final Map<GAV, ScmRevision> gavRevisions = new WeakHashMap<>();
+        private final Map<String, ScmRevision> groupIdRevisions = new HashMap<>();
+
+        ScmRevision get(GAV gav) {
+            return gavRevisions.get(gav);
+        }
+
+        void put(GAV gav, ScmRevision revision) {
+            gavRevisions.put(gav, revision);
+            groupIdRevisions.put(gav.getGroupId(), revision);
+        }
     }
 }

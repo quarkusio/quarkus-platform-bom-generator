@@ -185,10 +185,13 @@ public interface ProjectDependencyConfig {
     List<String> getRecipeRepos();
 
     /**
-     * Whether to validate the discovered code repo and tags that are included in the report
+     * @deprecated this option isn't used anymore
+     *
+     *             Whether to validate the discovered code repo and tags that are included in the report
      * 
      * @return whether to validate core repos and tags
      */
+    @Deprecated(forRemoval = true)
     boolean isValidateCodeRepoTags();
 
     /**

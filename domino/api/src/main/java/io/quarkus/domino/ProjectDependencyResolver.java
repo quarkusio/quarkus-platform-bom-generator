@@ -8,7 +8,6 @@ import com.redhat.hacbs.recipies.scm.TagInfo;
 import io.quarkus.bom.decomposer.BomDecomposerException;
 import io.quarkus.bom.decomposer.ReleaseIdDetector;
 import io.quarkus.bom.decomposer.ReleaseIdFactory;
-import io.quarkus.bom.decomposer.ScmRevisionResolver;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
@@ -18,6 +17,7 @@ import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.domino.pnc.PncVersionProvider;
 import io.quarkus.domino.scm.ScmRepository;
 import io.quarkus.domino.scm.ScmRevision;
+import io.quarkus.domino.scm.ScmRevisionResolver;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import java.io.IOException;
@@ -367,7 +367,8 @@ public class ProjectDependencyResolver {
                         int i = 0;
                         while (chains.hasNext()) {
                             logComment("  Chain #" + ++i + ":");
-                            chains.next().getDependencyChain().forEach(id -> logComment("    " + id));
+                            chains.next().getDependencyChain().forEach(id -> logComment("    " + id.getRepository() + " "
+                                    + id.getKind().toString().toLowerCase() + " " + id.getValue()));
                             logComment("");
                         }
                     }
@@ -847,7 +848,7 @@ public class ProjectDependencyResolver {
             ProjectDependencyConfig config) {
 
         if (config.isLegacyScmLocator()) {
-            return getLegacyReleaseIdResolver(artifactResolver, log, config.isValidateCodeRepoTags());
+            return getLegacyReleaseIdResolver(artifactResolver, log);
         }
 
         final List<ReleaseIdDetector> releaseDetectors = ServiceLoader.load(ReleaseIdDetector.class).stream()
@@ -892,6 +893,10 @@ public class ProjectDependencyResolver {
                 .setCacheRepoTags(true)
                 .setCloneLocalRecipeRepos(false)
                 .setFallback(gav -> {
+
+                    if ("8.34.0.Final".equals(gav.getVersion())) {
+                        throw new IllegalArgumentException(gav.toString());
+                    }
 
                     var pomArtifact = new DefaultArtifact(gav.getGroupId(), gav.getArtifactId(), ArtifactCoords.TYPE_POM,
                             gav.getVersion());
@@ -985,15 +990,13 @@ public class ProjectDependencyResolver {
             }
         };
         final ScmRevisionResolver releaseResolver = new ScmRevisionResolver(artifactResolver,
-                List.of(new PncReleaseIdDetector(new PncBuildInfoProvider()),
-                        hacbsScmLocator),
-                log, config.isValidateCodeRepoTags());
+                List.of(new PncReleaseIdDetector(new PncBuildInfoProvider()), hacbsScmLocator),
+                log);
         ref.set(releaseResolver);
         return releaseResolver;
     }
 
-    private static ScmRevisionResolver getLegacyReleaseIdResolver(MavenArtifactResolver artifactResolver, MessageWriter log,
-            boolean validateCodeRepoTags) {
+    private static ScmRevisionResolver getLegacyReleaseIdResolver(MavenArtifactResolver artifactResolver, MessageWriter log) {
         final List<ReleaseIdDetector> releaseDetectors = new ArrayList<>();
         releaseDetectors.add(new PncReleaseIdDetector(new PncBuildInfoProvider()));
         releaseDetectors.add(
@@ -1084,7 +1087,7 @@ public class ProjectDependencyResolver {
                 .addAll(ServiceLoader.load(ReleaseIdDetector.class).stream().map(ServiceLoader.Provider::get)
                         .collect(Collectors.toList()));
 
-        return new ScmRevisionResolver(artifactResolver, releaseDetectors, log, validateCodeRepoTags);
+        return new ScmRevisionResolver(artifactResolver, releaseDetectors, log);
     }
 
     private void logReleaseRepoDep(ReleaseRepo repo, int depth) {
