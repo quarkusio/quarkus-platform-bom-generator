@@ -2,12 +2,12 @@ package io.quarkus.domino;
 
 import io.quarkus.bom.decomposer.BomDecomposerException;
 import io.quarkus.bom.decomposer.ReleaseIdDetector;
-import io.quarkus.bom.decomposer.ScmRevisionResolver;
 import io.quarkus.domino.manifest.PncArtifactBuildInfo;
 import io.quarkus.domino.manifest.PncArtifactBuildInfo.Build;
 import io.quarkus.domino.manifest.PncArtifactBuildInfo.Content;
 import io.quarkus.domino.scm.ScmRepository;
 import io.quarkus.domino.scm.ScmRevision;
+import io.quarkus.domino.scm.ScmRevisionResolver;
 import org.eclipse.aether.artifact.Artifact;
 
 public class PncReleaseIdDetector implements ReleaseIdDetector {

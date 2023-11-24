@@ -114,10 +114,6 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
             "--recipe-repos" }, description = "Build recipe repository URLs, the default one is https://github.com/redhat-appstudio/jvm-build-data", split = ",")
     public List<String> recipeRepos;
 
-    @CommandLine.Option(names = {
-            "--validate-code-repo-tags" }, description = "Whether to validate the discovered code repo and tags that are included in the report")
-    public Boolean validateCodeRepoTags;
-
     @CommandLine.Option(names = { "--legacy-scm-locator" }, description = "Whether to use the legacy SCM locator")
     public Boolean legacyScmLocator;
 
@@ -289,9 +285,6 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
         }
         if (level != null) {
             config.setLevel(level);
-        }
-        if (validateCodeRepoTags != null) {
-            config.setValidateCodeRepoTags(validateCodeRepoTags);
         }
         if (legacyScmLocator != null) {
             config.setLegacyScmLocator(legacyScmLocator);
