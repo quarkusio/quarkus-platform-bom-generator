@@ -1,4 +1,4 @@
-package io.quarkus.domino.cli.repo;
+package io.quarkus.domino.tree;
 
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import java.util.Objects;

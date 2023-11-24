@@ -1,11 +1,10 @@
-package io.quarkus.domino.cli.repo;
+package io.quarkus.domino.tree;
 
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import java.util.ArrayList;
 import java.util.Formatter;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import org.eclipse.aether.artifact.Artifact;
 
 abstract class BaseDependencyTreeProcessScheduler<E> implements DependencyTreeVisitScheduler {
@@ -137,64 +136,5 @@ abstract class BaseDependencyTreeProcessScheduler<E> implements DependencyTreeVi
         }
  @formatter:on */
         return sb.append(a.getVersion()).toString();
-    }
-
-    public static void main(String[] args) throws Exception {
-
-        double[] x1 = { 2, 3, 4, 5, 6, 7, 8, 9 };
-        double[] y1 = { 4, 8, 16, 32, 64, 128, 256, 512 };
-        double[] x2 = { 10 };
-
-        for (int i = 0; i < x2.length; i++) {
-            System.out.println("Value: " + x2[i] + " => extrapolation: " + extraPolate(x1, y1, x2[i]));
-        }
-
-        var e = new Extrapolator();
-        e.pushSample(2);
-        e.pushSample(4);
-        e.pushSample(8);
-        e.pushSample(16);
-        e.pushSample(32);
-        e.pushSample(64);
-        e.pushSample(128);
-        e.pushSample(256);
-        e.pushSample(512);
-
-        System.out.println(e.extrapolate());
-    }
-
-    static double extraPolate(double[] x, double[] y, double x2) {
-        var lowIndex = 2;
-        return y[y.length - 1] + (x2 - x[x.length - lowIndex]) / (x[x.length - 1] - x[x.length - lowIndex])
-                * (y[y.length - 1] - y[y.length - lowIndex]);
-    }
-
-    private static class Extrapolator {
-
-        private static final int MAX_SAMPLES = 6;
-        private static final int LOW_INDEX = 1;
-        private final AtomicLong[] samples = new AtomicLong[MAX_SAMPLES];
-        private final AtomicInteger sampleCounter = new AtomicInteger(-1);
-
-        public Extrapolator() {
-            for (int i = 0; i < MAX_SAMPLES; ++i) {
-                samples[i] = new AtomicLong();
-            }
-        }
-
-        public void pushSample(long sample) {
-            var sampleIndex = sampleCounter.incrementAndGet();
-            samples[sampleIndex % MAX_SAMPLES].set(sample);
-        }
-
-        public long extrapolate() {
-            var sampleCounter = this.sampleCounter.get();
-            var sampleIndex = sampleCounter % MAX_SAMPLES;
-            var lastSample = samples[sampleIndex].get();
-            var lowSample = samples[(MAX_SAMPLES + sampleIndex - LOW_INDEX) % MAX_SAMPLES].get();
-            return lastSample
-                    + (sampleCounter + 1 - (sampleCounter - LOW_INDEX)) / (sampleCounter - (sampleCounter - LOW_INDEX))
-                            * (lastSample - lowSample);
-        }
     }
 }
