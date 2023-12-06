@@ -111,6 +111,49 @@ Before intergating the SCM locator library from the AppStudio, Domino used its o
 java -jar domino.jar report --bom=io.vertx:vertx-dependencies:4.3.4.redhat-00007 --output-file=report.txt --legacy-scm-locator
 ```
 
+#### Quarkus platform dependency tracing
+
+`quarkus` command was developed to support a couple of use-cases:
+
+1. to check whether a given artifact is found among dependencies of Quarkus extensions included in a given platform release;
+2. pre-download extensions artifacts and their dependencies for a given platform release.
+
+##### Tracing dependencies
+
+`quarkus` command allows checking whether a given artifact (or an artifact coordinates pattern) matches any extension artifacts and/or their dependencies included in a given platform release.
+
+For example, the following command will find all the extensions that have an artifact with artifactId matching `snappy*` GLOB pattern among their dependencies as well as matching dependency version constraints from all the platform member BOMs:
+```
+java -jar domino.jar quarkus --version=3.2.9.Final --trace snappy*
+```
+
+By default, only the extension artifacts having the matching artifact and the matching artifact itself are logged in the report. Add `--full-chain` to see complete dependency chains from each extension artifact to the matched artifacts.
+```
+java -jar domino.jar quarkus --version=3.2.9.Final --trace snappy* --full-chain
+```
+
+Analysis could be limited to selected members using `--members` argument that accepts a comma-separated list of platform member BOM `artifactId`s, for example
+```
+java -jar domino.jar quarkus --version=3.2.9.Final --trace snappy* --members=quarkus-camel-bom
+```
+
+Limiting analysis to only runtime extension artifacts could be done by adding `--runtime-only` argument
+```
+java -jar domino.jar quarkus --version=3.2.9.Final --trace snappy* --members=quarkus-camel-bom --runtime-only
+```
+
+##### Downloading platform dependencies
+
+`quarkus` command can be used to pre-download Quarkus extension artifacts and their dependencies to a local Maven repository for a given Quarkus platform release. Here is an example
+```
+java -jar domino.jar quarkus --version=3.2.9.Final --resolve
+```
+
+A custom local Maven repository location can be provided using `--repo-dir` argument.
+```
+java -jar domino.jar quarkus --version=3.2.9.Final --resolve --repo-dir=repo-3.2.9
+```
+
 ### Maven plugin
 
 There is also a Maven plugin goal that can be used to generate a dependency report. For example, here is one for Vert.X:

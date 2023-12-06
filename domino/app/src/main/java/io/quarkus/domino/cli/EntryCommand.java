@@ -6,7 +6,7 @@ import picocli.CommandLine;
 
 @TopCommand
 @CommandLine.Command(mixinStandardHelpOptions = true, subcommands = { Report.class, FromMaven.class, FromGradle.class,
-        FromConfig.class, Project.class, Dependency.class, Version.class })
+        FromConfig.class, Project.class, Dependency.class, Quarkus.class, Version.class })
 public class EntryCommand {
 
 }
