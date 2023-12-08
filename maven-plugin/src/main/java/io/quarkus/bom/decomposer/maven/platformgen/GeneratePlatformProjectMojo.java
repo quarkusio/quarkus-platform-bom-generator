@@ -1101,7 +1101,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Model originalEffectiveModel = new EffectiveModelResolver(nonWorkspaceResolver())
                 .resolveEffectiveModel(originalCoords);
         var effectivePlugins = originalEffectiveModel.getBuild().getPlugins().stream()
-                .collect(Collectors.toMap(p -> p.getArtifactId(), p -> p));
+                .collect(Collectors.toMap(Plugin::getArtifactId, p -> p));
         int i = 0;
         while (i < build.getPlugins().size()) {
             var plugin = build.getPlugins().get(i++);
@@ -1112,6 +1112,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 plugin.setVersion(effectivePlugin.getVersion());
             }
         }
+
+        // copy maven.* properties
+        copyMavenCompilerProperties(originalEffectiveModel, pom);
 
         var originalDeps = originalEffectiveModel.getDependencies();
 
@@ -1159,7 +1162,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         // make sure the original properties do not override the platform ones
-        final Properties originalProps = pom.getProperties();
+        var originalProps = pom.getProperties();
         if (!originalProps.isEmpty()) {
             pom.setProperties(new Properties());
             for (Map.Entry<?, ?> originalProp : originalProps.entrySet()) {
@@ -1175,6 +1178,15 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         persistPom(pom);
+    }
+
+    private static void copyMavenCompilerProperties(Model srcModel, Model targetModel) {
+        var srcProps = srcModel.getProperties();
+        for (var propName : srcProps.stringPropertyNames()) {
+            if (propName.startsWith("maven.compiler.")) {
+                targetModel.getProperties().setProperty(propName, srcProps.getProperty(propName));
+            }
+        }
     }
 
     private void configureFlattenPlugin(Model pom, boolean updatePomFile, Map<String, String> elementConfig) {
