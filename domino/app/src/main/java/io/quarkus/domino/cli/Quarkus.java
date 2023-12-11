@@ -251,8 +251,10 @@ public class Quarkus implements Callable<Integer> {
 
         treeProcessor.process();
 
+        int membersWithTraces = 0;
         for (var report : memberReports) {
             if (report.enabled && report.hasTraces()) {
+                ++membersWithTraces;
                 log.info("");
                 log.info("== " + report.metadata.getBom().getGroupId().toUpperCase()
                         + ":" + report.metadata.getBom().getArtifactId().toUpperCase()
@@ -303,6 +305,22 @@ public class Quarkus implements Callable<Integer> {
             }
         }
         log.info("");
+
+        if (trace != null && !trace.isEmpty() && membersWithTraces == 0) {
+            var sb = new StringBuilder()
+                    .append("No traces of ");
+            var i = trace.iterator();
+            sb.append(i.next());
+            if (i.hasNext()) {
+                var next = i.next();
+                while (i.hasNext()) {
+                    sb.append(", ").append(next);
+                    next = i.next();
+                }
+                sb.append(" and ").append(next);
+            }
+            log.info(sb.append(" found").toString());
+        }
         return 0;
     }
 
