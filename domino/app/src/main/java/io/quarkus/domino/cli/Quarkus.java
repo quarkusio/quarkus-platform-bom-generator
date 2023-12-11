@@ -404,7 +404,11 @@ public class Quarkus implements Callable<Integer> {
         var versionPattern = wildcard;
         var parts = wildcardPattern.split(":");
         if (parts.length > 0) {
-            artifactIdPattern = parts[0];
+            if (parts.length == 1 && wildcardPattern.charAt(wildcardPattern.length() - 1) == ':') {
+                groupIdPattern = parts[0];
+            } else {
+                artifactIdPattern = parts[0];
+            }
             if (parts.length > 1) {
                 groupIdPattern = parts[0];
                 artifactIdPattern = parts[1];
