@@ -20,8 +20,10 @@ import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -116,38 +118,43 @@ public class Quarkus implements Callable<Integer> {
         }
         final Map<ArtifactCoords, List<MemberReport>> rootsToMembers = tracePattern == null ? Map.of() : new HashMap<>();
 
-        var treeVisitor = new DependencyTreeVisitor<List<Artifact>>() {
+        var treeVisitor = new DependencyTreeVisitor<DependencyStack>() {
 
             @Override
-            public void visitTree(DependencyTreeVisit<List<Artifact>> ctx) {
+            public void visitTree(DependencyTreeVisit<DependencyStack> ctx) {
                 if (tracePattern != null) {
-                    visitNode(ctx, ctx.getRoot(), new ArrayList<>());
+                    visitNode(ctx, ctx.getRoot(), new DependencyStack());
                 }
             }
 
-            private void visitNode(DependencyTreeVisit<List<Artifact>> ctx, DependencyNode node, List<Artifact> branch) {
+            private void visitNode(DependencyTreeVisit<DependencyStack> ctx, DependencyNode node, DependencyStack stack) {
                 var a = node.getArtifact();
-                branch.add(a);
+                stack.push(a);
                 if (tracePattern.contains(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(),
                         a.getVersion())) {
-                    ctx.pushEvent(branch);
-                    branch.remove(branch.size() - 1);
+                    stack.eventPushScheduled = true;
+                } else if (stack.eventPushScheduled) {
+                    stack.pop();
                     return;
                 }
                 for (var child : node.getChildren()) {
-                    visitNode(ctx, child, branch);
+                    visitNode(ctx, child, stack);
                 }
-                branch.remove(branch.size() - 1);
+                if (stack.eventPushScheduled) {
+                    ctx.pushEvent(stack);
+                    stack.eventPushScheduled = false;
+                }
+                stack.pop();
             }
 
             @Override
-            public void onEvent(List<Artifact> result, MessageWriter log) {
+            public void onEvent(DependencyStack stack, MessageWriter log) {
                 if (!rootsToMembers.isEmpty()) {
-                    var a = result.get(0);
+                    var a = stack.peek();
                     var reports = rootsToMembers.get(ArtifactCoords.of(a.getGroupId(), a.getArtifactId(),
                             a.getClassifier(), a.getExtension(), a.getVersion()));
                     if (reports != null) {
-                        var copy = List.copyOf(result);
+                        var copy = stack.toList();
                         for (var report : reports) {
                             report.addTracedExtensionDependency(copy);
                         }
@@ -461,6 +468,27 @@ public class Quarkus implements Callable<Integer> {
 
         boolean hasTraces() {
             return !tracedExtensionDeps.isEmpty() || !tracedBomConstraints.isEmpty();
+        }
+    }
+
+    private static class DependencyStack {
+        final Deque<Artifact> chain = new ArrayDeque<>();
+        boolean eventPushScheduled;
+
+        void push(Artifact a) {
+            chain.addLast(a);
+        }
+
+        void pop() {
+            chain.removeLast();
+        }
+
+        Artifact peek() {
+            return chain.peekFirst();
+        }
+
+        List<Artifact> toList() {
+            return List.copyOf(chain);
         }
     }
 }
