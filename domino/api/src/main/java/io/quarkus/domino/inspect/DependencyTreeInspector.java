@@ -1,4 +1,4 @@
-package io.quarkus.domino.tree;
+package io.quarkus.domino.inspect;
 
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
@@ -14,10 +14,10 @@ import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.Exclusion;
 
-public class DependencyTreeProcessor {
+public class DependencyTreeInspector {
 
-    public static DependencyTreeProcessor configure() {
-        return new DependencyTreeProcessor();
+    public static DependencyTreeInspector configure() {
+        return new DependencyTreeInspector();
     }
 
     private String settings;
@@ -29,55 +29,73 @@ public class DependencyTreeProcessor {
     private DependencyTreeVisitor<?> treeVisitor;
     private boolean parallelProcessing;
     private MessageWriter log;
-    private List<DependencyTreeRoot> roots = new ArrayList<>();
+    private List<DependencyTreeRequest> roots = new ArrayList<>();
 
-    private DependencyTreeProcessor() {
+    private DependencyTreeInspector() {
     }
 
-    public DependencyTreeProcessor setTreeBuilder(DependencyTreeBuilder treeBuilder) {
+    public DependencyTreeInspector setTreeBuilder(DependencyTreeBuilder treeBuilder) {
         this.treeBuilder = treeBuilder;
         return this;
     }
 
-    public DependencyTreeProcessor setArtifactResolver(MavenArtifactResolver resolver) {
+    public DependencyTreeInspector setArtifactResolver(MavenArtifactResolver resolver) {
         this.resolver = resolver;
         return this;
     }
 
-    public DependencyTreeProcessor setResolveDependencies(boolean resolveDependencies) {
+    public DependencyTreeInspector setResolveDependencies(boolean resolveDependencies) {
         this.resolveDependencies = resolveDependencies;
         return this;
     }
 
-    public DependencyTreeProcessor setTreeVisitor(DependencyTreeVisitor<?> treeVisitor) {
+    public DependencyTreeInspector setTreeVisitor(DependencyTreeVisitor<?> treeVisitor) {
         this.treeVisitor = treeVisitor;
         return this;
     }
 
-    public DependencyTreeProcessor setParallelProcessing(boolean parallelProcessing) {
+    public DependencyTreeInspector setParallelProcessing(boolean parallelProcessing) {
         this.parallelProcessing = parallelProcessing;
         return this;
     }
 
-    public DependencyTreeProcessor setMessageWriter(MessageWriter log) {
+    public DependencyTreeInspector setMessageWriter(MessageWriter log) {
         this.log = log;
         return this;
     }
 
-    public DependencyTreeProcessor addRoot(Artifact artifact) {
-        return addRoot(artifact, List.of(), List.of());
+    public DependencyTreeInspector inspectAsDependency(Artifact artifact) {
+        return inspectAsDependency(artifact, List.of(), List.of());
     }
 
-    public DependencyTreeProcessor addRoot(Artifact artifact, List<Dependency> constraints) {
-        return addRoot(artifact, constraints, List.of());
+    public DependencyTreeInspector inspectAsDependency(Artifact artifact, List<Dependency> constraints) {
+        return inspectAsDependency(artifact, constraints, List.of());
     }
 
-    public DependencyTreeProcessor addRoot(Artifact artifact, List<Dependency> constraints, Collection<Exclusion> exclusions) {
-        this.roots.add(new DependencyTreeRoot(artifact, constraints, exclusions));
+    public DependencyTreeInspector inspectAsDependency(Artifact artifact, List<Dependency> constraints,
+            Collection<Exclusion> exclusions) {
+        return inspect(DependencyTreeRequest.ofDependency(artifact, constraints, exclusions));
+    }
+
+    public DependencyTreeInspector inspectAsRoot(Artifact artifact, List<Dependency> constraints,
+            Collection<Exclusion> exclusions) {
+        return inspect(DependencyTreeRequest.ofRoot(artifact, constraints, exclusions));
+    }
+
+    public DependencyTreeInspector inspectPlugin(Artifact artifact) {
+        return inspect(DependencyTreeRequest.ofPlugin(artifact));
+    }
+
+    public DependencyTreeInspector inspectPlugin(Artifact artifact, Collection<Exclusion> exclusions) {
+        return inspect(DependencyTreeRequest.ofPlugin(artifact, exclusions));
+    }
+
+    public DependencyTreeInspector inspect(DependencyTreeRequest request) {
+        this.roots.add(request);
         return this;
     }
 
-    public void process() {
+    public void complete() {
 
         if (resolver == null) {
             var config = BootstrapMavenContext.config()
@@ -114,9 +132,9 @@ public class DependencyTreeProcessor {
         }
 
         if (treeVisitor == null) {
-            treeVisitor = new DependencyTreeVisitor<Object>() {
+            treeVisitor = new DependencyTreeVisitor<>() {
                 @Override
-                public void visitTree(DependencyTreeVisit<Object> ctx) {
+                public void visit(DependencyTreeVisit<Object> ctx) {
                 }
 
                 @Override
@@ -124,17 +142,17 @@ public class DependencyTreeProcessor {
                 }
 
                 @Override
-                public void handleResolutionFailures(Collection<Artifact> artifacts) {
+                public void handleResolutionFailures(Collection<DependencyTreeError> requests) {
                 }
             };
         }
 
         var scheduler = parallelProcessing
                 ? DependencyTreeVisitScheduler.parallel(treeBuilder, treeVisitor, log, roots.size())
-                : DependencyTreeVisitScheduler.sequencial(treeBuilder, treeVisitor, log, roots.size());
+                : DependencyTreeVisitScheduler.sequential(treeBuilder, treeVisitor, log, roots.size());
 
         for (var r : roots) {
-            scheduler.scheduleProcessing(r);
+            scheduler.process(r);
         }
         scheduler.waitForCompletion();
         if (!scheduler.getResolutionFailures().isEmpty()) {

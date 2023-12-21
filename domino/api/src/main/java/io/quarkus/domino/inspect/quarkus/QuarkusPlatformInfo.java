@@ -1,4 +1,4 @@
-package io.quarkus.domino.tree.quarkus;
+package io.quarkus.domino.inspect.quarkus;
 
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.util.List;
