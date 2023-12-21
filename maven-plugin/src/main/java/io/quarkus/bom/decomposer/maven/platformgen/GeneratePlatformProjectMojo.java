@@ -15,8 +15,19 @@ import io.quarkus.bom.decomposer.maven.MojoMessageWriter;
 import io.quarkus.bom.decomposer.maven.util.Utils;
 import io.quarkus.bom.diff.BomDiff;
 import io.quarkus.bom.diff.HtmlBomDiffReportGenerator;
-import io.quarkus.bom.platform.*;
+import io.quarkus.bom.platform.ForeignPreferredConstraint;
+import io.quarkus.bom.platform.PlatformBomComposer;
+import io.quarkus.bom.platform.PlatformBomConfig;
+import io.quarkus.bom.platform.PlatformBomUtils;
+import io.quarkus.bom.platform.PlatformCatalogResolver;
+import io.quarkus.bom.platform.PlatformMember;
+import io.quarkus.bom.platform.PlatformMemberConfig;
+import io.quarkus.bom.platform.PlatformMemberTestConfig;
 import io.quarkus.bom.platform.PlatformMemberTestConfig.Copy;
+import io.quarkus.bom.platform.ProjectDependencyFilterConfig;
+import io.quarkus.bom.platform.RedHatExtensionDependencyCheck;
+import io.quarkus.bom.platform.ReportIndexPageGenerator;
+import io.quarkus.bom.platform.SbomConfig;
 import io.quarkus.bom.resolver.ArtifactResolver;
 import io.quarkus.bom.resolver.ArtifactResolverProvider;
 import io.quarkus.bom.resolver.EffectiveModelResolver;
@@ -1614,13 +1625,17 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     private Profile copyReleasePlugins(Profile parentReleaseProfile) {
         final Profile memberReleaseProfile = new Profile();
         memberReleaseProfile.setId(parentReleaseProfile.getId());
-        final Build build = new Build();
-        memberReleaseProfile.setBuild(build);
-        for (Plugin plugin : parentReleaseProfile.getBuild().getPlugins()) {
-            if (plugin.getArtifactId().equals("maven-gpg-plugin")) {
-                build.addPlugin(clonePluginConfig(plugin));
-            } else if (plugin.getArtifactId().equals("nexus-staging-maven-plugin")) {
-                build.addPlugin(clonePluginConfig(plugin));
+        memberReleaseProfile.setActivation(parentReleaseProfile.getActivation());
+        if (parentReleaseProfile.getBuild() != null) {
+            final Build build = new Build();
+            memberReleaseProfile.setBuild(build);
+            build.setPluginManagement(parentReleaseProfile.getBuild().getPluginManagement());
+            for (Plugin plugin : parentReleaseProfile.getBuild().getPlugins()) {
+                if (plugin.getArtifactId().equals("maven-gpg-plugin")) {
+                    build.addPlugin(clonePluginConfig(plugin));
+                } else if (plugin.getArtifactId().equals("nexus-staging-maven-plugin")) {
+                    build.addPlugin(clonePluginConfig(plugin));
+                }
             }
         }
         return memberReleaseProfile;
