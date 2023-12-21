@@ -1,17 +1,17 @@
-package io.quarkus.domino.tree;
+package io.quarkus.domino.inspect;
 
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import java.util.Objects;
 import org.eclipse.aether.graph.DependencyNode;
 
-class DefaultTreeProcessingContext<E> implements DependencyTreeVisitor.DependencyTreeVisit<E> {
+class DependencyTreeVisitContext<E> implements DependencyTreeVisitor.DependencyTreeVisit<E> {
 
-    private final DependencyTreeVisitor<E> processor;
+    private final DependencyTreeVisitor<E> visitor;
     private final MessageWriter log;
     DependencyNode root;
 
-    DefaultTreeProcessingContext(DependencyTreeVisitor<E> processor, MessageWriter log) {
-        this.processor = processor;
+    DependencyTreeVisitContext(DependencyTreeVisitor<E> visitor, MessageWriter log) {
+        this.visitor = visitor;
         this.log = log;
     }
 
@@ -28,6 +28,6 @@ class DefaultTreeProcessingContext<E> implements DependencyTreeVisitor.Dependenc
     @Override
     public void pushEvent(E event) {
         Objects.requireNonNull(root, "Dependency tree root node is null");
-        processor.onEvent(event, log);
+        visitor.onEvent(event, log);
     }
 }

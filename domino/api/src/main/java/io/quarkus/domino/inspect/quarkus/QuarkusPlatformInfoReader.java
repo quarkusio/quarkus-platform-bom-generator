@@ -1,4 +1,4 @@
-package io.quarkus.domino.tree.quarkus;
+package io.quarkus.domino.inspect.quarkus;
 
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationFeature;

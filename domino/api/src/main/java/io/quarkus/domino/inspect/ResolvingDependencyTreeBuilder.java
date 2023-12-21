@@ -1,4 +1,4 @@
-package io.quarkus.domino.tree;
+package io.quarkus.domino.inspect;
 
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import org.eclipse.aether.graph.DependencyNode;
@@ -12,7 +12,7 @@ public class ResolvingDependencyTreeBuilder extends DependencyTreeBuilder {
     }
 
     @Override
-    public DependencyNode doBuildTree(DependencyTreeRoot root) {
+    public DependencyNode doBuildTree(DependencyTreeRequest root) {
         try {
             return resolver.getSystem().resolveDependencies(
                     resolver.getSession(),

@@ -8,10 +8,11 @@ import io.quarkus.bootstrap.resolver.maven.options.BootstrapMavenOptions;
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.domino.ArtifactCoordsPattern;
 import io.quarkus.domino.ArtifactSet;
-import io.quarkus.domino.tree.DependencyTreeProcessor;
-import io.quarkus.domino.tree.DependencyTreeVisitor;
-import io.quarkus.domino.tree.quarkus.QuarkusPlatformInfo;
-import io.quarkus.domino.tree.quarkus.QuarkusPlatformInfoReader;
+import io.quarkus.domino.inspect.DependencyTreeError;
+import io.quarkus.domino.inspect.DependencyTreeInspector;
+import io.quarkus.domino.inspect.DependencyTreeVisitor;
+import io.quarkus.domino.inspect.quarkus.QuarkusPlatformInfo;
+import io.quarkus.domino.inspect.quarkus.QuarkusPlatformInfoReader;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.paths.PathTree;
 import io.quarkus.util.GlobUtil;
@@ -121,7 +122,7 @@ public class Quarkus implements Callable<Integer> {
         var treeVisitor = new DependencyTreeVisitor<DependencyStack>() {
 
             @Override
-            public void visitTree(DependencyTreeVisit<DependencyStack> ctx) {
+            public void visit(DependencyTreeVisit<DependencyStack> ctx) {
                 if (tracePattern != null) {
                     visitNode(ctx, ctx.getRoot(), new DependencyStack());
                 }
@@ -163,11 +164,11 @@ public class Quarkus implements Callable<Integer> {
             }
 
             @Override
-            public void handleResolutionFailures(Collection<Artifact> artifacts) {
+            public void handleResolutionFailures(Collection<DependencyTreeError> requests) {
             }
         };
 
-        var treeProcessor = DependencyTreeProcessor.configure()
+        var treeProcessor = DependencyTreeInspector.configure()
                 .setArtifactResolver(resolver)
                 .setResolveDependencies(resolve)
                 .setParallelProcessing(parallelProcessing)
@@ -181,7 +182,7 @@ public class Quarkus implements Callable<Integer> {
                 effectiveConstraints = coreConstraints;
                 var pluginCoords = platform.getMavenPlugin();
                 if (isVersionSelected(pluginCoords.getVersion())) {
-                    treeProcessor.addRoot(getAetherArtifact(pluginCoords));
+                    treeProcessor.inspectPlugin(getAetherArtifact(pluginCoords));
                     if (tracePattern != null) {
                         rootsToMembers.computeIfAbsent(pluginCoords, k -> new ArrayList<>(1)).add(m);
                     }
@@ -197,7 +198,7 @@ public class Quarkus implements Callable<Integer> {
                 for (var e : m.metadata.getExtensions()) {
                     if (isVersionSelected(e.getVersion())) {
                         var d = m.bomConstraints.get(e);
-                        treeProcessor.addRoot(getAetherArtifact(e), effectiveConstraints,
+                        treeProcessor.inspectAsDependency(getAetherArtifact(e), effectiveConstraints,
                                 d == null ? List.of() : d.getExclusions());
                         if (tracePattern != null) {
                             rootsToMembers.computeIfAbsent(e, k -> new ArrayList<>(1)).add(m);
@@ -228,7 +229,7 @@ public class Quarkus implements Callable<Integer> {
                                         });
                             }
                             d = m.bomConstraints.get(deployment);
-                            treeProcessor.addRoot(getAetherArtifact(deployment), effectiveConstraints,
+                            treeProcessor.inspectAsDependency(getAetherArtifact(deployment), effectiveConstraints,
                                     d == null ? List.of() : d.getExclusions());
                             if (tracePattern != null) {
                                 rootsToMembers.computeIfAbsent(deployment, k -> new ArrayList<>(1)).add(m);
@@ -249,7 +250,7 @@ public class Quarkus implements Callable<Integer> {
             }
         }
 
-        treeProcessor.process();
+        treeProcessor.complete();
 
         int membersWithTraces = 0;
         for (var report : memberReports) {

@@ -1,8 +1,7 @@
-package io.quarkus.domino.tree;
+package io.quarkus.domino.inspect;
 
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import java.util.Collection;
-import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.graph.DependencyNode;
 
 public interface DependencyTreeVisitor<E> {
@@ -16,9 +15,9 @@ public interface DependencyTreeVisitor<E> {
         void pushEvent(E event);
     }
 
-    void visitTree(DependencyTreeVisit<E> ctx);
+    void visit(DependencyTreeVisit<E> ctx);
 
     void onEvent(E event, MessageWriter log);
 
-    void handleResolutionFailures(Collection<Artifact> artifacts);
+    void handleResolutionFailures(Collection<DependencyTreeError> errors);
 }

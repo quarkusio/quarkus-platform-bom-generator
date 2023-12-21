@@ -6,8 +6,9 @@ import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.options.BootstrapMavenOptions;
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.domino.ArtifactSet;
-import io.quarkus.domino.tree.DependencyTreeProcessor;
-import io.quarkus.domino.tree.DependencyTreeVisitor;
+import io.quarkus.domino.inspect.DependencyTreeError;
+import io.quarkus.domino.inspect.DependencyTreeInspector;
+import io.quarkus.domino.inspect.DependencyTreeVisitor;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.util.GlobUtil;
 import java.io.BufferedWriter;
@@ -97,7 +98,7 @@ public class Dependency implements Callable<Integer> {
         var treeVisitor = new DependencyTreeVisitor<List<Artifact>>() {
 
             @Override
-            public void visitTree(DependencyTreeVisit<List<Artifact>> ctx) {
+            public void visit(DependencyTreeVisit<List<Artifact>> ctx) {
                 if (tracePattern != null) {
                     visitNode(ctx, ctx.getRoot(), new ArrayList<>());
                 }
@@ -126,9 +127,10 @@ public class Dependency implements Callable<Integer> {
             }
 
             @Override
-            public void handleResolutionFailures(Collection<Artifact> artifacts) {
+            public void handleResolutionFailures(Collection<DependencyTreeError> errors) {
                 if (invalidArtifactsReport != null) {
-                    for (var a : artifacts) {
+                    for (var e : errors) {
+                        var a = e.getRequest().getArtifact();
                         var sb = new StringBuilder();
                         sb.append(a.getGroupId()).append(":").append(a.getArtifactId()).append(":");
                         if (!a.getClassifier().isEmpty()) {
@@ -147,7 +149,7 @@ public class Dependency implements Callable<Integer> {
             }
         };
 
-        var treeProcessor = DependencyTreeProcessor.configure()
+        var treeProcessor = DependencyTreeInspector.configure()
                 .setArtifactResolver(resolver)
                 .setResolveDependencies(resolve)
                 .setParallelProcessing(parallelProcessing)
@@ -171,7 +173,7 @@ public class Dependency implements Callable<Integer> {
             for (var d : descriptor.getManagedDependencies()) {
                 var a = d.getArtifact();
                 if (isVersionSelected(a.getVersion()) && managedRoots.add(d.getArtifact().toString())) {
-                    treeProcessor.addRoot(d.getArtifact(), constraints, d.getExclusions());
+                    treeProcessor.inspectAsDependency(d.getArtifact(), constraints, d.getExclusions());
                 }
             }
         } else if (this.roots.isEmpty()) {
@@ -184,12 +186,12 @@ public class Dependency implements Callable<Integer> {
                 var a = new DefaultArtifact(coords.getGroupId(), coords.getArtifactId(), coords.getClassifier(),
                         coords.getType(), coords.getVersion());
                 if (isVersionSelected(a.getVersion())) {
-                    treeProcessor.addRoot(a);
+                    treeProcessor.inspectAsDependency(a);
                 }
             }
         }
 
-        treeProcessor.process();
+        treeProcessor.complete();
 
         if (!invalidArtifacts.isEmpty() && invalidArtifactsReport != null) {
             var list = new ArrayList<>(invalidArtifacts);
