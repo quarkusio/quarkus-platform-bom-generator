@@ -1,6 +1,5 @@
 package io.quarkus.domino.inspect;
 
-import io.quarkus.devtools.messagewriter.MessageWriter;
 import java.util.ArrayList;
 import java.util.Formatter;
 import java.util.List;
@@ -15,10 +14,12 @@ abstract class DependencyTreeVisitSchedulerBase<E> implements DependencyTreeVisi
     protected final DependencyTreeVisitContext<E> ctx;
     protected final AtomicInteger counter = new AtomicInteger();
     protected final int rootsTotal;
+    private final String progressTrackerPrefix;
 
-    DependencyTreeVisitSchedulerBase(DependencyTreeVisitor<E> visitor, MessageWriter log, int rootsTotal) {
-        ctx = new DependencyTreeVisitContext<>(visitor, log);
+    DependencyTreeVisitSchedulerBase(DependencyTreeVisitContext<E> ctx, int rootsTotal, String progressTrackerPrefix) {
+        this.ctx = ctx;
         this.rootsTotal = rootsTotal;
+        this.progressTrackerPrefix = progressTrackerPrefix;
     }
 
     @Override
@@ -27,12 +28,15 @@ abstract class DependencyTreeVisitSchedulerBase<E> implements DependencyTreeVisi
     }
 
     protected String getResolvedTreeMessage(Artifact a) {
-        var sb = new StringBuilder(160);
+        var sb = new StringBuilder(180);
         var formatter = new Formatter(sb);
         var treeIndex = counter.incrementAndGet();
         final double percents = ((double) treeIndex * 100) / rootsTotal;
 
         formatter.format(FORMAT_BASE, treeIndex, rootsTotal, percents);
+        if (progressTrackerPrefix != null) {
+            sb.append(progressTrackerPrefix);
+        }
 
         sb.append(a.getGroupId()).append(':').append(a.getArtifactId()).append(':');
         if (!a.getClassifier().isEmpty()) {
@@ -47,10 +51,14 @@ abstract class DependencyTreeVisitSchedulerBase<E> implements DependencyTreeVisi
         return sb.append(a.getVersion()).toString();
     }
 
-    protected String formatErrorMessage(DependencyTreeRequest request, Exception e) {
+    protected String formatErrorMessage(DependencyTreeRequest request, Throwable e) {
         var sb = new StringBuilder();
         sb.append("Failed to process dependencies of ").append(request.getArtifact());
         if (e != null) {
+            if (e.getCause() != null) {
+                // the outer one is most probably a tree processing wrapper of the actual one thrown by the resolver
+                e = e.getCause();
+            }
             var error = e.getLocalizedMessage();
             sb.append(" because ").append(Character.toLowerCase(error.charAt(0))).append(error.substring(1));
         }
