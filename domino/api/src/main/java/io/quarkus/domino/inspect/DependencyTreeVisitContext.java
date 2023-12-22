@@ -6,8 +6,8 @@ import org.eclipse.aether.graph.DependencyNode;
 
 class DependencyTreeVisitContext<E> implements DependencyTreeVisitor.DependencyTreeVisit<E> {
 
-    private final DependencyTreeVisitor<E> visitor;
-    private final MessageWriter log;
+    final DependencyTreeVisitor<E> visitor;
+    final MessageWriter log;
     DependencyNode root;
 
     DependencyTreeVisitContext(DependencyTreeVisitor<E> visitor, MessageWriter log) {

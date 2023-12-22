@@ -1,19 +1,14 @@
 package io.quarkus.domino.inspect;
 
-import io.quarkus.devtools.messagewriter.MessageWriter;
 import org.eclipse.aether.graph.DependencyNode;
 
-public class SequentialTreeVisitScheduler<E> extends DependencyTreeVisitSchedulerBase<E> {
+class SequentialTreeVisitScheduler<E> extends DependencyTreeVisitSchedulerBase<E> {
 
-    private final DependencyTreeVisitor<E> visitor;
-    private final MessageWriter log;
     private final DependencyTreeBuilder treeBuilder;
 
-    public SequentialTreeVisitScheduler(DependencyTreeVisitor<E> visitor, MessageWriter log, int treesTotal,
-            DependencyTreeBuilder treeBuilder) {
-        super(visitor, log, treesTotal);
-        this.visitor = visitor;
-        this.log = log;
+    SequentialTreeVisitScheduler(DependencyTreeVisitContext<E> ctx, int treesTotal,
+            DependencyTreeBuilder treeBuilder, String progressTrackerPrefix) {
+        super(ctx, treesTotal, progressTrackerPrefix);
         this.treeBuilder = treeBuilder;
     }
 
@@ -22,14 +17,14 @@ public class SequentialTreeVisitScheduler<E> extends DependencyTreeVisitSchedule
         final DependencyNode rootNode;
         try {
             rootNode = treeBuilder.buildTree(req);
-            log.info(getResolvedTreeMessage(rootNode.getArtifact()));
+            ctx.log.info(getResolvedTreeMessage(rootNode.getArtifact()));
         } catch (Exception e) {
             errors.add(new DependencyTreeError(req, e));
-            log.error(formatErrorMessage(req, e));
+            ctx.log.error(formatErrorMessage(req, e));
             return;
         }
         ctx.root = rootNode;
-        visitor.visit(ctx);
+        ctx.visitor.visit(ctx);
     }
 
     @Override

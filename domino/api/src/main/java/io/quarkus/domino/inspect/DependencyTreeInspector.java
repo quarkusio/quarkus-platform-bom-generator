@@ -26,17 +26,13 @@ public class DependencyTreeInspector {
     private MavenArtifactResolver resolver;
     private boolean resolveDependencies;
     private DependencyTreeBuilder treeBuilder;
-    private DependencyTreeVisitor<?> treeVisitor;
+    private DependencyTreeVisitor<?> visitor;
     private boolean parallelProcessing;
     private MessageWriter log;
     private List<DependencyTreeRequest> roots = new ArrayList<>();
+    private String progressTrackerPrefix;
 
     private DependencyTreeInspector() {
-    }
-
-    public DependencyTreeInspector setTreeBuilder(DependencyTreeBuilder treeBuilder) {
-        this.treeBuilder = treeBuilder;
-        return this;
     }
 
     public DependencyTreeInspector setArtifactResolver(MavenArtifactResolver resolver) {
@@ -49,8 +45,13 @@ public class DependencyTreeInspector {
         return this;
     }
 
+    public DependencyTreeInspector setTreeBuilder(DependencyTreeBuilder treeBuilder) {
+        this.treeBuilder = treeBuilder;
+        return this;
+    }
+
     public DependencyTreeInspector setTreeVisitor(DependencyTreeVisitor<?> treeVisitor) {
-        this.treeVisitor = treeVisitor;
+        this.visitor = treeVisitor;
         return this;
     }
 
@@ -95,6 +96,11 @@ public class DependencyTreeInspector {
         return this;
     }
 
+    public DependencyTreeInspector setProgressTrackerPrefix(String progressTrackerPrefix) {
+        this.progressTrackerPrefix = progressTrackerPrefix;
+        return this;
+    }
+
     public void complete() {
 
         if (resolver == null) {
@@ -131,8 +137,8 @@ public class DependencyTreeInspector {
             log = MessageWriter.info();
         }
 
-        if (treeVisitor == null) {
-            treeVisitor = new DependencyTreeVisitor<>() {
+        if (visitor == null) {
+            visitor = new DependencyTreeVisitor<>() {
                 @Override
                 public void visit(DependencyTreeVisit<Object> ctx) {
                 }
@@ -148,15 +154,19 @@ public class DependencyTreeInspector {
         }
 
         var scheduler = parallelProcessing
-                ? DependencyTreeVisitScheduler.parallel(treeBuilder, treeVisitor, log, roots.size())
-                : DependencyTreeVisitScheduler.sequential(treeBuilder, treeVisitor, log, roots.size());
+                ? new ParallelTreeVisitScheduler<>(
+                        new DependencyTreeVisitContext<>(visitor, log),
+                        roots.size(), treeBuilder, progressTrackerPrefix)
+                : new SequentialTreeVisitScheduler<>(
+                        new DependencyTreeVisitContext<>(visitor, log),
+                        roots.size(), treeBuilder, progressTrackerPrefix);
 
         for (var r : roots) {
             scheduler.process(r);
         }
         scheduler.waitForCompletion();
         if (!scheduler.getResolutionFailures().isEmpty()) {
-            treeVisitor.handleResolutionFailures(scheduler.getResolutionFailures());
+            visitor.handleResolutionFailures(scheduler.getResolutionFailures());
         }
     }
 }

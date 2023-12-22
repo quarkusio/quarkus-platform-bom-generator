@@ -2,6 +2,7 @@ package io.quarkus.domino.inspect;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.Exclusion;
@@ -32,6 +33,10 @@ public class DependencyTreeRequest {
         return new DependencyTreeRequest(artifact, List.of(), exclusions, PLUGIN);
     }
 
+    // this is not the best idea but it'll work for now
+    private static final AtomicInteger counter = new AtomicInteger();
+
+    private final Integer id;
     private final Artifact root;
     private final List<Dependency> constraints;
     private final Collection<Exclusion> exclusions;
@@ -42,10 +47,11 @@ public class DependencyTreeRequest {
         this.constraints = constraints;
         this.exclusions = exclusions;
         this.type = type;
+        id = counter.incrementAndGet();
     }
 
-    String getId() {
-        return root.toString();
+    Integer getId() {
+        return id;
     }
 
     public Artifact getArtifact() {
