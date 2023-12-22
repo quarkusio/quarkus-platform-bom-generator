@@ -21,10 +21,8 @@ import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,8 +39,6 @@ import picocli.CommandLine;
 @CommandLine.Command(name = "quarkus", header = "Quarkus platform release analysis", description = "%n"
         + "Various options to analyze dependencies of a Quarkus platform release.")
 public class Quarkus implements Callable<Integer> {
-
-    private static final String ARROW = "\u21b3";
 
     @CommandLine.Option(names = {
             "--settings",
@@ -68,8 +64,8 @@ public class Quarkus implements Callable<Integer> {
     protected List<String> trace = List.of();
 
     @CommandLine.Option(names = {
-            "--full-chain" }, description = "Log complete dependency chain for traced artifacts")
-    public boolean fullChain;
+            "--tree" }, description = "Log complete dependency tree for traced artifacts")
+    public boolean tree;
 
     @CommandLine.Option(names = {
             "--resolve" }, description = "Resolve binary artifacts in addition to collecting their metadata")
@@ -119,45 +115,64 @@ public class Quarkus implements Callable<Integer> {
         }
         final Map<ArtifactCoords, List<MemberReport>> rootsToMembers = tracePattern == null ? Map.of() : new HashMap<>();
 
-        var treeVisitor = new DependencyTreeVisitor<DependencyStack>() {
+        var treeVisitor = new DependencyTreeVisitor<TreeNode>() {
+
+            final Map<Artifact, String> enforcedBy = new HashMap<>();
 
             @Override
-            public void visit(DependencyTreeVisit<DependencyStack> ctx) {
+            public void visit(DependencyTreeVisit<TreeNode> visit) {
                 if (tracePattern != null) {
-                    visitNode(ctx, ctx.getRoot(), new DependencyStack());
+                    var result = visit(visit, visit.getRoot());
+                    if (result != null) {
+                        visit.pushEvent(result);
+                    }
                 }
             }
 
-            private void visitNode(DependencyTreeVisit<DependencyStack> ctx, DependencyNode node, DependencyStack stack) {
+            private TreeNode visit(DependencyTreeVisit<TreeNode> visit, DependencyNode node) {
                 var a = node.getArtifact();
-                stack.push(a);
+                TreeNode result = null;
                 if (tracePattern.contains(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(),
                         a.getVersion())) {
-                    stack.eventPushScheduled = true;
-                } else if (stack.eventPushScheduled) {
-                    stack.pop();
-                    return;
+                    var enforced = enforcedBy.computeIfAbsent(a, k -> {
+                        var coords = ArtifactCoords.of(k.getGroupId(), k.getArtifactId(), k.getClassifier(),
+                                k.getExtension(), k.getVersion());
+                        StringBuilder sb = null;
+                        for (var report : memberReports) {
+                            if ((report.enabled || report == coreReport) && report.bomConstraints.containsKey(coords)) {
+                                if (sb == null) {
+                                    sb = new StringBuilder().append(" [managed by ");
+                                } else {
+                                    sb.append(", ");
+                                }
+                                sb.append(report.metadata.getBom().getArtifactId());
+                            }
+                        }
+                        return sb == null ? "" : sb.append("]").toString();
+                    });
+                    result = new TreeNode(a, true, enforced);
                 }
                 for (var child : node.getChildren()) {
-                    visitNode(ctx, child, stack);
+                    var childResult = visit(visit, child);
+                    if (childResult != null) {
+                        if (result == null) {
+                            result = new TreeNode(a, false);
+                        }
+                        result.addChild(childResult);
+                    }
                 }
-                if (stack.eventPushScheduled) {
-                    ctx.pushEvent(stack);
-                    stack.eventPushScheduled = false;
-                }
-                stack.pop();
+                return result;
             }
 
             @Override
-            public void onEvent(DependencyStack stack, MessageWriter log) {
+            public void onEvent(TreeNode root, MessageWriter log) {
                 if (!rootsToMembers.isEmpty()) {
-                    var a = stack.peek();
+                    var a = root.artifact;
                     var reports = rootsToMembers.get(ArtifactCoords.of(a.getGroupId(), a.getArtifactId(),
                             a.getClassifier(), a.getExtension(), a.getVersion()));
                     if (reports != null) {
-                        var copy = stack.toList();
                         for (var report : reports) {
-                            report.addTracedExtensionDependency(copy);
+                            report.addTracedExtensionDependency(root);
                         }
                     }
                 }
@@ -269,38 +284,11 @@ public class Quarkus implements Callable<Integer> {
                     }
                 }
                 if (!report.tracedExtensionDeps.isEmpty()) {
-                    final Map<Artifact, String> enforcedBy = new HashMap<>(1);
                     log.info("");
                     log.info("= Extension dependencies");
                     for (var result : report.tracedExtensionDeps) {
-                        var enforced = enforcedBy.computeIfAbsent(result.get(result.size() - 1), k -> {
-                            var coords = ArtifactCoords.of(k.getGroupId(), k.getArtifactId(), k.getClassifier(),
-                                    k.getExtension(), k.getVersion());
-                            StringBuilder sb = null;
-                            if (report.bomConstraints.containsKey(coords)) {
-                                sb = new StringBuilder().append(" [managed by ")
-                                        .append(report.metadata.getBom().getArtifactId());
-                            }
-                            if (report != coreReport && coreReport.bomConstraints.containsKey(coords)) {
-                                if (sb == null) {
-                                    sb = new StringBuilder().append(" [managed by ");
-                                } else {
-                                    sb.append(", ");
-                                }
-                                sb.append(coreReport.metadata.getBom().getArtifactId());
-                            }
-                            return sb == null ? "" : sb.append("]").toString();
-                        });
                         log.info("");
-                        var i = 0;
-                        if (fullChain) {
-                            while (i < result.size() - 1) {
-                                log.info(getMessage(i, result.get(i++)));
-                            }
-                        } else if (i < result.size() - 1) {
-                            log.info(getMessage(0, result.get(i++)));
-                        }
-                        log.info(getMessage(i, result.get(result.size() - 1)) + enforced);
+                        result.log(log, tree);
                     }
                 }
             }
@@ -386,17 +374,6 @@ public class Quarkus implements Callable<Integer> {
         return new MavenArtifactResolver(new BootstrapMavenContext(config));
     }
 
-    private static String getMessage(int i, Artifact a) {
-        var sb = new StringBuilder();
-        if (i > 0) {
-            for (int j = 0; j < i - 1; ++j) {
-                sb.append("  ");
-            }
-            sb.append(ARROW).append(' ');
-        }
-        return sb.append(toCompactCoords(a)).toString();
-    }
-
     private static String toCompactCoords(Artifact a) {
         var sb = new StringBuilder();
         sb.append(a.getGroupId()).append(":").append(a.getArtifactId()).append(":");
@@ -464,7 +441,7 @@ public class Quarkus implements Callable<Integer> {
         private final boolean enabled;
         private Map<ArtifactCoords, Dependency> bomConstraints = Map.of();
         private List<Dependency> tracedBomConstraints = List.of();
-        private List<List<Artifact>> tracedExtensionDeps = List.of();
+        private List<TreeNode> tracedExtensionDeps = List.of();
 
         MemberReport(QuarkusPlatformInfo.Member metadata) {
             this(metadata, true);
@@ -482,11 +459,11 @@ public class Quarkus implements Callable<Integer> {
             tracedBomConstraints.add(d);
         }
 
-        void addTracedExtensionDependency(List<Artifact> chain) {
+        void addTracedExtensionDependency(TreeNode root) {
             if (tracedExtensionDeps.isEmpty()) {
                 tracedExtensionDeps = new ArrayList<>();
             }
-            tracedExtensionDeps.add(chain);
+            tracedExtensionDeps.add(root);
         }
 
         boolean hasTraces() {
@@ -494,24 +471,115 @@ public class Quarkus implements Callable<Integer> {
         }
     }
 
-    private static class DependencyStack {
-        final Deque<Artifact> chain = new ArrayDeque<>();
-        boolean eventPushScheduled;
+    private static class TreeNode {
 
-        void push(Artifact a) {
-            chain.addLast(a);
+        private static final String ARROW = "↳";
+        private static final String VERTICAL_LINE = "│  ";
+        private static final String MIDDLE_LINK = "├─ ";
+        private static final String LAST_LINK = "└─ ";
+
+        final Artifact artifact;
+        final String enforcedBy;
+        final boolean matched;
+        List<TreeNode> tracedChildren = List.of();
+
+        private TreeNode(Artifact a, boolean matched) {
+            this(a, matched, null);
         }
 
-        void pop() {
-            chain.removeLast();
+        private TreeNode(Artifact a, boolean matched, String enforcedBy) {
+            this.artifact = a;
+            this.enforcedBy = enforcedBy;
+            this.matched = matched;
         }
 
-        Artifact peek() {
-            return chain.peekFirst();
+        private void addChild(TreeNode child) {
+            if (tracedChildren.isEmpty()) {
+                tracedChildren = new ArrayList<>(2);
+            }
+            tracedChildren.add(child);
         }
 
-        List<Artifact> toList() {
-            return List.copyOf(chain);
+        private void log(MessageWriter log, boolean fullChain) {
+            if (fullChain) {
+                log(new ArrayList<>(), log);
+            } else {
+                var queue = new ArrayList<>(tracedChildren);
+                var result = new ArrayList<TreeNode>();
+                for (int i = 0; i < queue.size(); ++i) {
+                    var child = queue.get(i);
+                    if (child.matched) {
+                        result.add(child);
+                    }
+                    queue.addAll(child.tracedChildren);
+                }
+
+                var sb = new StringBuilder();
+                append(sb);
+                log.info(sb.toString());
+
+                for (var child : result) {
+                    sb = new StringBuilder();
+                    sb.append(ARROW).append(' ');
+                    child.append(sb);
+                    log.info(sb.toString());
+                }
+            }
+        }
+
+        private void log(List<Boolean> depth, MessageWriter log) {
+            var sb = new StringBuilder();
+            if (!depth.isEmpty()) {
+                for (int i = 0; i < depth.size() - 1; ++i) {
+                    if (depth.get(i)) {
+                        sb.append(VERTICAL_LINE);
+                    } else {
+                        sb.append("   ");
+                    }
+                }
+                if (depth.get(depth.size() - 1)) {
+                    sb.append(MIDDLE_LINK);
+                } else {
+                    sb.append(LAST_LINK);
+                }
+            }
+            append(sb);
+            log.info(sb.toString());
+
+            final int childrenTotal = tracedChildren.size();
+            if (childrenTotal > 0) {
+                if (childrenTotal == 1) {
+                    depth.add(false);
+                    tracedChildren.get(0).log(depth, log);
+                } else {
+                    depth.add(true);
+                    int i = 0;
+                    while (i < childrenTotal) {
+                        tracedChildren.get(i++).log(depth, log);
+                        if (i == childrenTotal - 1) {
+                            depth.set(depth.size() - 1, false);
+                        }
+                    }
+                }
+                depth.remove(depth.size() - 1);
+            }
+        }
+
+        private void append(StringBuilder out) {
+            out.append(artifact.getGroupId()).append(':').append(artifact.getArtifactId()).append(':');
+            if (!artifact.getClassifier().isEmpty()) {
+                out.append(artifact.getClassifier()).append(':');
+            }
+            if (!"jar".equals(artifact.getExtension())) {
+                if (artifact.getClassifier().isEmpty()) {
+                    out.append(':');
+                }
+                out.append(artifact.getExtension()).append(':');
+            }
+            out.append(artifact.getVersion());
+            if (enforcedBy != null) {
+                out.append(enforcedBy);
+            }
         }
     }
 }
