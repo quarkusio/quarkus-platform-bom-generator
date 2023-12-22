@@ -127,9 +127,9 @@ For example, the following command will find all the extensions that have an art
 java -jar domino.jar quarkus --version=3.2.9.Final --trace snappy*
 ```
 
-By default, only the extension artifacts having the matching artifact and the matching artifact itself are logged in the report. Add `--full-chain` to see complete dependency chains from each extension artifact to the matched artifacts.
+By default, only the extension artifacts having the matching artifacts among their dependencies and those matched artifacts are logged in the report. Add `--tree` to see the complete dependency subtree from each extension artifact to the matched artifacts.
 ```
-java -jar domino.jar quarkus --version=3.2.9.Final --trace snappy* --full-chain
+java -jar domino.jar quarkus --version=3.2.9.Final --trace snappy* --tree
 ```
 
 Analysis could be limited to selected members using `--members` argument that accepts a comma-separated list of platform member BOM `artifactId`s, for example
