@@ -33,6 +33,6 @@ public enum BuildTool {
                 }
             }
         }
-        throw new IllegalArgumentException("Unable to find a determine the build tool for " + projectDir);
+        throw new IllegalArgumentException("Unable to determine the build tool for " + projectDir);
     }
 }

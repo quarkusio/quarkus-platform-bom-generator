@@ -11,7 +11,7 @@ public interface DecomposedBomBuilder {
 
     void bomArtifact(Artifact bomArtifact);
 
-    void bomDependency(ScmRevision releaseId, Dependency dep) throws BomDecomposerException;
+    void bomDependency(ScmRevision revision, Dependency dep) throws BomDecomposerException;
 
     DecomposedBom build() throws BomDecomposerException;
 }
