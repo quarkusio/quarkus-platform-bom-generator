@@ -5,9 +5,10 @@ import io.quarkus.maven.dependency.ArtifactKey;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.graph.Dependency;
@@ -19,7 +20,7 @@ class ProjectReleaseImpl implements ProjectRelease {
         private Builder() {
         }
 
-        private LinkedHashMap<ArtifactKey, ProjectDependency> deps = new LinkedHashMap<>();
+        private Map<ArtifactKey, ProjectDependency> deps = new ConcurrentHashMap<>();
 
         @Override
         public ScmRevision id() {
