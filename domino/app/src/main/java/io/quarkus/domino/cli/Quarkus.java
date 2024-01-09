@@ -8,12 +8,14 @@ import io.quarkus.bootstrap.resolver.maven.options.BootstrapMavenOptions;
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.domino.ArtifactCoordsPattern;
 import io.quarkus.domino.ArtifactSet;
+import io.quarkus.domino.RhVersionPattern;
 import io.quarkus.domino.inspect.DependencyTreeError;
 import io.quarkus.domino.inspect.DependencyTreeInspector;
 import io.quarkus.domino.inspect.DependencyTreeVisitor;
 import io.quarkus.domino.inspect.quarkus.QuarkusPlatformInfo;
 import io.quarkus.domino.inspect.quarkus.QuarkusPlatformInfoReader;
 import io.quarkus.maven.dependency.ArtifactCoords;
+import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.paths.PathTree;
 import io.quarkus.util.GlobUtil;
 import java.io.BufferedReader;
@@ -39,6 +41,10 @@ import picocli.CommandLine;
 @CommandLine.Command(name = "quarkus", header = "Quarkus platform release analysis", description = "%n"
         + "Various options to analyze dependencies of a Quarkus platform release.")
 public class Quarkus implements Callable<Integer> {
+
+    private static final List<ArtifactKey> EXTRA_CORE_ARTIFACTS = List.of(
+            ArtifactKey.of("io.quarkus", "quarkus-junit5", ArtifactCoords.DEFAULT_CLASSIFIER, ArtifactCoords.TYPE_JAR),
+            ArtifactKey.of("io.quarkus", "quarkus-junit5-mockito", ArtifactCoords.DEFAULT_CLASSIFIER, ArtifactCoords.TYPE_JAR));
 
     @CommandLine.Option(names = {
             "--settings",
@@ -200,6 +206,26 @@ public class Quarkus implements Callable<Integer> {
                     treeProcessor.inspectPlugin(getAetherArtifact(pluginCoords));
                     if (tracePattern != null) {
                         rootsToMembers.computeIfAbsent(pluginCoords, k -> new ArrayList<>(1)).add(m);
+                    }
+                }
+                for (var extraKey : EXTRA_CORE_ARTIFACTS) {
+                    var extraArtifact = ArtifactCoords.of(extraKey.getGroupId(), extraKey.getArtifactId(),
+                            extraKey.getClassifier(), extraKey.getType(), platform.getCore().getQuarkusCoreVersion());
+                    var d = m.bomConstraints.get(extraArtifact);
+                    if (d == null && RhVersionPattern.isRhVersion(platform.getCore().getQuarkusCoreVersion())) {
+                        extraArtifact = ArtifactCoords.of(extraKey.getGroupId(), extraKey.getArtifactId(),
+                                extraKey.getClassifier(), extraKey.getType(),
+                                RhVersionPattern.ensureNoRhQualifier(platform.getCore().getQuarkusCoreVersion()));
+                        d = m.bomConstraints.get(extraArtifact);
+                    }
+                    if (d == null) {
+                        log.warn("Failed to locate " + extraArtifact + " among "
+                                + platform.getCore().getBom().toCompactCoords() + " constraints");
+                    } else if (isVersionSelected(d.getArtifact().getVersion())) {
+                        if (tracePattern != null) {
+                            rootsToMembers.computeIfAbsent(extraArtifact, k -> new ArrayList<>(1)).add(m);
+                        }
+                        treeProcessor.inspectAsDependency(d.getArtifact(), effectiveConstraints, d.getExclusions());
                     }
                 }
             } else {
@@ -570,7 +596,7 @@ public class Quarkus implements Callable<Integer> {
             if (!artifact.getClassifier().isEmpty()) {
                 out.append(artifact.getClassifier()).append(':');
             }
-            if (!"jar".equals(artifact.getExtension())) {
+            if (!ArtifactCoords.TYPE_JAR.equals(artifact.getExtension())) {
                 if (artifact.getClassifier().isEmpty()) {
                     out.append(':');
                 }

@@ -10,6 +10,7 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
 import io.quarkus.devtools.messagewriter.MessageWriter;
+import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.domino.scm.ScmRevisionResolver;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.nio.file.Path;
@@ -18,7 +19,6 @@ import java.util.List;
 import java.util.ServiceLoader;
 import org.apache.maven.model.DistributionManagement;
 import org.apache.maven.model.Model;
-import org.apache.maven.model.resolution.UnresolvableModelException;
 import org.apache.maven.project.ProjectBuildingRequest;
 import org.apache.maven.project.ProjectModelResolver;
 import org.eclipse.aether.RequestTrace;
@@ -26,6 +26,7 @@ import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.resolution.ArtifactDescriptorResult;
+import org.eclipse.aether.resolution.ArtifactResult;
 
 public class BomDecomposer {
 
@@ -76,15 +77,16 @@ public class BomDecomposer {
 
             final BootstrapMavenContext mvnCtx = underlyingResolver.getMavenContext();
             final LocalProject bomProject = mvnCtx.getCurrentProject();
-            bomArtifact = new DefaultArtifact(bomProject.getGroupId(), bomProject.getArtifactId(), "", "pom",
-                    bomProject.getVersion());
+            bomArtifact = new DefaultArtifact(bomProject.getGroupId(), bomProject.getArtifactId(),
+                    ArtifactCoords.DEFAULT_CLASSIFIER, ArtifactCoords.TYPE_POM, bomProject.getVersion());
             bomArtifact = bomArtifact.setFile(bom.toFile());
             bomSource = PomSource.of(bom);
             return this;
         }
 
         public BomDecomposerConfig bomArtifact(String groupId, String artifactId, String version) {
-            return bomArtifact(new DefaultArtifact(groupId, artifactId, "", "pom", version));
+            return bomArtifact(new DefaultArtifact(groupId, artifactId, ArtifactCoords.DEFAULT_CLASSIFIER,
+                    ArtifactCoords.TYPE_POM, version));
         }
 
         public BomDecomposerConfig bomArtifact(Artifact artifact) {
@@ -163,44 +165,54 @@ public class BomDecomposer {
         //bomBuilder.bomSource(PomSource.of(resolve(bomArtifact).getFile().toPath()));
         final Iterable<Dependency> artifacts = this.artifacts == null ? bomManagedDeps() : this.artifacts;
         for (Dependency dep : artifacts) {
-            try {
-                // filter out dependencies that can't be resolved
-                // if an artifact has a classifier we resolve the artifact itself
-                // if an artifact does not have a classifier we will try resolving its pom
-                final Artifact artifact = dep.getArtifact();
-                final String classifier = artifact.getClassifier();
-                if (!classifier.isEmpty() &&
-                        !classifier.equals("sources") &&
-                        !classifier.equals("javadoc")) {
-                    resolve(artifact);
-                } else if (ArtifactCoords.TYPE_JAR.equals(artifact.getExtension())) {
-                    final Model model = revisionResolver.readPom(artifact);
-                    if (ArtifactCoords.TYPE_POM.equals(model.getPackaging())) {
-                        // if an artifact has type JAR but the packaging is POM then check whether the artifact is resolvable
-                        try {
-                            resolve(artifact);
-                        } catch (BomDecomposerException | ArtifactNotFoundException e) {
-                            final DistributionManagement distr = model.getDistributionManagement();
-                            if (distr == null || distr.getRelocation() == null) {
-                                // there is no relocation, so it can be removed
-                                throw e;
-                            }
-                            logger().debug("Found relocation for %s", artifact);
-                        }
-                    }
-                }
-                bomBuilder.bomDependency(revisionResolver.resolveRevision(artifact, List.of()), dep);
-            } catch (BomDecomposerException e) {
-                throw e;
-            } catch (ArtifactNotFoundException | UnresolvableModelException e) {
-                // there are plenty of BOMs that include artifacts that don't exist
-                logger().debug("Failed to resolve %s", dep);
-            }
+            addDependency(bomBuilder, dep);
         }
         return transformer == null ? bomBuilder.build() : transformer.transform(bomBuilder.build());
     }
 
-    private Iterable<Dependency> bomManagedDeps() throws BomDecomposerException {
+    private void addDependency(DecomposedBomBuilder bomBuilder, Dependency dep) throws BomDecomposerException {
+        try {
+            // filter out dependencies that can't be resolved
+            // if an artifact has a classifier we resolve the artifact itself
+            // if an artifact does not have a classifier we will try resolving its pom
+            validateArtifact(dep.getArtifact());
+            ScmRevision revision = resolveRevision(dep.getArtifact());
+            bomBuilder.bomDependency(revision, dep);
+        } catch (ArtifactNotFoundException e) {
+            // there are plenty of BOMs that include artifacts that don't exist
+            logger().debug("Failed to resolve %s", dep);
+        }
+    }
+
+    private ScmRevision resolveRevision(Artifact artifact) throws BomDecomposerException {
+        return revisionResolver.resolveRevision(artifact, List.of());
+    }
+
+    private void validateArtifact(Artifact artifact) throws BomDecomposerException {
+        final String classifier = artifact.getClassifier();
+        if (!classifier.isEmpty() &&
+                !classifier.equals("sources") &&
+                !classifier.equals("javadoc")) {
+            resolve(artifact);
+        } else if (ArtifactCoords.TYPE_JAR.equals(artifact.getExtension())) {
+            final Model model = revisionResolver.readPom(artifact);
+            if (ArtifactCoords.TYPE_POM.equals(model.getPackaging())) {
+                // if an artifact has type JAR but the packaging is POM then check whether the artifact is resolvable
+                try {
+                    resolve(artifact);
+                } catch (ArtifactNotFoundException e) {
+                    final DistributionManagement distr = model.getDistributionManagement();
+                    if (distr == null || distr.getRelocation() == null) {
+                        // there is no relocation, so it can be removed
+                        throw e;
+                    }
+                    logger().debug("Found relocation for %s", artifact);
+                }
+            }
+        }
+    }
+
+    private Iterable<Dependency> bomManagedDeps() {
         return describe(bomArtifact).getManagedDependencies();
     }
 
@@ -208,12 +220,12 @@ public class BomDecomposer {
         return logger == null ? logger = MessageWriter.debug() : logger;
     }
 
-    private ArtifactDescriptorResult describe(Artifact artifact) throws BomDecomposerException {
+    private ArtifactDescriptorResult describe(Artifact artifact) {
         return artifactResolver().describe(artifact);
     }
 
-    private Artifact resolve(Artifact artifact) throws BomDecomposerException {
-        return artifactResolver().resolve(artifact).getArtifact();
+    private ArtifactResult resolve(Artifact artifact) {
+        return artifactResolver().resolve(artifact);
     }
 
     private ProjectModelResolver getModelResolver() {

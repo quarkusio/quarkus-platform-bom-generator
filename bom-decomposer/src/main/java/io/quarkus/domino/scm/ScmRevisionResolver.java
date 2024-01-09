@@ -17,15 +17,13 @@ import java.net.http.HttpResponse.BodySubscribers;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.WeakHashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import org.apache.maven.model.Model;
-import org.apache.maven.model.resolution.UnresolvableModelException;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.repository.RemoteRepository;
 
@@ -68,7 +66,7 @@ public class ScmRevisionResolver {
     }
 
     public ScmRevision resolveRevision(Artifact artifact, List<RemoteRepository> repos)
-            throws BomDecomposerException, UnresolvableModelException {
+            throws BomDecomposerException {
         var gav = new GAV(artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion());
         var revision = cache.get(gav);
         if (revision == null) {
@@ -221,8 +219,8 @@ public class ScmRevisionResolver {
     }
 
     private static class ScmRevisionCache {
-        private final Map<GAV, ScmRevision> gavRevisions = new WeakHashMap<>();
-        private final Map<String, ScmRevision> groupIdRevisions = new HashMap<>();
+        private final Map<GAV, ScmRevision> gavRevisions = new ConcurrentHashMap<>();
+        private final Map<String, ScmRevision> groupIdRevisions = new ConcurrentHashMap<>();
 
         ScmRevision get(GAV gav) {
             return gavRevisions.get(gav);
@@ -230,7 +228,9 @@ public class ScmRevisionResolver {
 
         void put(GAV gav, ScmRevision revision) {
             gavRevisions.put(gav, revision);
-            groupIdRevisions.put(gav.getGroupId(), revision);
+            if (revision.getRepository().isUrl()) {
+                groupIdRevisions.put(gav.getGroupId(), revision);
+            }
         }
     }
 }
