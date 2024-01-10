@@ -894,10 +894,6 @@ public class ProjectDependencyResolver {
                 .setCloneLocalRecipeRepos(false)
                 .setFallback(gav -> {
 
-                    if ("8.34.0.Final".equals(gav.getVersion())) {
-                        throw new IllegalArgumentException(gav.toString());
-                    }
-
                     var pomArtifact = new DefaultArtifact(gav.getGroupId(), gav.getArtifactId(), ArtifactCoords.TYPE_POM,
                             gav.getVersion());
 
