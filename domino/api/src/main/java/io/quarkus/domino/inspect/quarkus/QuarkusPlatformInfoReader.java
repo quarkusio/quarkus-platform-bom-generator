@@ -92,11 +92,17 @@ public class QuarkusPlatformInfoReader {
         }
 
         var coreMember = readMember(platformKey, QUARKUS_BOM, version);
-        var allMembers = new ArrayList<QuarkusPlatformInfo.Member>(coreMember.getRelease().getMemberBoms().size());
-        allMembers.add(coreMember);
-        for (var memberBom : coreMember.getRelease().getMemberBoms()) {
-            if (!memberBom.equals(coreMember.getBom())) {
-                allMembers.add(readMember(memberBom.getGroupId(), memberBom.getArtifactId(), memberBom.getVersion()));
+        final List<QuarkusPlatformInfo.Member> allMembers;
+        if (coreMember.getRelease() == null) {
+            allMembers = new ArrayList<>(1);
+            allMembers.add(coreMember);
+        } else {
+            allMembers = new ArrayList<QuarkusPlatformInfo.Member>(coreMember.getRelease().getMemberBoms().size());
+            allMembers.add(coreMember);
+            for (var memberBom : coreMember.getRelease().getMemberBoms()) {
+                if (!memberBom.equals(coreMember.getBom())) {
+                    allMembers.add(readMember(memberBom.getGroupId(), memberBom.getArtifactId(), memberBom.getVersion()));
+                }
             }
         }
         return new QuarkusPlatformInfo(coreMember, allMembers,

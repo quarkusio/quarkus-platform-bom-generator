@@ -62,6 +62,9 @@ public class Quarkus implements Callable<Integer> {
     @CommandLine.Option(names = { "--version" }, description = "Local repository directory")
     public String version;
 
+    @CommandLine.Option(names = { "--platform-group-id" }, description = "Quarkus platform groupId")
+    public String platformGroupId;
+
     @CommandLine.Option(names = { "--parallel" }, description = "Resolves dependency trees in parallel", defaultValue = "true")
     public boolean parallelProcessing;
 
@@ -99,6 +102,7 @@ public class Quarkus implements Callable<Integer> {
         var platform = QuarkusPlatformInfoReader.builder()
                 .setResolver(resolver)
                 .setVersion(version)
+                .setPlatformKey(platformGroupId)
                 .build()
                 .readPlatformInfo();
         var memberReports = new ArrayList<MemberReport>(members.isEmpty() ? platform.getMembers().size() : members.size());
