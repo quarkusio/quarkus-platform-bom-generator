@@ -184,7 +184,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
     private List<String> pomLines;
 
-    private final Set<ArtifactKey> universalBomDepKeys = new HashSet<>();
+    private final Map<ArtifactKey, String> universalBomDepKeys = new HashMap<>();
 
     private TransformerFactory transformerFactory;
 
@@ -1946,7 +1946,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                         modelDep.setClassifier(a.getClassifier());
                     }
                     modelDep.setType(a.getExtension());
-                    if (!universalBomDepKeys.contains(
+                    if (!universalBomDepKeys.containsKey(
                             ArtifactKey.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension()))) {
                         modelDep.setVersion(getTestArtifactVersion(a.getGroupId(), a.getVersion()));
                     }
@@ -2177,10 +2177,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 if (!coords.getClassifier().isEmpty()) {
                     dep.setClassifier(coords.getClassifier());
                 }
-                if (!coords.getType().equals("jar")) {
+                if (!ArtifactCoords.TYPE_JAR.equals(coords.getType())) {
                     dep.setType(coords.getType());
                 }
-                if (!universalBomDepKeys.contains(ArtifactKey.of(coords.getGroupId(), coords.getArtifactId(),
+                if (!universalBomDepKeys.containsKey(ArtifactKey.of(coords.getGroupId(), coords.getArtifactId(),
                         coords.getClassifier(), coords.getType()))) {
                     dep.setVersion(coords.getVersion());
                 }
@@ -2906,7 +2906,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         for (ProjectRelease r : universalGeneratedBom.releases()) {
             for (ProjectDependency d : r.dependencies()) {
-                universalBomDepKeys.add(d.key());
+                universalBomDepKeys.put(d.key(), d.artifact().getVersion());
             }
         }
         return universalGeneratedBom;

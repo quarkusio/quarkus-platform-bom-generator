@@ -41,7 +41,8 @@ import java.util.Properties;
 import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -346,14 +347,20 @@ public class ProjectDependencyResolver {
                     codeReposTotal = releaseRepos.size();
 
                     final List<ReleaseRepo> sorted = ReleaseCollection.sort(releaseRepos.values());
-                    boolean logLatestPncBuilds = Boolean.getBoolean("logLatestPncBuilds");
-                    AtomicInteger counter = new AtomicInteger();
-                    for (ReleaseRepo e : sorted) {
-                        logComment("repo-url " + e.getRevision().getRepository());
-                        logComment("tag " + e.getRevision().getValue());
-                        if (logLatestPncBuilds) {
-                            logLatestPncBuilds(e);
-                        } else {
+                    if (Boolean.getBoolean("logMissingPncBuilds")) {
+                        for (ReleaseRepo e : sorted) {
+                            logMissingPncBuilds(e, getLatestPncVersions(sorted));
+                        }
+                    } else if (Boolean.getBoolean("logLatestPncBuilds")) {
+                        for (ReleaseRepo e : sorted) {
+                            logComment("repo-url " + e.getRevision().getRepository());
+                            logComment("tag " + e.getRevision().getValue());
+                            logLatestPncBuilds(e, getLatestPncVersions(sorted));
+                        }
+                    } else {
+                        for (ReleaseRepo e : sorted) {
+                            logComment("repo-url " + e.getRevision().getRepository());
+                            logComment("tag " + e.getRevision().getValue());
                             for (String s : toSortedStrings(e.artifacts.keySet(), config.isLogModulesToBuild())) {
                                 log(s);
                             }
@@ -448,36 +455,53 @@ public class ProjectDependencyResolver {
         }
     }
 
-    private void logLatestPncBuilds(ReleaseRepo e) {
-        log.info("Checking the latest PNC builds of " + e.getRevision());
-        var gavSet = new HashSet<io.quarkus.maven.dependency.GAV>(e.artifacts.size());
-        var artifactSet = e.artifacts.keySet();
-        for (var c : artifactSet) {
-            gavSet.add(new io.quarkus.maven.dependency.GAV(c.getGroupId(), c.getArtifactId(), c.getVersion()));
-        }
-        var latestVersions = PncVersionProvider.getLastRedHatBuildVersions(gavSet);
-        var pncRebuilds = new HashMap<io.quarkus.maven.dependency.GAV, String>(latestVersions.size());
-        for (var latest : latestVersions) {
-            if (latest.getLatestVersion() != null && !latest.getLatestVersion().equals(latest.getVersion())) {
-                pncRebuilds.put(
-                        new io.quarkus.maven.dependency.GAV(latest.getGroupId(), latest.getArtifactId(), latest.getVersion()),
-                        latest.getLatestVersion());
+    private void logMissingPncBuilds(ReleaseRepo release, Map<io.quarkus.maven.dependency.GAV, String> pncVersions) {
+        List<String> lines = null;
+        var gavs = config.isLogModulesToBuild() ? new HashSet<io.quarkus.maven.dependency.GAV>() : null;
+        for (var c : release.artifacts.keySet()) {
+            var gav = new io.quarkus.maven.dependency.GAV(c.getGroupId(), c.getArtifactId(), c.getVersion());
+            String latestVersion = pncVersions.get(gav);
+            if (latestVersion == null) {
+                String line = null;
+                if (gavs == null) {
+                    line = c.toGACTVString();
+                } else if (gavs.add(gav)) {
+                    line = gav.toString();
+                }
+                if (line != null) {
+                    if (lines == null) {
+                        lines = new ArrayList<>();
+                        lines.add("# repo-url " + release.getRevision().getRepository());
+                        lines.add("# tag " + release.getRevision().getValue());
+                    }
+                    lines.add(line);
+                }
             }
         }
-        final List<String> lines = new ArrayList<>(latestVersions.size());
-        for (var c : artifactSet) {
+        if (lines != null) {
+            Collections.sort(lines);
+            for (var line : lines) {
+                log(line);
+            }
+        }
+    }
+
+    private void logLatestPncBuilds(ReleaseRepo e, Map<io.quarkus.maven.dependency.GAV, String> pncVersions) {
+        final List<String> lines = new ArrayList<>(e.artifacts.size());
+        var gavs = config.isLogModulesToBuild() ? new HashSet<io.quarkus.maven.dependency.GAV>() : null;
+        for (var c : e.artifacts.keySet()) {
             var gav = new io.quarkus.maven.dependency.GAV(c.getGroupId(), c.getArtifactId(), c.getVersion());
             StringBuilder sb = null;
-            if (!config.isLogModulesToBuild()) {
+            if (gavs == null) {
                 sb = new StringBuilder();
                 sb.append(c.toGACTVString());
-            } else if (gavSet.remove(gav)) {
+            } else if (gavs.add(gav)) {
                 sb = new StringBuilder();
                 sb.append(gav);
             }
 
             if (sb != null) {
-                String latestVersion = pncRebuilds.get(gav);
+                String latestVersion = pncVersions.get(gav);
                 if (latestVersion != null) {
                     sb.append(" # was rebuilt as ").append(latestVersion);
                 }
@@ -488,6 +512,33 @@ public class ProjectDependencyResolver {
         for (var line : lines) {
             log(line);
         }
+    }
+
+    private Map<io.quarkus.maven.dependency.GAV, String> getLatestPncVersions(Collection<ReleaseRepo> releases) {
+        var result = new ConcurrentHashMap<io.quarkus.maven.dependency.GAV, String>();
+        var futures = new CompletableFuture<?>[releases.size()];
+        int i = 0;
+        for (var release : releases) {
+            futures[i++] = CompletableFuture.runAsync(() -> {
+                log.info("Looking for the latest PNC builds of " + release.getRevision());
+                var gavSet = new HashSet<io.quarkus.maven.dependency.GAV>(release.artifacts.size());
+                var artifactSet = release.artifacts.keySet();
+                for (var c : artifactSet) {
+                    gavSet.add(new io.quarkus.maven.dependency.GAV(c.getGroupId(), c.getArtifactId(), c.getVersion()));
+                }
+                var latestVersions = PncVersionProvider.getLastRedHatBuildVersions(gavSet);
+                for (var latest : latestVersions) {
+                    if (latest.getLatestVersion() != null && !latest.getLatestVersion().equals(latest.getVersion())) {
+                        result.put(
+                                new io.quarkus.maven.dependency.GAV(latest.getGroupId(), latest.getArtifactId(),
+                                        latest.getVersion()),
+                                latest.getLatestVersion());
+                    }
+                }
+            });
+        }
+        CompletableFuture.allOf(futures).join();
+        return result;
     }
 
     public void resolveDependencies() {
