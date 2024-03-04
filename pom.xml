@@ -41,16 +41,16 @@
     <maven.compiler.release>11</maven.compiler.release>
 
     <java-ordered-properties.version>1.0.4</java-ordered-properties.version>
-    <maven-gpg-plugin.version>1.6</maven-gpg-plugin.version>
-    <compiler-plugin.version>3.11.0</compiler-plugin.version>
-    <maven-javadoc-plugin.version>3.1.1</maven-javadoc-plugin.version>
-    <maven-source-plugin.version>3.2.0</maven-source-plugin.version>
-    <nexus-staging-maven-plugin.version>1.6.8</nexus-staging-maven-plugin.version>
-    <surefire-plugin.version>3.1.2</surefire-plugin.version>
+    <maven-gpg-plugin.version>3.1.0</maven-gpg-plugin.version>
+    <compiler-plugin.version>3.12.1</compiler-plugin.version>
+    <maven-javadoc-plugin.version>3.6.3</maven-javadoc-plugin.version>
+    <maven-source-plugin.version>3.3.0</maven-source-plugin.version>
+    <nexus-staging-maven-plugin.version>1.6.9</nexus-staging-maven-plugin.version>
+    <surefire-plugin.version>3.2.5</surefire-plugin.version>
 
     <assertj.version>3.24.2</assertj.version>
     <commons-text.version>1.10.0</commons-text.version>
-    <cyclonedx.version>8.0.1</cyclonedx.version>
+    <cyclonedx.version>8.0.3</cyclonedx.version>
     <gradle-tooling.version>8.1.1</gradle-tooling.version>
     <quarkus.version>2.16.12.Final</quarkus.version>
     <quarkus-jgit.version>2.3.2</quarkus-jgit.version>
