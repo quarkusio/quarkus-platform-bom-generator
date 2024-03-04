@@ -12,6 +12,7 @@ import io.quarkus.bom.decomposer.ProjectDependency;
 import io.quarkus.bom.decomposer.ProjectRelease;
 import io.quarkus.bom.decomposer.maven.GenerateMavenRepoZip;
 import io.quarkus.bom.decomposer.maven.MojoMessageWriter;
+import io.quarkus.bom.decomposer.maven.QuarkusWorkspaceProvider;
 import io.quarkus.bom.decomposer.maven.util.Utils;
 import io.quarkus.bom.diff.BomDiff;
 import io.quarkus.bom.diff.HtmlBomDiffReportGenerator;
@@ -32,6 +33,7 @@ import io.quarkus.bom.resolver.ArtifactResolver;
 import io.quarkus.bom.resolver.ArtifactResolverProvider;
 import io.quarkus.bom.resolver.EffectiveModelResolver;
 import io.quarkus.bootstrap.BootstrapConstants;
+import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
@@ -109,7 +111,6 @@ import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
-import org.eclipse.aether.impl.RemoteRepositoryManager;
 import org.eclipse.aether.repository.RemoteRepository;
 
 @Mojo(name = "generate-platform-project", defaultPhase = LifecyclePhase.INITIALIZE, requiresDependencyCollection = ResolutionScope.NONE)
@@ -124,25 +125,22 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     private static final String DEPENDENCIES_TO_BUILD = "dependenciesToBuild";
 
     @Component
-    private RepositorySystem repoSystem;
+    RepositorySystem repoSystem;
 
     @Component
-    private RemoteRepositoryManager remoteRepoManager;
-
-    @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
-    private List<RemoteRepository> repos;
-
-    @Parameter(defaultValue = "${project.remotePluginRepositories}", readonly = true, required = true)
-    private List<RemoteRepository> pluginRepos;
+    QuarkusWorkspaceProvider mvnProvider;
 
     @Parameter(defaultValue = "${repositorySystemSession}", readonly = true)
-    private RepositorySystemSession repoSession;
+    RepositorySystemSession repoSession;
+
+    @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
+    List<RemoteRepository> repos;
 
     @Parameter(defaultValue = "${project}")
-    protected MavenProject project;
+    MavenProject project;
 
     @Parameter(defaultValue = "${session}", readonly = true)
-    private MavenSession session;
+    MavenSession session;
 
     @Parameter(required = true, defaultValue = "${basedir}/generated-platform-project")
     File outputDir;
@@ -167,9 +165,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     boolean recordUpdatedBoms;
 
     Artifact universalBom;
-    MavenArtifactResolver nonWorkspaceResolver;
-    MavenArtifactResolver mavenResolver;
-    ArtifactResolver artifactResolver;
+    MavenArtifactResolver nonWsResolver;
+    MavenArtifactResolver wsAwareResolver;
 
     PlatformCatalogResolver catalogs;
     final Map<ArtifactKey, PlatformMemberImpl> members = new LinkedHashMap<>();
@@ -262,7 +259,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         for (PlatformMemberImpl member : members.values()) {
-            generatePlatformDescriptorModule(member.descriptorCoords(), member.baseModel, true,
+            generatePlatformDescriptorModule(member.descriptorCoords(), member.baseModel,
                     quarkusCore.getInputBom().equals(member.getInputBom()),
                     platformConfig.getAttachedMavenPlugin(), member);
             generatePlatformPropertiesModule(member, true);
@@ -325,13 +322,14 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             generateReleasesReport(universalGeneratedBom, releasesReport);
             index.universalBom(universalPlatformBomXml.toUri().toURL(), universalGeneratedBom, releasesReport);
 
+            var artifactResolver = ArtifactResolverProvider.get(getWorkspaceAwareMavenResolver());
             for (PlatformMemberImpl member : members.values()) {
                 if (member.getInputBom() == null) {
                     continue;
                 }
                 generateBomReports(member.originalBom, member.generatedBom,
                         reportsOutputDir.resolve(member.config().getName().toLowerCase()), index,
-                        member.generatedPomFile, artifactResolver());
+                        member.generatedPomFile, artifactResolver);
             }
         } catch (Exception e) {
             throw new MojoExecutionException("Failed to generate platform member BOM reports", e);
@@ -349,10 +347,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 throw new MojoExecutionException("Failed to ZIP platform member BOM reports", e);
             }
         }
-    }
-
-    private boolean isGenerateBomReports() {
-        return platformConfig.isGenerateBomReports() || platformConfig.getGenerateBomReportsZip() != null;
     }
 
     private void generateDominoCliConfig() throws MojoExecutionException {
@@ -409,7 +403,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 for (String s : member.config().getMetadataOverrideArtifacts()) {
                     try {
                         metadataOverrides
-                                .add(nonWorkspaceResolver().resolve(toAetherArtifact(s)).getArtifact().getFile().toPath());
+                                .add(getNonWorkspaceResolver().resolve(toAetherArtifact(s)).getArtifact().getFile().toPath());
                     } catch (BootstrapMavenException e) {
                         throw new MojoExecutionException("Failed to resolve " + s, e);
                     }
@@ -458,7 +452,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                         }
                         if (a.getFile() == null) {
                             try {
-                                a = nonWorkspaceResolver().resolve(a).getArtifact();
+                                a = getNonWorkspaceResolver().resolve(a).getArtifact();
                             } catch (BootstrapMavenException e) {
                                 throw new RuntimeException("Failed to resolve " + a, e);
                             }
@@ -1009,7 +1003,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final ArtifactCoords originalCoords = ArtifactCoords.fromString(pluginConfig.getOriginalPluginCoords());
         final Path sourcesJar;
         try {
-            sourcesJar = nonWorkspaceResolver().resolve(new DefaultArtifact(originalCoords.getGroupId(),
+            sourcesJar = getNonWorkspaceResolver().resolve(new DefaultArtifact(originalCoords.getGroupId(),
                     originalCoords.getArtifactId(), "sources", ArtifactCoords.TYPE_JAR, originalCoords.getVersion()))
                     .getArtifact().getFile().toPath();
         } catch (Exception e) {
@@ -1054,10 +1048,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         // Delete the generated HelpMojo
         try {
-            Files.walkFileTree(javaSources, new SimpleFileVisitor<Path>() {
+            Files.walkFileTree(javaSources, new SimpleFileVisitor<>() {
                 @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
-                        throws IOException {
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
                     if (file.getFileName().toString().equals("HelpMojo.java")) {
                         try {
                             Files.delete(file);
@@ -1109,7 +1102,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             pom.setBuild(build);
         }
         // copy the effective maven-plugin-plugin config and set expected versions
-        final Model originalEffectiveModel = new EffectiveModelResolver(nonWorkspaceResolver())
+        final Model originalEffectiveModel = new EffectiveModelResolver(getNonWorkspaceResolver())
                 .resolveEffectiveModel(originalCoords);
         var effectivePlugins = originalEffectiveModel.getBuild().getPlugins().stream()
                 .collect(Collectors.toMap(Plugin::getArtifactId, p -> p));
@@ -1576,7 +1569,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 if (!prevCoords.equals(generatedCoords)) {
                     final List<org.eclipse.aether.graph.Dependency> prevDeps;
                     try {
-                        prevDeps = nonWorkspaceResolver.resolveDescriptor(prevBomCoords).getManagedDependencies();
+                        prevDeps = getNonWorkspaceResolver().resolveDescriptor(prevBomCoords).getManagedDependencies();
                     } catch (BootstrapMavenException e) {
                         throw new MojoExecutionException("Failed to resolve " + prevBomCoords, e);
                     }
@@ -1741,7 +1734,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             final Artifact testCatalogArtifact = toAetherArtifact(member.config().getTestCatalogArtifact());
             final File testCatalogFile;
             try {
-                testCatalogFile = nonWorkspaceResolver().resolve(testCatalogArtifact).getArtifact().getFile();
+                testCatalogFile = getNonWorkspaceResolver().resolve(testCatalogArtifact).getArtifact().getFile();
             } catch (Exception e) {
                 throw new MojoExecutionException("Failed to resolve test catalog artifact " + testCatalogArtifact, e);
             }
@@ -1919,7 +1912,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
 
             try {
-                for (org.eclipse.aether.graph.Dependency d : nonWorkspaceResolver()
+                for (org.eclipse.aether.graph.Dependency d : getNonWorkspaceResolver()
                         .resolveDescriptor(toPomArtifact(testArtifact)).getDependencies()) {
                     if (!d.getScope().equals("test")) {
                         continue;
@@ -2324,11 +2317,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
     private void generateUniversalPlatformModule(Model parentPom) throws MojoExecutionException {
         final Artifact bomArtifact = getUniversalBomArtifact();
-        final String artifactIdBase = getArtifactIdBase(bomArtifact.getArtifactId());
-        final String moduleName = artifactIdBase;
+        final String moduleName = getArtifactIdBase(bomArtifact.getArtifactId());
 
         final Model pom = newModel();
-        pom.setArtifactId(artifactIdBase + "-parent");
+        pom.setArtifactId(moduleName + "-parent");
         pom.setPackaging(ArtifactCoords.TYPE_POM);
         pom.setName(getNameBase(parentPom) + " " + artifactIdToName(moduleName) + " - Parent");
         parentPom.addModule(moduleName);
@@ -2347,7 +2339,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 ArtifactCoords.of(bomArtifact.getGroupId(),
                         PlatformArtifacts.ensureCatalogArtifactId(bomArtifact.getArtifactId()),
                         bomArtifact.getVersion(), "json", bomArtifact.getVersion()),
-                pom, true, true, null, null);
+                pom, true, null, null);
 
         // to make the descriptor pom resolvable during the platform BOM generation, we need to persist the generated POMs
         persistPom(pom);
@@ -2370,8 +2362,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private void generatePlatformDescriptorModule(ArtifactCoords descriptorCoords, Model parentPom,
-            boolean addPlatformReleaseConfig, boolean copyQuarkusCoreMetadata, AttachedMavenPluginConfig attachedPlugin,
-            PlatformMember member)
+            boolean copyQuarkusCoreMetadata, AttachedMavenPluginConfig attachedPlugin, PlatformMember member)
             throws MojoExecutionException {
         final String moduleName = "descriptor";
         parentPom.addModule(moduleName);
@@ -2416,26 +2407,24 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             config.addChild(textDomElement("upstreamQuarkusCoreVersion", platformConfig.getUpstreamQuarkusCoreVersion()));
         }
 
-        if (addPlatformReleaseConfig) {
-            final Xpp3Dom stackConfig = new Xpp3Dom("platformRelease");
-            config.addChild(stackConfig);
-            final Xpp3Dom platformKey = new Xpp3Dom("platformKey");
-            stackConfig.addChild(platformKey);
-            stackConfig.addChild(textDomElement("stream", "${" + PLATFORM_STREAM_PROP + "}"));
-            stackConfig.addChild(textDomElement("version", "${" + PLATFORM_RELEASE_PROP + "}"));
-            final Xpp3Dom membersConfig = new Xpp3Dom("members");
-            stackConfig.addChild(membersConfig);
-            if (descriptorCoords.getGroupId().equals(getUniversalBomArtifact().getGroupId())
-                    && descriptorCoords.getArtifactId()
-                            .equals(PlatformArtifacts.ensureCatalogArtifactId(getUniversalBomArtifact().getArtifactId()))) {
-                platformKey.setValue("${project.groupId}");
-                addMemberDescriptorConfig(pom, membersConfig, descriptorCoords);
-            } else {
-                platformKey.setValue("${" + PLATFORM_KEY_PROP + "}");
-                for (PlatformMember m : members.values()) {
-                    if (!m.config().isHidden()) {
-                        addMemberDescriptorConfig(pom, membersConfig, m.descriptorCoords());
-                    }
+        final Xpp3Dom stackConfig = new Xpp3Dom("platformRelease");
+        config.addChild(stackConfig);
+        final Xpp3Dom platformKey = new Xpp3Dom("platformKey");
+        stackConfig.addChild(platformKey);
+        stackConfig.addChild(textDomElement("stream", "${" + PLATFORM_STREAM_PROP + "}"));
+        stackConfig.addChild(textDomElement("version", "${" + PLATFORM_RELEASE_PROP + "}"));
+        final Xpp3Dom membersConfig = new Xpp3Dom("members");
+        stackConfig.addChild(membersConfig);
+        if (descriptorCoords.getGroupId().equals(getUniversalBomArtifact().getGroupId())
+                && descriptorCoords.getArtifactId()
+                        .equals(PlatformArtifacts.ensureCatalogArtifactId(getUniversalBomArtifact().getArtifactId()))) {
+            platformKey.setValue("${project.groupId}");
+            addMemberDescriptorConfig(pom, membersConfig, descriptorCoords);
+        } else {
+            platformKey.setValue("${" + PLATFORM_KEY_PROP + "}");
+            for (PlatformMember m : members.values()) {
+                if (!m.config().isHidden()) {
+                    addMemberDescriptorConfig(pom, membersConfig, m.descriptorCoords());
                 }
             }
         }
@@ -2445,9 +2434,15 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             // copy the quarkus-bom metadata
             overrides = CatalogMapperHelper.mapper().createObjectNode();
             final Artifact bom = quarkusCore.getInputBom();
-            final Path jsonPath = artifactResolver().resolve(new DefaultArtifact(bom.getGroupId(),
+            var jsonArtifact = new DefaultArtifact(bom.getGroupId(),
                     bom.getArtifactId() + Constants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX, bom.getVersion(), "json",
-                    bom.getVersion())).getArtifact().getFile().toPath();
+                    bom.getVersion());
+            final Path jsonPath;
+            try {
+                jsonPath = getNonWorkspaceResolver().resolve(jsonArtifact).getArtifact().getFile().toPath();
+            } catch (BootstrapMavenException e) {
+                throw new MojoExecutionException("Failed to resolve " + jsonArtifact, e);
+            }
             final JsonNode descriptorNode;
             try (BufferedReader reader = Files.newBufferedReader(jsonPath)) {
                 descriptorNode = CatalogMapperHelper.mapper().readTree(reader);
@@ -2524,7 +2519,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         // METADATA OVERRIDES
         final StringJoiner metadataOverrideFiles = new StringJoiner(",");
-        if (overrides != null) {
+        if (overrides != null && !overrides.isEmpty()) {
             Path overridesFile = moduleDir.resolve("src").resolve("main").resolve("resources").resolve("overrides.json");
             try {
                 CatalogMapperHelper.serialize(overrides, overridesFile);
@@ -2596,8 +2591,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 "mailingLists", "remove"));
     }
 
-    private void addExtensionDependencyCheck(final RedHatExtensionDependencyCheck depCheckConfig,
-            final Xpp3Dom config) {
+    private void addExtensionDependencyCheck(final RedHatExtensionDependencyCheck depCheckConfig, Xpp3Dom config) {
         if (depCheckConfig != null && depCheckConfig.isEnabled() && depCheckConfig.getVersionPattern() != null) {
             final Xpp3Dom depCheck = new Xpp3Dom("extensionDependencyCheck");
             config.addChild(depCheck);
@@ -2701,7 +2695,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                     : member;
             List<org.eclipse.aether.graph.Dependency> originalDm;
             try {
-                originalDm = nonWorkspaceResolver().resolveDescriptor(srcMember.getInputBom()).getManagedDependencies();
+                originalDm = getNonWorkspaceResolver().resolveDescriptor(srcMember.getInputBom()).getManagedDependencies();
             } catch (BootstrapMavenException e) {
                 throw new MojoExecutionException("Failed to resolve " + member.getInputBom(), e);
             }
@@ -2714,7 +2708,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                         && a.getGroupId().equals(srcMember.getInputBom().getGroupId())
                         && a.getVersion().equals(srcMember.getInputBom().getVersion())) {
                     try (BufferedReader reader = Files
-                            .newBufferedReader(nonWorkspaceResolver.resolve(a).getArtifact().getFile().toPath())) {
+                            .newBufferedReader(nonWsResolver.resolve(a).getArtifact().getFile().toPath())) {
                         tmp.load(reader);
                     } catch (Exception e) {
                         throw new MojoExecutionException("Failed to resolve " + a, e);
@@ -2821,7 +2815,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Artifact bomArtifact = getUniversalBomArtifact();
         final PlatformBomGeneratorConfig bomGen = platformConfig.getBomGenerator();
         final PlatformBomConfig.Builder configBuilder = PlatformBomConfig.builder()
-                .artifactResolver(artifactResolver())
+                .artifactResolver(ArtifactResolverProvider.get(getNonWorkspaceResolver()))
                 .pomResolver(PomSource.of(bomArtifact))
                 .includePlatformProperties(platformConfig.getUniversal().isGeneratePlatformProperties())
                 .platformBom(bomArtifact)
@@ -2877,15 +2871,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
         }
 
-        final PlatformBomConfig config = configBuilder.build();
-
-        PlatformBomComposer bomComposer;
         try {
-            bomComposer = new PlatformBomComposer(config, new MojoMessageWriter(getLog()));
+            universalGeneratedBom = new PlatformBomComposer(configBuilder.build(), new MojoMessageWriter(getLog()))
+                    .platformBom();
         } catch (BomDecomposerException e) {
             throw new MojoExecutionException("Failed to generate the platform BOM", e);
         }
-        universalGeneratedBom = bomComposer.platformBom();
 
         final Model baseModel = project.getModel().clone();
         baseModel.setName(getNameBase(parentPom) + " Quarkus Platform BOM");
@@ -2916,25 +2907,35 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         return universalBom == null ? universalBom = toPomArtifact(platformConfig.getUniversal().getBom()) : universalBom;
     }
 
-    private PlatformCatalogResolver catalogResolver() throws MojoExecutionException {
-        return catalogs == null ? catalogs = new PlatformCatalogResolver(mavenArtifactResolver()) : catalogs;
+    private PlatformCatalogResolver catalogResolver() {
+        return catalogs == null ? catalogs = new PlatformCatalogResolver(getWorkspaceAwareMavenResolver()) : catalogs;
     }
 
-    private MavenArtifactResolver nonWorkspaceResolver() throws MojoExecutionException {
-        if (nonWorkspaceResolver != null) {
-            return nonWorkspaceResolver;
+    private MavenArtifactResolver getNonWorkspaceResolver() {
+        if (nonWsResolver == null) {
+            try {
+                nonWsResolver = MavenArtifactResolver.builder()
+                        .setRepositorySystem(repoSystem)
+                        .setRepositorySystemSession(repoSession)
+                        .setRemoteRepositoryManager(mvnProvider.getRemoteRepositoryManager())
+                        .setRemoteRepositories(repos)
+                        .setWorkspaceDiscovery(false)
+                        .build();
+            } catch (BootstrapMavenException e) {
+                throw new RuntimeException("Failed to initialize Maven artifact resolver", e);
+            }
         }
-        try {
-            return nonWorkspaceResolver = MavenArtifactResolver.builder()
-                    .setRepositorySystem(repoSystem)
-                    .setRepositorySystemSession(repoSession)
-                    .setRemoteRepositories(repos)
-                    .setRemoteRepositoryManager(remoteRepoManager)
-                    .setWorkspaceDiscovery(false)
-                    .build();
-        } catch (BootstrapMavenException e) {
-            throw new MojoExecutionException("Failed to initialize Maven artifact resolver", e);
+        return nonWsResolver;
+    }
+
+    private MavenArtifactResolver getWorkspaceAwareMavenResolver() {
+        if (wsAwareResolver == null) {
+            wsAwareResolver = mvnProvider.createArtifactResolver(
+                    BootstrapMavenContext.config()
+                            .setRemoteRepositories(repos)
+                            .setCurrentProject(new File(outputDir, POM_XML).toString()));
         }
+        return wsAwareResolver;
     }
 
     private PlatformReleaseConfig releaseConfig() {
@@ -2958,37 +2959,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             platformReleaseConfig = tmp;
         }
         return platformReleaseConfig;
-    }
-
-    private void resetResolver() {
-        mavenResolver = null;
-        artifactResolver = null;
-    }
-
-    private ArtifactResolver artifactResolver() throws MojoExecutionException {
-        if (mavenResolver == null) {
-            artifactResolver = null;
-        }
-        return artifactResolver == null
-                ? artifactResolver = ArtifactResolverProvider.get(mavenArtifactResolver(), null)
-                : artifactResolver;
-    }
-
-    private MavenArtifactResolver mavenArtifactResolver() throws MojoExecutionException {
-        if (mavenResolver != null) {
-            return mavenResolver;
-        }
-        try {
-            return mavenResolver = MavenArtifactResolver.builder()
-                    .setRepositorySystem(repoSystem)
-                    .setRepositorySystemSession(repoSession)
-                    .setRemoteRepositories(repos)
-                    .setRemoteRepositoryManager(remoteRepoManager)
-                    .setCurrentProject(new File(outputDir, POM_XML).toString())
-                    .build();
-        } catch (BootstrapMavenException e) {
-            throw new MojoExecutionException("Failed to initialize Maven artifact resolver", e);
-        }
     }
 
     private class PlatformMemberImpl implements PlatformMember {

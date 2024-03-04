@@ -1,7 +1,7 @@
 package io.quarkus.domino.cli;
 
+import jakarta.enterprise.context.ApplicationScoped;
 import java.nio.file.Path;
-import javax.enterprise.context.ApplicationScoped;
 
 @ApplicationScoped
 public class ToolConfig {

@@ -9,16 +9,13 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-public class MemeberDependencyAlignmentTest {
+public class MemberDependencyAlignmentTest {
 
     @TempDir
     Path workingDir;
 
     @Test
     void test() throws Exception {
-        //Path workingDir = Path.of("/home/aloubyansky/playground/test-project");
-        //IoUtils.recursiveDelete(workingDir);
-
         var platformGenerator = PlatformTestProjectGenerator.newInstance();
 
         var jackson10 = platformGenerator.configureProject("org.jackson", "jackson-parent", "1.0")

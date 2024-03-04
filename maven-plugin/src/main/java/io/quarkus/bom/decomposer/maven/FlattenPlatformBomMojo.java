@@ -33,11 +33,9 @@ import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.Exclusion;
 import org.eclipse.aether.impl.RemoteRepositoryManager;
 import org.eclipse.aether.repository.RemoteRepository;
-import org.eclipse.aether.resolution.ArtifactDescriptorException;
 import org.eclipse.aether.resolution.ArtifactDescriptorRequest;
 import org.eclipse.aether.resolution.ArtifactDescriptorResult;
 import org.eclipse.aether.resolution.ArtifactRequest;
-import org.eclipse.aether.resolution.ArtifactResolutionException;
 
 /**
  * This goal flattens the BOM, i.e. generates its effective content, and replaces the original POM
@@ -58,10 +56,10 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
     RemoteRepositoryManager remoteRepoManager;
 
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
-    private List<RemoteRepository> repos;
+    List<RemoteRepository> repos;
 
     @Parameter(defaultValue = "${repositorySystemSession}", readonly = true)
-    private RepositorySystemSession repoSession;
+    RepositorySystemSession repoSession;
 
     @Parameter(defaultValue = "${project}")
     protected MavenProject project;
@@ -103,7 +101,7 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
                     new ArtifactDescriptorRequest()
                             .setArtifact(bomArtifact)
                             .setRepositories(repos));
-        } catch (ArtifactDescriptorException e) {
+        } catch (Exception e) {
             throw new MojoExecutionException("Failed to read artifact descriptor for " + bomArtifact, e);
         }
 
@@ -194,9 +192,10 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
 
     private boolean resolve(final org.eclipse.aether.artifact.Artifact a) {
         try {
-            return repoSystem.resolveArtifact(repoSession, new ArtifactRequest().setArtifact(a).setRepositories(repos))
+            return repoSystem.resolveArtifact(repoSession,
+                    new ArtifactRequest().setArtifact(a).setRepositories(repos))
                     .isResolved();
-        } catch (ArtifactResolutionException e) {
+        } catch (Exception e) {
             return false;
         }
     }

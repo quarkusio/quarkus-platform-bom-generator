@@ -25,15 +25,11 @@ import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.collection.CollectRequest;
-import org.eclipse.aether.collection.DependencyCollectionException;
 import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.DependencyNode;
-import org.eclipse.aether.impl.RemoteRepositoryManager;
 import org.eclipse.aether.repository.RemoteRepository;
-import org.eclipse.aether.resolution.ArtifactDescriptorException;
 import org.eclipse.aether.resolution.ArtifactDescriptorRequest;
 import org.eclipse.aether.resolution.ArtifactRequest;
-import org.eclipse.aether.resolution.ArtifactResolutionException;
 
 /**
  * Reports non-productized dependencies of supported Quarkus extensions.
@@ -41,23 +37,20 @@ import org.eclipse.aether.resolution.ArtifactResolutionException;
 @Mojo(name = "non-productized", threadSafe = true)
 public class NonProductizedDepsMojo extends AbstractMojo {
 
-    @Component
-    private RepositorySystem repoSystem;
+    @Parameter(defaultValue = "${project}", readonly = true)
+    MavenProject project;
+
+    @Parameter(required = true)
+    String bom;
 
     @Component
-    RemoteRepositoryManager remoteRepoManager;
+    RepositorySystem repoSystem;
 
     @Parameter(defaultValue = "${repositorySystemSession}", readonly = true)
     RepositorySystemSession repoSession;
 
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
     List<RemoteRepository> repos;
-
-    @Parameter(defaultValue = "${project}", readonly = true)
-    MavenProject project;
-
-    @Parameter(required = true)
-    String bom;
 
     private final Set<ArtifactCoords> productized = new HashSet<>();
     private final Map<Integer, Set<ArtifactCoords>> nonProductized = new HashMap<>();
@@ -75,7 +68,7 @@ public class NonProductizedDepsMojo extends AbstractMojo {
                     .setArtifact(new DefaultArtifact(catalogCoords.getGroupId(), catalogCoords.getArtifactId(),
                             catalogCoords.getClassifier(), catalogCoords.getType(), catalogCoords.getVersion())))
                     .getArtifact().getFile().toPath();
-        } catch (ArtifactResolutionException e) {
+        } catch (Exception e) {
             throw new MojoExecutionException("Failed to resolve " + catalogCoords, e);
         }
 
@@ -88,12 +81,13 @@ public class NonProductizedDepsMojo extends AbstractMojo {
 
         final List<Dependency> managedDeps;
         try {
-            managedDeps = repoSystem.readArtifactDescriptor(repoSession, new ArtifactDescriptorRequest()
-                    .setRepositories(repos)
-                    .setArtifact(new DefaultArtifact(bomCoords.getGroupId(), bomCoords.getArtifactId(),
-                            "", ArtifactCoords.TYPE_POM, bomCoords.getVersion())))
+            managedDeps = repoSystem
+                    .readArtifactDescriptor(repoSession, new ArtifactDescriptorRequest()
+                            .setRepositories(repos)
+                            .setArtifact(new DefaultArtifact(bomCoords.getGroupId(), bomCoords.getArtifactId(),
+                                    "", ArtifactCoords.TYPE_POM, bomCoords.getVersion())))
                     .getManagedDependencies();
-        } catch (ArtifactDescriptorException e) {
+        } catch (Exception e) {
             throw new MojoExecutionException("Failed to resolve the descriptor of " + bomCoords, e);
         }
         final Set<ArtifactCoords> managedCoords = new HashSet<>(managedDeps.size());
@@ -112,12 +106,13 @@ public class NonProductizedDepsMojo extends AbstractMojo {
                 final Artifact a = new DefaultArtifact(e.getArtifact().getGroupId(),
                         e.getArtifact().getArtifactId(), e.getArtifact().getClassifier(),
                         e.getArtifact().getType(), e.getArtifact().getVersion());
-                root = repoSystem.collectDependencies(repoSession, new CollectRequest()
-                        .setManagedDependencies(managedDeps)
-                        .setRepositories(repos)
-                        .setRoot(new Dependency(a, "runtime")))
+                root = repoSystem
+                        .collectDependencies(repoSession, new CollectRequest()
+                                .setManagedDependencies(managedDeps)
+                                .setRepositories(repos)
+                                .setRoot(new Dependency(a, "runtime")))
                         .getRoot();
-            } catch (DependencyCollectionException e1) {
+            } catch (Exception e1) {
                 throw new RuntimeException("Failed to collect dependencies of " + e.getArtifact().toCompactCoords(), e1);
             }
 

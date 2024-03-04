@@ -2,7 +2,7 @@ package io.quarkus.bom.decomposer.maven;
 
 import io.quarkus.bom.decomposer.maven.platformgen.PlatformReleaseWithMembersConfig;
 import io.quarkus.bootstrap.BootstrapConstants;
-import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
+import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalWorkspace;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
@@ -44,7 +44,6 @@ import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.graph.Dependency;
-import org.eclipse.aether.impl.RemoteRepositoryManager;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.resolution.ArtifactDescriptorException;
 import org.eclipse.aether.resolution.ArtifactDescriptorRequest;
@@ -91,18 +90,6 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
 
     @Parameter(property = "outputFile", defaultValue = "${project.build.directory}/${project.artifactId}-${project.version}-${project.version}.json")
     private File outputFile;
-
-    @Component
-    RepositorySystem repoSystem;
-
-    @Component
-    RemoteRepositoryManager remoteRepoManager;
-
-    @Parameter(defaultValue = "${repositorySystemSession}", readonly = true)
-    RepositorySystemSession repoSession;
-
-    @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
-    List<RemoteRepository> repos;
 
     @Parameter(defaultValue = "${project}", readonly = true)
     MavenProject project;
@@ -170,6 +157,18 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
     @Parameter(property = "workspaceDiscovery")
     boolean workspaceDiscovery;
 
+    @Component
+    RepositorySystem repoSystem;
+
+    @Parameter(defaultValue = "${repositorySystemSession}", readonly = true)
+    RepositorySystemSession repoSession;
+
+    @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
+    List<RemoteRepository> repos;
+
+    @Component
+    QuarkusWorkspaceProvider bootstrapProvider;
+
     MavenArtifactResolver resolver;
 
     @Override
@@ -222,7 +221,8 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
                 try {
                     f = repoSystem.resolveArtifact(repoSession, new ArtifactRequest().setArtifact(new DefaultArtifact(
                             coords.getGroupId(), coords.getArtifactId(), coords.getClassifier(), coords.getType(),
-                            coords.getVersion())).setRepositories(repos)).getArtifact().getFile();
+                            coords.getVersion())).setRepositories(repos))
+                            .getArtifact().getFile();
                 } catch (ArtifactResolutionException e) {
                     throw new MojoExecutionException("Failed to resolve metadata override artifact " + coords, e);
                 }
@@ -369,8 +369,10 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
             final List<ExtensionOrigin> origins;
             if (extension == null) {
                 try {
-                    extension = processDependency(repoSystem.resolveArtifact(repoSession,
-                            new ArtifactRequest().setRepositories(repos).setArtifact(artifact)).getArtifact());
+                    extension = processDependency(
+                            repoSystem.resolveArtifact(repoSession,
+                                    new ArtifactRequest().setRepositories(repos).setArtifact(artifact))
+                                    .getArtifact());
                 } catch (ArtifactResolutionException e) {
                     // there are some parent poms that appear as jars for some reason
                     debug("Failed to resolve dependency %s defined in %s", artifact, bomArtifact);
@@ -538,30 +540,25 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
         }
     }
 
-    private MavenArtifactResolver getResolver() throws MojoExecutionException {
+    private MavenArtifactResolver getResolver() {
         if (resolver == null) {
-            try {
-                var builder = MavenArtifactResolver.builder()
-                        .setRemoteRepositoryManager(remoteRepoManager)
-                        .setRemoteRepositories(repos);
-                if (!workspaceDiscovery) {
-                    builder.setRepositorySystem(repoSystem)
-                            .setRepositorySystemSession(repoSession)
-                            .setWorkspaceDiscovery(false);
-                }
-                resolver = builder.build();
-            } catch (BootstrapMavenException e) {
-                throw new MojoExecutionException("Failed to initialize Maven artifact resolver", e);
+            var config = BootstrapMavenContext.config()
+                    .setRemoteRepositories(repos)
+                    .setWorkspaceDiscovery(workspaceDiscovery);
+            if (!workspaceDiscovery) {
+                config.setRepositorySystem(repoSystem)
+                        .setRepositorySystemSession(repoSession);
             }
+            resolver = bootstrapProvider.createArtifactResolver(config);
         }
         return resolver;
     }
 
     private List<Dependency> dependencyManagementFromDescriptor(Artifact bomArtifact) throws MojoExecutionException {
         try {
-            return repoSystem
-                    .readArtifactDescriptor(repoSession,
-                            new ArtifactDescriptorRequest().setRepositories(repos).setArtifact(bomArtifact))
+            return repoSystem.readArtifactDescriptor(repoSession,
+                    new ArtifactDescriptorRequest().setRepositories(repos)
+                            .setArtifact(bomArtifact))
                     .getManagedDependencies();
         } catch (ArtifactDescriptorException e) {
             throw new MojoExecutionException("Failed to read descriptor of " + bomArtifact, e);
@@ -571,8 +568,8 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
     private List<Dependency> dependencyManagementFromResolvedPom(Artifact bomArtifact) throws MojoExecutionException {
         final Path pomXml;
         try {
-            pomXml = repoSystem
-                    .resolveArtifact(repoSession, new ArtifactRequest().setArtifact(bomArtifact).setRepositories(repos))
+            pomXml = repoSystem.resolveArtifact(repoSession,
+                    new ArtifactRequest().setArtifact(bomArtifact).setRepositories(repos))
                     .getArtifact().getFile().toPath();
         } catch (ArtifactResolutionException e) {
             throw new MojoExecutionException("Failed to resolve " + bomArtifact, e);
