@@ -101,8 +101,12 @@ public class Quarkus implements Callable<Integer> {
     protected Set<String> members = Set.of();
 
     @CommandLine.Option(names = {
-            "--redhat-version-rate" }, description = "Calculate the rate of redhat versions among the dependencies")
+            "--redhat-version-rate" }, description = "Calculate the rate of redhat versions among the inspected dependencies")
     public boolean redhatVersionRate;
+
+    @CommandLine.Option(names = {
+            "--info" }, description = "Log basic Quarkus platform release information")
+    public boolean info;
 
     protected MessageWriter log = MessageWriter.info();
 
@@ -111,6 +115,20 @@ public class Quarkus implements Callable<Integer> {
 
         var resolver = getResolver();
         var platform = readPlatformInfo(resolver);
+        if (info) {
+            log.info("");
+            log.info("Platform version: " + version);
+            log.info("");
+            log.info("Member BOMs:");
+            for (var m : platform.getMembers()) {
+                log.info("- " + m.getBom().toCompactCoords());
+            }
+            log.info("");
+            log.info("Maven plugin: " + platform.getMavenPlugin().toCompactCoords());
+            log.info("");
+            return 0;
+        }
+
         var memberReports = new ArrayList<MemberReport>(members.isEmpty() ? platform.getMembers().size() : members.size());
         final MemberReport coreReport = new MemberReport(platform.getCore(), isMemberSelected(platform.getCore()));
         for (var m : platform.getMembers()) {
