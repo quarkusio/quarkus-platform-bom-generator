@@ -154,6 +154,46 @@ A custom local Maven repository location can be provided using `--repo-dir` argu
 java -jar domino.jar quarkus --version=3.2.9.Final --resolve --repo-dir=repo-3.2.9
 ```
 
+#### Red Hat dependency version rate
+
+`quarkus` command includes option `--redhat-version-rate` that enables calculation of the rate of dependencies with `redhat` version qualifier among all the visited dependencies.
+
+##### Red Hat build of Quarkus productization rate
+
+The following command will inspect dependencies of all the Quarkus extensions that are managed by `quarkus-bom`, Quarkus Maven plugin and other Qarkus artifacts that are supported as direct application dependencies (such as `io.quarkus:quarkus-junit5`) and calculate the rate of artifacts containing `redhat` version qualifier:
+```
+[user@localhost playground]$ domino quarkus --version 3.2.10.Final-redhat-00002 --members=quarkus-bom --redhat-version-rate
+<skip/>
+Total number of dependencies: 1470
+Red Hat version rate: 62.3%
+```
+
+`--extension-versions=*redhat*` can be added to limit analysis to only extensions that were rebuilt by Red Hat:
+```
+[user@localhost playground]$ domino quarkus --version 3.2.10.Final-redhat-00002 --members=quarkus-bom --redhat-version-rate --extension-versions=*redhat*
+<skip/>
+Total number of dependencies: 1075
+Red Hat version rate: 82.3%
+```
+
+##### Red Hat build of Apache Camel for Quarkus productization rate
+
+The following command will inspect dependencies of all the Camel Quarkus extensions that are managed by `quarkus-camel-bom` and calculate the rate of artifacts containing `redhat` version qualifier:
+```
+[user@localhost playground]$ domino quarkus --version 3.2.10.Final-redhat-00002 --members=quarkus-camel-bom --redhat-version-rate
+<skip/>
+Total number of dependencies: 2583
+Red Hat version rate: 41.9%
+```
+
+`--extension-versions=*redhat*` can be added to limit analysis to only extensions that were rebuilt by Red Hat:
+```
+[user@localhost playground]$ domino quarkus --version 3.2.10.Final-redhat-00002 --members=quarkus-camel-bom --redhat-version-rate --extension-versions=*redhat*
+<skip/>
+Total number of dependencies: 1278
+Red Hat version rate: 80.4%
+```
+
 ### Maven plugin
 
 There is also a Maven plugin goal that can be used to generate a dependency report. For example, here is one for Vert.X:

@@ -31,11 +31,14 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.DependencyNode;
+import org.eclipse.aether.repository.RemoteRepository;
 import picocli.CommandLine;
 
 @CommandLine.Command(name = "quarkus", header = "Quarkus platform release analysis", description = "%n"
@@ -97,18 +100,17 @@ public class Quarkus implements Callable<Integer> {
             "--members" }, description = "Limit the analysis to the specified members", split = ",")
     protected Set<String> members = Set.of();
 
+    @CommandLine.Option(names = {
+            "--redhat-version-rate" }, description = "Calculate the rate of redhat versions among the dependencies")
+    public boolean redhatVersionRate;
+
     protected MessageWriter log = MessageWriter.info();
 
     @Override
     public Integer call() throws Exception {
 
         var resolver = getResolver();
-        var platform = QuarkusPlatformInfoReader.builder()
-                .setResolver(resolver)
-                .setVersion(version)
-                .setPlatformKey(platformGroupId)
-                .build()
-                .readPlatformInfo();
+        var platform = readPlatformInfo(resolver);
         var memberReports = new ArrayList<MemberReport>(members.isEmpty() ? platform.getMembers().size() : members.size());
         final MemberReport coreReport = new MemberReport(platform.getCore(), isMemberSelected(platform.getCore()));
         for (var m : platform.getMembers()) {
@@ -117,25 +119,139 @@ public class Quarkus implements Callable<Integer> {
             }
         }
 
-        final ArtifactSet tracePattern;
-        if (trace != null && !trace.isEmpty()) {
-            var builder = ArtifactSet.builder();
-            for (var exp : trace) {
-                builder.include(toArtifactCoordsPattern(exp));
-            }
-            tracePattern = builder.build();
-        } else {
-            tracePattern = null;
-        }
+        final ArtifactSet tracePattern = initTracePattern();
         final Map<ArtifactCoords, List<MemberReport>> rootsToMembers = tracePattern == null ? Map.of() : new HashMap<>();
+        final Map<ArtifactCoords, ArtifactCoords> allNodes = redhatVersionRate ? new ConcurrentHashMap<>() : null;
+        final AtomicInteger redhatVersionsTotal = new AtomicInteger();
+        var treeVisitor = initTreeVisitor(tracePattern, allNodes, redhatVersionsTotal, memberReports, coreReport,
+                rootsToMembers);
+        var treeInspector = initTreeInspector(resolver, treeVisitor);
+        var coreConstraints = readBomConstraints(platform.getCore().getBom(), resolver);
 
+        for (var m : memberReports) {
+            final List<Dependency> effectiveConstraints;
+            if (m.metadata == platform.getCore()) {
+                m.bomConstraints = mapConstraints(coreConstraints);
+                effectiveConstraints = coreConstraints;
+                if (m.enabled) {
+                    var pluginCoords = platform.getMavenPlugin();
+                    if (isVersionSelected(pluginCoords.getVersion())) {
+                        treeInspector.inspectPlugin(getAetherArtifact(pluginCoords));
+                        if (tracePattern != null) {
+                            rootsToMembers.computeIfAbsent(pluginCoords, k -> new ArrayList<>(1)).add(m);
+                        }
+                    }
+                    for (var extraKey : EXTRA_CORE_ARTIFACTS) {
+                        var extraArtifact = ArtifactCoords.of(extraKey.getGroupId(), extraKey.getArtifactId(),
+                                extraKey.getClassifier(), extraKey.getType(), platform.getCore().getQuarkusCoreVersion());
+                        var d = m.bomConstraints.get(extraArtifact);
+                        if (d == null && RhVersionPattern.isRhVersion(platform.getCore().getQuarkusCoreVersion())) {
+                            extraArtifact = ArtifactCoords.of(extraKey.getGroupId(), extraKey.getArtifactId(),
+                                    extraKey.getClassifier(), extraKey.getType(),
+                                    RhVersionPattern.ensureNoRhQualifier(platform.getCore().getQuarkusCoreVersion()));
+                            d = m.bomConstraints.get(extraArtifact);
+                        }
+                        if (d == null) {
+                            log.warn("Failed to locate " + extraArtifact + " among "
+                                    + platform.getCore().getBom().toCompactCoords() + " constraints");
+                        } else if (isVersionSelected(d.getArtifact().getVersion())) {
+                            if (tracePattern != null) {
+                                rootsToMembers.computeIfAbsent(extraArtifact, k -> new ArrayList<>(1)).add(m);
+                            }
+                            treeInspector.inspectAsDependency(d.getArtifact(), effectiveConstraints, d.getExclusions());
+                        }
+                    }
+                }
+            } else {
+                var tmp = readBomConstraints(m.metadata.getBom(), resolver);
+                effectiveConstraints = new ArrayList<>(coreConstraints.size() + tmp.size());
+                effectiveConstraints.addAll(coreConstraints);
+                effectiveConstraints.addAll(tmp);
+                m.bomConstraints = mapConstraints(tmp);
+            }
+            if (m.enabled) {
+                for (var e : m.metadata.getExtensions()) {
+                    if (isVersionSelected(e.getVersion())) {
+                        var d = m.bomConstraints.get(e);
+                        treeInspector.inspectAsDependency(getAetherArtifact(e), effectiveConstraints,
+                                d == null ? List.of() : d.getExclusions());
+                        if (tracePattern != null) {
+                            rootsToMembers.computeIfAbsent(e, k -> new ArrayList<>(1)).add(m);
+                        }
+
+                        if (!runtimeOnly) {
+                            var deployment = ArtifactCoords.of(e.getGroupId(), e.getArtifactId() + "-deployment",
+                                    e.getClassifier(),
+                                    e.getType(), e.getVersion());
+                            d = m.bomConstraints.get(deployment);
+                            if (d == null) {
+                                var jar = resolver.resolve(getAetherArtifact(e)).getArtifact().getFile().toPath();
+                                deployment = PathTree.ofDirectoryOrArchive(jar).apply(BootstrapConstants.DESCRIPTOR_PATH,
+                                        visit -> {
+                                            var props = new Properties();
+                                            try (BufferedReader reader = Files.newBufferedReader(visit.getPath())) {
+                                                props.load(reader);
+                                            } catch (IOException ioe) {
+                                                throw new UncheckedIOException(ioe);
+                                            }
+                                            var coords = props.getProperty(BootstrapConstants.PROP_DEPLOYMENT_ARTIFACT);
+                                            if (coords == null) {
+                                                throw new RuntimeException(
+                                                        visit.getUrl() + " is missing property "
+                                                                + BootstrapConstants.PROP_DEPLOYMENT_ARTIFACT);
+                                            }
+                                            return ArtifactCoords.fromString(coords);
+                                        });
+                            }
+                            d = m.bomConstraints.get(deployment);
+                            treeInspector.inspectAsDependency(getAetherArtifact(deployment), effectiveConstraints,
+                                    d == null ? List.of() : d.getExclusions());
+                            if (tracePattern != null) {
+                                rootsToMembers.computeIfAbsent(deployment, k -> new ArrayList<>(1)).add(m);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (tracePattern != null) {
+                for (var d : m.bomConstraints.values()) {
+                    var a = d.getArtifact();
+                    if (tracePattern.contains(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(),
+                            a.getVersion())) {
+                        m.addTracedBomConstraint(d);
+                    }
+                }
+            }
+        }
+
+        treeInspector.complete();
+
+        logMemberReports(memberReports);
+
+        if (allNodes != null) {
+            log.info("Total number of dependencies: " + allNodes.size());
+            if (!allNodes.isEmpty()) {
+                log.info(String.format("Red Hat version rate: %.1f%%",
+                        ((double) redhatVersionsTotal.get() * 100) / allNodes.size()));
+            }
+            log.info("");
+        }
+
+        return 0;
+    }
+
+    private DependencyTreeVisitor<TreeNode> initTreeVisitor(ArtifactSet tracePattern,
+            Map<ArtifactCoords, ArtifactCoords> allNodes, AtomicInteger redhatVersionsTotal,
+            ArrayList<MemberReport> memberReports, MemberReport coreReport,
+            Map<ArtifactCoords, List<MemberReport>> rootsToMembers) {
         var treeVisitor = new DependencyTreeVisitor<TreeNode>() {
 
             final Map<Artifact, String> enforcedBy = new HashMap<>();
 
             @Override
             public void visit(DependencyTreeVisit<TreeNode> visit) {
-                if (tracePattern != null) {
+                if (tracePattern != null || redhatVersionRate) {
                     var result = visit(visit, visit.getRoot());
                     if (result != null) {
                         visit.pushEvent(result);
@@ -145,9 +261,17 @@ public class Quarkus implements Callable<Integer> {
 
             private TreeNode visit(DependencyTreeVisit<TreeNode> visit, DependencyNode node) {
                 var a = node.getArtifact();
+                if (allNodes != null) {
+                    var coords = ArtifactCoords.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(),
+                            a.getVersion());
+                    if (allNodes.put(coords, coords) == null && RhVersionPattern.isRhVersion(a.getVersion())) {
+                        redhatVersionsTotal.incrementAndGet();
+                    }
+                }
                 TreeNode result = null;
-                if (tracePattern.contains(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(),
-                        a.getVersion())) {
+                if (tracePattern != null
+                        && tracePattern.contains(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(),
+                                a.getVersion())) {
                     result = new TreeNode(a, true, getEnforcedInfo(a));
                 }
                 for (var child : node.getChildren()) {
@@ -199,112 +323,10 @@ public class Quarkus implements Callable<Integer> {
             public void handleResolutionFailures(Collection<DependencyTreeError> requests) {
             }
         };
+        return treeVisitor;
+    }
 
-        var treeProcessor = DependencyTreeInspector.configure()
-                .setArtifactResolver(resolver)
-                .setResolveDependencies(resolve)
-                .setParallelProcessing(parallelProcessing)
-                .setProgressTrackerPrefix("Inspecting ")
-                .setTreeVisitor(treeVisitor);
-
-        var coreConstraints = readBomConstraints(platform.getCore().getBom(), resolver);
-        for (var m : memberReports) {
-            final List<Dependency> effectiveConstraints;
-            if (m.metadata == platform.getCore()) {
-                m.bomConstraints = mapConstraints(coreConstraints);
-                effectiveConstraints = coreConstraints;
-                var pluginCoords = platform.getMavenPlugin();
-                if (isVersionSelected(pluginCoords.getVersion())) {
-                    treeProcessor.inspectPlugin(getAetherArtifact(pluginCoords));
-                    if (tracePattern != null) {
-                        rootsToMembers.computeIfAbsent(pluginCoords, k -> new ArrayList<>(1)).add(m);
-                    }
-                }
-                for (var extraKey : EXTRA_CORE_ARTIFACTS) {
-                    var extraArtifact = ArtifactCoords.of(extraKey.getGroupId(), extraKey.getArtifactId(),
-                            extraKey.getClassifier(), extraKey.getType(), platform.getCore().getQuarkusCoreVersion());
-                    var d = m.bomConstraints.get(extraArtifact);
-                    if (d == null && RhVersionPattern.isRhVersion(platform.getCore().getQuarkusCoreVersion())) {
-                        extraArtifact = ArtifactCoords.of(extraKey.getGroupId(), extraKey.getArtifactId(),
-                                extraKey.getClassifier(), extraKey.getType(),
-                                RhVersionPattern.ensureNoRhQualifier(platform.getCore().getQuarkusCoreVersion()));
-                        d = m.bomConstraints.get(extraArtifact);
-                    }
-                    if (d == null) {
-                        log.warn("Failed to locate " + extraArtifact + " among "
-                                + platform.getCore().getBom().toCompactCoords() + " constraints");
-                    } else if (isVersionSelected(d.getArtifact().getVersion())) {
-                        if (tracePattern != null) {
-                            rootsToMembers.computeIfAbsent(extraArtifact, k -> new ArrayList<>(1)).add(m);
-                        }
-                        treeProcessor.inspectAsDependency(d.getArtifact(), effectiveConstraints, d.getExclusions());
-                    }
-                }
-            } else {
-                var tmp = readBomConstraints(m.metadata.getBom(), resolver);
-                effectiveConstraints = new ArrayList<>(coreConstraints.size() + tmp.size());
-                effectiveConstraints.addAll(coreConstraints);
-                effectiveConstraints.addAll(tmp);
-                m.bomConstraints = mapConstraints(tmp);
-            }
-            if (m.enabled) {
-                for (var e : m.metadata.getExtensions()) {
-                    if (isVersionSelected(e.getVersion())) {
-                        var d = m.bomConstraints.get(e);
-                        treeProcessor.inspectAsDependency(getAetherArtifact(e), effectiveConstraints,
-                                d == null ? List.of() : d.getExclusions());
-                        if (tracePattern != null) {
-                            rootsToMembers.computeIfAbsent(e, k -> new ArrayList<>(1)).add(m);
-                        }
-
-                        if (!runtimeOnly) {
-                            var deployment = ArtifactCoords.of(e.getGroupId(), e.getArtifactId() + "-deployment",
-                                    e.getClassifier(),
-                                    e.getType(), e.getVersion());
-                            d = m.bomConstraints.get(deployment);
-                            if (d == null) {
-                                var jar = resolver.resolve(getAetherArtifact(e)).getArtifact().getFile().toPath();
-                                deployment = PathTree.ofDirectoryOrArchive(jar).apply(BootstrapConstants.DESCRIPTOR_PATH,
-                                        visit -> {
-                                            var props = new Properties();
-                                            try (BufferedReader reader = Files.newBufferedReader(visit.getPath())) {
-                                                props.load(reader);
-                                            } catch (IOException ioe) {
-                                                throw new UncheckedIOException(ioe);
-                                            }
-                                            var coords = props.getProperty(BootstrapConstants.PROP_DEPLOYMENT_ARTIFACT);
-                                            if (coords == null) {
-                                                throw new RuntimeException(
-                                                        visit.getUrl() + " is missing property "
-                                                                + BootstrapConstants.PROP_DEPLOYMENT_ARTIFACT);
-                                            }
-                                            return ArtifactCoords.fromString(coords);
-                                        });
-                            }
-                            d = m.bomConstraints.get(deployment);
-                            treeProcessor.inspectAsDependency(getAetherArtifact(deployment), effectiveConstraints,
-                                    d == null ? List.of() : d.getExclusions());
-                            if (tracePattern != null) {
-                                rootsToMembers.computeIfAbsent(deployment, k -> new ArrayList<>(1)).add(m);
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (tracePattern != null) {
-                for (var d : m.bomConstraints.values()) {
-                    var a = d.getArtifact();
-                    if (tracePattern.contains(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(),
-                            a.getVersion())) {
-                        m.addTracedBomConstraint(d);
-                    }
-                }
-            }
-        }
-
-        treeProcessor.complete();
-
+    private void logMemberReports(ArrayList<MemberReport> memberReports) {
         int membersWithTraces = 0;
         for (var report : memberReports) {
             if (report.enabled && report.hasTraces()) {
@@ -348,7 +370,39 @@ public class Quarkus implements Callable<Integer> {
             }
             log.info(sb.append(" found").toString());
         }
-        return 0;
+    }
+
+    private DependencyTreeInspector initTreeInspector(MavenArtifactResolver resolver,
+            DependencyTreeVisitor<TreeNode> treeVisitor) {
+        return DependencyTreeInspector.configure()
+                .setArtifactResolver(resolver)
+                .setResolveDependencies(resolve)
+                .setParallelProcessing(parallelProcessing)
+                .setProgressTrackerPrefix("Inspecting ")
+                .setTreeVisitor(treeVisitor);
+    }
+
+    private ArtifactSet initTracePattern() {
+        final ArtifactSet tracePattern;
+        if (trace != null && !trace.isEmpty()) {
+            var builder = ArtifactSet.builder();
+            for (var exp : trace) {
+                builder.include(toArtifactCoordsPattern(exp));
+            }
+            tracePattern = builder.build();
+        } else {
+            tracePattern = null;
+        }
+        return tracePattern;
+    }
+
+    private QuarkusPlatformInfo readPlatformInfo(MavenArtifactResolver resolver) {
+        return QuarkusPlatformInfoReader.builder()
+                .setResolver(resolver)
+                .setVersion(version)
+                .setPlatformKey(platformGroupId)
+                .build()
+                .readPlatformInfo();
     }
 
     private boolean isMemberSelected(QuarkusPlatformInfo.Member member) {
@@ -392,6 +446,8 @@ public class Quarkus implements Callable<Integer> {
         }
     }
 
+    private static final String MRRC_URL = "https://maven.repository.redhat.com/ga";
+
     private MavenArtifactResolver getResolver() throws BootstrapMavenException {
         var config = BootstrapMavenContext.config()
                 .setWorkspaceDiscovery(false)
@@ -409,7 +465,48 @@ public class Quarkus implements Callable<Integer> {
         if (mavenProfiles != null) {
             System.setProperty(BootstrapMavenOptions.QUARKUS_INTERNAL_MAVEN_CMD_LINE_ARGS, "-P" + mavenProfiles);
         }
-        return new MavenArtifactResolver(new BootstrapMavenContext(config));
+        var mvnCtx = new BootstrapMavenContext(config);
+        // if the version is a redhat one, enable the redhat repository in case it's not configured
+        if (version != null && RhVersionPattern.isRhVersion(version)) {
+            boolean redhatConfigured = false;
+            for (var r : mvnCtx.getRemoteRepositories()) {
+                if (redhatConfigured = isRedhat(r)) {
+                    break;
+                }
+            }
+            if (!redhatConfigured) {
+                var mrrc = new RemoteRepository.Builder("redhat", "default", MRRC_URL).build();
+                mvnCtx = new BootstrapMavenContext(
+                        BootstrapMavenContext.config()
+                                .setRemoteRepositoryManager(mvnCtx.getRemoteRepositoryManager())
+                                .setRepositorySystem(mvnCtx.getRepositorySystem())
+                                .setRepositorySystemSession(mvnCtx.getRepositorySystemSession())
+                                .setRemoteRepositories(
+                                        mvnCtx.getRemoteRepositoryManager()
+                                                .aggregateRepositories(mvnCtx.getRepositorySystemSession(),
+                                                        List.of(mrrc),
+                                                        mvnCtx.getRemoteRepositories(), false))
+                                .setRemotePluginRepositories(
+                                        mvnCtx.getRemoteRepositoryManager()
+                                                .aggregateRepositories(mvnCtx.getRepositorySystemSession(),
+                                                        List.of(mrrc),
+                                                        mvnCtx.getRemotePluginRepositories(), false)));
+            }
+        }
+        return new MavenArtifactResolver(mvnCtx);
+    }
+
+    private static boolean isRedhat(RemoteRepository repo) {
+        // it could be MRRC or another RH repo
+        if (repo.getUrl().contains("redhat.com")) {
+            return true;
+        }
+        for (var mirrored : repo.getMirroredRepositories()) {
+            if (isRedhat(mirrored)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String toCompactCoords(Artifact a) {
