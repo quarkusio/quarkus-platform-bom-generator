@@ -51,7 +51,7 @@ public class NodeTask<I, N, O> {
     public void dependsOn(NodeTask<I, N, O> dep) {
         lock.writeLock().lock();
         try {
-            dependencies.computeIfAbsent(dep.id, i -> dep);
+            dependencies.putIfAbsent(dep.id, dep);
         } finally {
             lock.writeLock().unlock();
         }

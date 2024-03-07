@@ -1,6 +1,6 @@
 package io.quarkus.bom.decomposer.maven;
 
-import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
+import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.domino.ProductInfoImpl;
 import io.quarkus.domino.ProjectDependencyConfig;
@@ -21,7 +21,6 @@ import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
-import org.eclipse.aether.impl.RemoteRepositoryManager;
 import org.eclipse.aether.repository.RemoteRepository;
 
 /**
@@ -35,12 +34,6 @@ import org.eclipse.aether.repository.RemoteRepository;
  */
 @Mojo(name = "deps-to-rebuild", threadSafe = true, requiresProject = false)
 public class NonQuarkusDepsToBuildMojo extends AbstractMojo {
-
-    @Component
-    RemoteRepositoryManager remoteRepoManager;
-
-    @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
-    List<RemoteRepository> repos;
 
     @Parameter(required = false, defaultValue = "${project.file}")
     File projectFile;
@@ -204,21 +197,20 @@ public class NonQuarkusDepsToBuildMojo extends AbstractMojo {
     @Parameter(required = false)
     ProductInfoImpl.Builder productInfo;
 
+    @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
+    List<RemoteRepository> repos;
+
+    @Component
+    QuarkusWorkspaceProvider bootstrapProvider;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
 
-        MavenArtifactResolver resolver;
-        try {
-            resolver = MavenArtifactResolver.builder()
-                    .setRemoteRepositories(repos)
-                    .setRemoteRepositoryManager(remoteRepoManager)
-                    .setWorkspaceDiscovery(projectFile != null)
-                    .setPreferPomsFromWorkspace(projectFile != null)
-                    .setCurrentProject(projectFile == null ? null : projectFile.toString())
-                    .build();
-        } catch (BootstrapMavenException e) {
-            throw new MojoExecutionException("Failed to initialize Maven artifact resolver", e);
-        }
+        final MavenArtifactResolver resolver = bootstrapProvider.createArtifactResolver(BootstrapMavenContext.config()
+                .setRemoteRepositories(repos)
+                .setWorkspaceDiscovery(projectFile != null)
+                .setPreferPomsFromWorkspace(projectFile != null)
+                .setCurrentProject(projectFile == null ? null : projectFile.toString()));
 
         final ProjectDependencyResolver.Builder builder = ProjectDependencyResolver.builder()
                 .setArtifactResolver(resolver)

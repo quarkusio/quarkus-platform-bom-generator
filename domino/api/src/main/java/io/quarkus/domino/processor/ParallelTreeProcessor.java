@@ -1,6 +1,7 @@
 package io.quarkus.domino.processor;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -45,15 +46,38 @@ public class ParallelTreeProcessor<I, N, O> {
     }
 
     public void addRoot(N root) {
-        rootTasks.add(visit(root));
+        rootTasks.add(visit(root, new LinkedHashMap<>()));
     }
 
-    private NodeTask<I, N, O> visit(N node) {
-        final NodeTask<I, N, O> nodeTask = allTasks.computeIfAbsent(nodeProcessor.getNodeId(node),
+    private NodeTask<I, N, O> visit(N node, Map<I, N> visited) {
+        var nodeId = nodeProcessor.getNodeId(node);
+        {
+            var prevNode = visited.put(nodeId, node);
+            if (prevNode != null) {
+                var sb = new StringBuilder("Circular dependency detected: ");
+                var i = visited.entrySet().iterator();
+                while (i.hasNext()) {
+                    var e = i.next();
+                    if (e.getKey().equals(nodeId)) {
+                        sb.append(e.getValue());
+                        break;
+                    }
+                }
+                while (i.hasNext()) {
+                    var e = i.next();
+                    sb.append(" -> ").append(e.getValue());
+                }
+                sb.append(" -> ").append(node);
+                throw new IllegalArgumentException(sb.toString());
+            }
+        }
+
+        final NodeTask<I, N, O> nodeTask = allTasks.computeIfAbsent(nodeId,
                 id -> NodeTask.of(id, node, nodeFunc, resultQueue));
         for (N c : nodeProcessor.getChildren(node)) {
-            nodeTask.dependsOn(visit(c));
+            nodeTask.dependsOn(visit(c, visited));
         }
+        visited.remove(nodeId);
         return nodeTask;
     }
 }

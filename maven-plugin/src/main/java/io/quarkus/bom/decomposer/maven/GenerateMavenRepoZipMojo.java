@@ -1,6 +1,7 @@
 package io.quarkus.bom.decomposer.maven;
 
 import io.quarkus.bom.decomposer.maven.platformgen.MavenRepoZip;
+import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.maven.dependency.ArtifactCoords;
@@ -13,34 +14,21 @@ import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
-import org.eclipse.aether.RepositorySystem;
-import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.graph.Dependency;
-import org.eclipse.aether.impl.RemoteRepositoryManager;
-import org.eclipse.aether.repository.RemoteRepository;
 
 @Mojo(name = "generate-maven-repo-zip", threadSafe = true)
 public class GenerateMavenRepoZipMojo extends AbstractMojo {
-
-    @Component
-    RepositorySystem repoSystem;
-
-    @Component
-    RemoteRepositoryManager remoteRepoManager;
-
-    @Parameter(defaultValue = "${repositorySystemSession}", readonly = true)
-    RepositorySystemSession repoSession;
-
-    @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
-    List<RemoteRepository> repos;
 
     @Parameter(defaultValue = "${project}", readonly = true)
     MavenProject project;
 
     @Parameter
     GenerateMavenRepoZip generateMavenRepoZip;
+
+    @Component
+    QuarkusWorkspaceProvider bootstrapProvider;
 
     private MavenArtifactResolver resolver;
 
@@ -85,19 +73,9 @@ public class GenerateMavenRepoZipMojo extends AbstractMojo {
     }
 
     private MavenArtifactResolver getResolver() throws MojoExecutionException {
-        if (resolver != null) {
-            return resolver;
-        }
-        try {
-            return resolver = MavenArtifactResolver.builder()
-                    .setRepositorySystem(repoSystem)
-                    .setRemoteRepositoryManager(remoteRepoManager)
-                    .setRepositorySystemSession(repoSession)
-                    .setRemoteRepositories(repos)
-                    .setWorkspaceDiscovery(true)
-                    .build();
-        } catch (BootstrapMavenException e) {
-            throw new MojoExecutionException("Failed to initialize Maven artifact resolver", e);
-        }
+        return resolver == null
+                ? resolver = bootstrapProvider
+                        .createArtifactResolver(BootstrapMavenContext.config().setWorkspaceDiscovery(true))
+                : resolver;
     }
 }

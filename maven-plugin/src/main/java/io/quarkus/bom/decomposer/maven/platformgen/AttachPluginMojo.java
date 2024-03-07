@@ -22,20 +22,17 @@ import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
-import org.apache.maven.project.MavenProjectHelper;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.Exclusion;
-import org.eclipse.aether.impl.RemoteRepositoryManager;
 import org.eclipse.aether.repository.RemoteRepository;
-import org.eclipse.aether.resolution.ArtifactDescriptorException;
 import org.eclipse.aether.resolution.ArtifactDescriptorRequest;
 import org.eclipse.aether.resolution.ArtifactDescriptorResult;
 import org.eclipse.aether.resolution.ArtifactRequest;
-import org.eclipse.aether.resolution.ArtifactResolutionException;
+import org.eclipse.aether.util.artifact.JavaScopes;
 
 @Mojo(name = "attach-maven-plugin", threadSafe = true)
 public class AttachPluginMojo extends AbstractMojo {
@@ -47,24 +44,16 @@ public class AttachPluginMojo extends AbstractMojo {
     String targetPluginCoords;
 
     @Parameter(defaultValue = "${project}", readonly = true)
-    private MavenProject project;
-    @Component
-    private MavenProjectHelper projectHelper;
+    MavenProject project;
 
     @Component
-    private RepositorySystem repoSystem;
-
-    @Component
-    private RemoteRepositoryManager remoteRepoManager;
-
-    @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
-    private List<RemoteRepository> repos;
+    RepositorySystem repoSystem;
 
     @Parameter(defaultValue = "${project.remotePluginRepositories}", readonly = true, required = true)
-    private List<RemoteRepository> pluginRepos;
+    List<RemoteRepository> pluginRepos;
 
     @Parameter(defaultValue = "${repositorySystemSession}", readonly = true)
-    private RepositorySystemSession repoSession;
+    RepositorySystemSession repoSession;
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
@@ -94,7 +83,7 @@ public class AttachPluginMojo extends AbstractMojo {
         IoUtils.recursiveDelete(classesDir.resolve("META-INF").resolve("maven"));
 
         final Path originalPom = resolve(new DefaultArtifact(originalCoords.getGroupId(), originalCoords.getArtifactId(), null,
-                "pom", originalCoords.getVersion()));
+                ArtifactCoords.TYPE_POM, originalCoords.getVersion()));
         final Model generatedModel = project.getOriginalModel().clone();
         generatedModel.setGroupId(targetCoords.getGroupId());
         generatedModel.setArtifactId(targetCoords.getArtifactId());
@@ -118,14 +107,14 @@ public class AttachPluginMojo extends AbstractMojo {
             if (!a.getClassifier().isEmpty()) {
                 modelDep.setClassifier(a.getClassifier());
             }
-            if (!a.getExtension().isEmpty() && !"jar".equals(a.getExtension())) {
+            if (!a.getExtension().isEmpty() && !ArtifactCoords.TYPE_JAR.equals(a.getExtension())) {
                 modelDep.setType(a.getExtension());
             }
             if (!managedKeys.contains(ArtifactKey.of(modelDep.getGroupId(), modelDep.getArtifactId(), modelDep.getClassifier(),
                     modelDep.getType()))) {
                 modelDep.setVersion(a.getVersion());
             }
-            if (!d.getScope().isEmpty() && !"compile".equals(d.getScope())) {
+            if (!d.getScope().isEmpty() && !JavaScopes.COMPILE.equals(d.getScope())) {
                 modelDep.setScope(d.getScope());
             }
             if (d.isOptional()) {
@@ -154,7 +143,7 @@ public class AttachPluginMojo extends AbstractMojo {
         try {
             return repoSystem.readArtifactDescriptor(repoSession,
                     new ArtifactDescriptorRequest().setArtifact(a).setRepositories(pluginRepos));
-        } catch (ArtifactDescriptorException e) {
+        } catch (Exception e) {
             throw new MojoExecutionException("Failed to describe " + a, e);
         }
     }
@@ -163,9 +152,10 @@ public class AttachPluginMojo extends AbstractMojo {
         try {
             return repoSystem
                     .resolveArtifact(repoSession,
-                            new ArtifactRequest().setArtifact(pluginArtifact).setRepositories(pluginRepos))
+                            new ArtifactRequest().setArtifact(pluginArtifact)
+                                    .setRepositories(pluginRepos))
                     .getArtifact().getFile().toPath();
-        } catch (ArtifactResolutionException e) {
+        } catch (Exception e) {
             throw new MojoExecutionException("Failed to resolve artifact " + pluginArtifact, e);
         }
     }

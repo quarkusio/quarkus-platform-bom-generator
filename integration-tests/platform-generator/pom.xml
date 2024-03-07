@@ -26,7 +26,6 @@
     <dependency>
       <groupId>jakarta.inject</groupId>
       <artifactId>jakarta.inject-api</artifactId>
-      <version>1.0</version>
       <scope>test</scope>
     </dependency>
     <dependency>

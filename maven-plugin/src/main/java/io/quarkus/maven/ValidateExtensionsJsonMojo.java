@@ -1,5 +1,6 @@
 package io.quarkus.maven;
 
+import io.quarkus.bom.decomposer.maven.QuarkusWorkspaceProvider;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
@@ -44,6 +45,18 @@ import org.eclipse.aether.repository.RemoteRepository;
 @Mojo(name = "validate-extension-catalog", threadSafe = true)
 public class ValidateExtensionsJsonMojo extends AbstractMojo {
 
+    @Component
+    RepositorySystem repoSystem;
+
+    @Component
+    RemoteRepositoryManager remoteRepoManager;
+
+    @Parameter(defaultValue = "${repositorySystemSession}", readonly = true)
+    RepositorySystemSession repoSession;
+
+    @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
+    List<RemoteRepository> repos;
+
     @Parameter(property = "jsonGroupId", required = true)
     private String jsonGroupId;
 
@@ -61,24 +74,15 @@ public class ValidateExtensionsJsonMojo extends AbstractMojo {
     @Parameter(defaultValue = "false", property = "quarkus.validate-extensions-json.skip")
     private boolean skip;
 
-    @Component
-    private RepositorySystem repoSystem;
-
-    @Component
-    private RemoteRepositoryManager remoteRepoManager;
-
-    @Parameter(defaultValue = "${repositorySystemSession}", readonly = true)
-    private RepositorySystemSession repoSession;
-
-    @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
-    private List<RemoteRepository> repos;
-
     /**
      * Group ID's that we know don't contain extensions. This can speed up the process
      * by preventing the download of artifacts that are not required.
      */
     @Parameter
     private Set<String> ignoredGroupIds = new HashSet<>(0);
+
+    @Component
+    QuarkusWorkspaceProvider bootstrapProvider;
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {

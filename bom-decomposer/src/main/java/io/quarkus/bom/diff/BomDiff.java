@@ -6,6 +6,7 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
+import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -97,7 +98,8 @@ public class BomDiff {
             if (resolver != null) {
                 final MavenArtifactResolver baseResolver = resolver.underlyingResolver();
                 resolverBuilder.setRepositorySystem(baseResolver.getSystem())
-                        .setRemoteRepositoryManager(baseResolver.getRemoteRepositoryManager());
+                        .setRemoteRepositoryManager(baseResolver.getRemoteRepositoryManager())
+                        .setSettingsDecrypter(baseResolver.getMavenContext().getSettingsDecrypter());
             }
             MavenArtifactResolver underlyingResolver;
             try {
@@ -108,8 +110,8 @@ public class BomDiff {
 
             final BootstrapMavenContext mvnCtx = underlyingResolver.getMavenContext();
             final LocalProject bomProject = mvnCtx.getCurrentProject();
-            Artifact pomArtifact = new DefaultArtifact(bomProject.getGroupId(), bomProject.getArtifactId(), "", "pom",
-                    bomProject.getVersion());
+            Artifact pomArtifact = new DefaultArtifact(bomProject.getGroupId(), bomProject.getArtifactId(),
+                    ArtifactCoords.DEFAULT_CLASSIFIER, ArtifactCoords.TYPE_POM, bomProject.getVersion());
             pomArtifact = pomArtifact.setFile(pom.toFile());
 
             return ArtifactResolverProvider.get(underlyingResolver, resolver.getBaseDir()).describe(pomArtifact);

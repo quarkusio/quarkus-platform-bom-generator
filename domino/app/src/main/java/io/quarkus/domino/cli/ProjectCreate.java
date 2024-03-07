@@ -1,10 +1,10 @@
 package io.quarkus.domino.cli;
 
+import jakarta.inject.Inject;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.Callable;
-import javax.inject.Inject;
 import org.eclipse.jgit.api.Git;
 import picocli.CommandLine;
 

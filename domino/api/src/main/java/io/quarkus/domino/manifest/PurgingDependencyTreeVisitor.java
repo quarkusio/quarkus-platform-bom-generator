@@ -56,9 +56,9 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
         //log.infof("Roots total: %s", roots.size());
         //log.infof("Nodes total: %s", nodesTotal);
 
-        var treeProcessor = newTreeProcessor();
         for (VisitedComponentImpl root : roots) {
             // we want to process each tree separately due to possible variations across different trees
+            var treeProcessor = newTreeProcessor();
             treeProcessor.addRoot(root);
             var results = treeProcessor.schedule().join();
             boolean failures = false;
@@ -250,7 +250,17 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
         }
 
         private boolean isCyclicDependency(ArtifactCoords coords) {
-            return isSameGav(this.coords, coords) || parent != null && parent.isCyclicDependency(coords);
+            if (isSameGav(this.coords, coords) || parent != null && parent.isCyclicDependency(coords)) {
+                return true;
+            }
+            if (linkedParents != null) {
+                for (var p : linkedParents) {
+                    if (p.isCyclicDependency(coords)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         private void swap(VisitedComponentImpl other) {

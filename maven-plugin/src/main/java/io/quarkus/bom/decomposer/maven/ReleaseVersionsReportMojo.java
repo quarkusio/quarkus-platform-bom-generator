@@ -7,7 +7,7 @@ import io.quarkus.bom.decomposer.DecomposedBomHtmlReportGenerator;
 import io.quarkus.bom.decomposer.DecomposedBomHtmlReportGenerator.HtmlWriterBuilder;
 import io.quarkus.bom.decomposer.DecomposedBomReleasesLogger;
 import io.quarkus.bom.resolver.ArtifactResolverProvider;
-import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
+import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import java.util.List;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -18,9 +18,6 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.plugins.annotations.ResolutionScope;
 import org.apache.maven.project.MavenProject;
-import org.eclipse.aether.RepositorySystem;
-import org.eclipse.aether.RepositorySystemSession;
-import org.eclipse.aether.impl.RemoteRepositoryManager;
 import org.eclipse.aether.repository.RemoteRepository;
 
 @Mojo(name = "report-release-versions", defaultPhase = LifecyclePhase.VERIFY, requiresDependencyCollection = ResolutionScope.COMPILE_PLUS_RUNTIME)
@@ -50,17 +47,11 @@ public class ReleaseVersionsReportMojo extends AbstractMojo {
     @Parameter(defaultValue = "${skipBomReport}")
     protected boolean skip;
 
-    @Component
-    private RepositorySystem repoSystem;
-
-    @Component
-    private RemoteRepositoryManager remoteRepoManager;
-
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
     private List<RemoteRepository> repos;
 
-    @Parameter(defaultValue = "${repositorySystemSession}", readonly = true)
-    private RepositorySystemSession repoSession;
+    @Component
+    QuarkusWorkspaceProvider bootstrapProvider;
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
@@ -78,14 +69,13 @@ public class ReleaseVersionsReportMojo extends AbstractMojo {
         final MojoMessageWriter msgWriter = new MojoMessageWriter(getLog());
         final BomDecomposerConfig config = BomDecomposer.config()
                 .mavenArtifactResolver(ArtifactResolverProvider.get(
-                        MavenArtifactResolver.builder()
-                                .setRepositorySystem(repoSystem)
-                                .setRepositorySystemSession(repoSession)
-                                .setRemoteRepositories(repos)
-                                .setRemoteRepositoryManager(remoteRepoManager)
-                                .setPreferPomsFromWorkspace(true)
-                                .setCurrentProject(project.getFile() == null ? null : project.getFile().getAbsolutePath())
-                                .build()))
+                        bootstrapProvider.createArtifactResolver(
+                                BootstrapMavenContext.config()
+                                        .setRemoteRepositories(repos)
+                                        .setPreferPomsFromWorkspace(true)
+                                        .setWorkspaceDiscovery(project.getFile() == null)
+                                        .setCurrentProject(
+                                                project.getFile() == null ? null : project.getFile().getAbsolutePath()))))
                 .logger(msgWriter)
                 .debug()
                 .bomArtifact(project.getGroupId(), project.getArtifactId(), project.getVersion());

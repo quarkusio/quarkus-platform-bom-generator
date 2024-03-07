@@ -107,6 +107,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                 ? new PncVersionIncrementor(new SpPlatformVersionIncrementor())
                 : new SpPlatformVersionIncrementor();
 
+        logger.info("Decomposing " + config.quarkusBom().getInputBom());
         final DecomposedBom originalQuarkusBom = BomDecomposer.config()
                 .logger(logger)
                 .mavenArtifactResolver(resolver())

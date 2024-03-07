@@ -48,7 +48,6 @@ public class TraceDependencyMojo extends AbstractMojo {
 
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
     List<RemoteRepository> repos;
-
     /**
      * Complete coordinates of the dependency to trace, e.g. a GAV or a GACTV.
      * Either this or {@link #key} can be specified at the same time.
