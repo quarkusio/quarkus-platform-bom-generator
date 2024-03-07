@@ -42,6 +42,10 @@ import picocli.CommandLine;
         + "Various options to analyze dependencies of a Quarkus platform release.")
 public class Quarkus implements Callable<Integer> {
 
+    private static final String MEMBER_HEADER_PREFIX = "= ";
+    private static final String BOM_ENTRY_HEADER_PREFIX = "== ";
+    private static final String EXTENSIONS_HEADER_PREFIX = "== ";
+
     private static final List<ArtifactKey> EXTRA_CORE_ARTIFACTS = List.of(
             ArtifactKey.of("io.quarkus", "quarkus-junit5", ArtifactCoords.DEFAULT_CLASSIFIER, ArtifactCoords.TYPE_JAR),
             ArtifactKey.of("io.quarkus", "quarkus-junit5-mockito", ArtifactCoords.DEFAULT_CLASSIFIER, ArtifactCoords.TYPE_JAR));
@@ -144,23 +148,7 @@ public class Quarkus implements Callable<Integer> {
                 TreeNode result = null;
                 if (tracePattern.contains(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(),
                         a.getVersion())) {
-                    var enforced = enforcedBy.computeIfAbsent(a, k -> {
-                        var coords = ArtifactCoords.of(k.getGroupId(), k.getArtifactId(), k.getClassifier(),
-                                k.getExtension(), k.getVersion());
-                        StringBuilder sb = null;
-                        for (var report : memberReports) {
-                            if ((report.enabled || report == coreReport) && report.bomConstraints.containsKey(coords)) {
-                                if (sb == null) {
-                                    sb = new StringBuilder().append(" [managed by ");
-                                } else {
-                                    sb.append(", ");
-                                }
-                                sb.append(report.metadata.getBom().getArtifactId());
-                            }
-                        }
-                        return sb == null ? "" : sb.append("]").toString();
-                    });
-                    result = new TreeNode(a, true, enforced);
+                    result = new TreeNode(a, true, getEnforcedInfo(a));
                 }
                 for (var child : node.getChildren()) {
                     var childResult = visit(visit, child);
@@ -172,6 +160,25 @@ public class Quarkus implements Callable<Integer> {
                     }
                 }
                 return result;
+            }
+
+            private String getEnforcedInfo(Artifact a) {
+                return enforcedBy.computeIfAbsent(a, k -> {
+                    var coords = ArtifactCoords.of(k.getGroupId(), k.getArtifactId(), k.getClassifier(),
+                            k.getExtension(), k.getVersion());
+                    StringBuilder sb = null;
+                    for (var report : memberReports) {
+                        if ((report.enabled || report == coreReport) && report.bomConstraints.containsKey(coords)) {
+                            if (sb == null) {
+                                sb = new StringBuilder().append(" [managed by ");
+                            } else {
+                                sb.append(", ");
+                            }
+                            sb.append(report.metadata.getBom().getArtifactId());
+                        }
+                    }
+                    return sb == null ? "" : sb.append("]").toString();
+                });
             }
 
             @Override
@@ -197,6 +204,7 @@ public class Quarkus implements Callable<Integer> {
                 .setArtifactResolver(resolver)
                 .setResolveDependencies(resolve)
                 .setParallelProcessing(parallelProcessing)
+                .setProgressTrackerPrefix("Inspecting ")
                 .setTreeVisitor(treeVisitor);
 
         var coreConstraints = readBomConstraints(platform.getCore().getBom(), resolver);
@@ -302,12 +310,12 @@ public class Quarkus implements Callable<Integer> {
             if (report.enabled && report.hasTraces()) {
                 ++membersWithTraces;
                 log.info("");
-                log.info("== " + report.metadata.getBom().getGroupId().toUpperCase()
+                log.info(MEMBER_HEADER_PREFIX + report.metadata.getBom().getGroupId().toUpperCase()
                         + ":" + report.metadata.getBom().getArtifactId().toUpperCase()
                         + ":" + report.metadata.getBom().getVersion().toUpperCase());
                 if (!report.tracedBomConstraints.isEmpty()) {
                     log.info("");
-                    log.info("= BOM entries");
+                    log.info(BOM_ENTRY_HEADER_PREFIX + "BOM entries");
                     log.info("");
                     for (var v : report.tracedBomConstraints) {
                         log.info(toCompactCoords(v.getArtifact()));
@@ -315,7 +323,7 @@ public class Quarkus implements Callable<Integer> {
                 }
                 if (!report.tracedExtensionDeps.isEmpty()) {
                     log.info("");
-                    log.info("= Extension dependencies");
+                    log.info(EXTENSIONS_HEADER_PREFIX + "Extension dependencies");
                     for (var result : report.tracedExtensionDeps) {
                         log.info("");
                         result.log(log, tree);
