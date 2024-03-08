@@ -42,11 +42,11 @@
 
     <java-ordered-properties.version>1.0.4</java-ordered-properties.version>
     <jakarta-inject.version>2.0.1</jakarta-inject.version>
-    <maven-gpg-plugin.version>3.1.0</maven-gpg-plugin.version>
+    <maven-gpg-plugin.version>1.6</maven-gpg-plugin.version>
     <compiler-plugin.version>3.12.1</compiler-plugin.version>
     <maven-javadoc-plugin.version>3.6.3</maven-javadoc-plugin.version>
     <maven-source-plugin.version>3.3.0</maven-source-plugin.version>
-    <nexus-staging-maven-plugin.version>1.6.9</nexus-staging-maven-plugin.version>
+    <nexus-staging-maven-plugin.version>1.6.8</nexus-staging-maven-plugin.version>
     <surefire-plugin.version>3.2.5</surefire-plugin.version>
 
     <assertj.version>3.25.3</assertj.version>
