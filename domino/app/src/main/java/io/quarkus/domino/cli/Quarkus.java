@@ -140,8 +140,9 @@ public class Quarkus implements Callable<Integer> {
         final ArtifactSet tracePattern = initTracePattern();
         final Map<ArtifactCoords, List<MemberReport>> rootsToMembers = tracePattern == null ? Map.of() : new HashMap<>();
         final Map<ArtifactCoords, ArtifactCoords> allNodes = redhatVersionRate ? new ConcurrentHashMap<>() : null;
-        final AtomicInteger redhatVersionsTotal = new AtomicInteger();
-        var treeVisitor = initTreeVisitor(tracePattern, allNodes, redhatVersionsTotal, memberReports, coreReport,
+        final AtomicInteger inspectedRoots = new AtomicInteger();
+        final AtomicInteger redhatVersions = new AtomicInteger();
+        var treeVisitor = initTreeVisitor(tracePattern, allNodes, redhatVersions, inspectedRoots, memberReports, coreReport,
                 rootsToMembers);
         var treeInspector = initTreeInspector(resolver, treeVisitor);
         var coreConstraints = readBomConstraints(platform.getCore().getBom(), resolver);
@@ -248,10 +249,11 @@ public class Quarkus implements Callable<Integer> {
         logMemberReports(memberReports);
 
         if (allNodes != null) {
-            log.info("Total number of dependencies: " + allNodes.size());
+            log.info(String.format("%-32s: %s", "Number of root artifacts", inspectedRoots));
+            log.info(String.format("%-32s: %s", "Total number of artifacts", allNodes.size()));
             if (!allNodes.isEmpty()) {
-                log.info(String.format("Red Hat version rate: %.1f%%",
-                        ((double) redhatVersionsTotal.get() * 100) / allNodes.size()));
+                log.info(String.format("%-32s: %s (%.1f%%)", "Artifacts with Red Hat versions",
+                        redhatVersions, ((double) redhatVersions.get() * 100) / allNodes.size()));
             }
             log.info("");
         }
@@ -260,16 +262,18 @@ public class Quarkus implements Callable<Integer> {
     }
 
     private DependencyTreeVisitor<TreeNode> initTreeVisitor(ArtifactSet tracePattern,
-            Map<ArtifactCoords, ArtifactCoords> allNodes, AtomicInteger redhatVersionsTotal,
+            Map<ArtifactCoords, ArtifactCoords> allNodes,
+            AtomicInteger redhatVersionsTotal, AtomicInteger inspectedRoots,
             ArrayList<MemberReport> memberReports, MemberReport coreReport,
             Map<ArtifactCoords, List<MemberReport>> rootsToMembers) {
-        var treeVisitor = new DependencyTreeVisitor<TreeNode>() {
+        return new DependencyTreeVisitor<>() {
 
             final Map<Artifact, String> enforcedBy = new HashMap<>();
 
             @Override
             public void visit(DependencyTreeVisit<TreeNode> visit) {
                 if (tracePattern != null || redhatVersionRate) {
+                    inspectedRoots.incrementAndGet();
                     var result = visit(visit, visit.getRoot());
                     if (result != null) {
                         visit.pushEvent(result);
@@ -341,7 +345,6 @@ public class Quarkus implements Callable<Integer> {
             public void handleResolutionFailures(Collection<DependencyTreeError> requests) {
             }
         };
-        return treeVisitor;
     }
 
     private void logMemberReports(ArrayList<MemberReport> memberReports) {
