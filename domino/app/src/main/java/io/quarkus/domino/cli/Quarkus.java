@@ -118,13 +118,13 @@ public class Quarkus implements Callable<Integer> {
         if (info) {
             log.info("");
             log.info("Platform version: " + version);
+            log.info("Quarkus core version: " + platform.getCore().getQuarkusCoreVersion());
+            log.info("Maven plugin: " + platform.getMavenPlugin().toCompactCoords());
             log.info("");
             log.info("Member BOMs:");
             for (var m : platform.getMembers()) {
                 log.info("- " + m.getBom().toCompactCoords());
             }
-            log.info("");
-            log.info("Maven plugin: " + platform.getMavenPlugin().toCompactCoords());
             log.info("");
             return 0;
         }
