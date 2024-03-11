@@ -5,6 +5,7 @@ import static io.quarkus.bom.decomposer.maven.util.Utils.newModel;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.quarkus.bom.PomSource;
+import io.quarkus.bom.decomposer.BomDecomposer;
 import io.quarkus.bom.decomposer.BomDecomposerException;
 import io.quarkus.bom.decomposer.DecomposedBom;
 import io.quarkus.bom.decomposer.DecomposedBomHtmlReportGenerator;
@@ -60,6 +61,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -69,6 +71,8 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.StringJoiner;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.stream.Collectors;
 import javax.xml.transform.Result;
 import javax.xml.transform.Source;
@@ -1774,12 +1778,57 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
         }
 
+        final boolean parallelProcessing = testConfigs.size() > 1 && BomDecomposer.isParallelProcessing();
+        final List<CompletableFuture<?>> futures;
+        final Deque<Throwable> errors;
+        if (parallelProcessing) {
+            futures = new ArrayList<>(testConfigs.size());
+            errors = new ConcurrentLinkedDeque<>();
+        } else {
+            futures = List.of();
+            errors = null;
+        }
+
         for (PlatformMemberTestConfig testConfig : testConfigs.values()) {
             if (member.config().getDefaultTestConfig() != null) {
                 testConfig.applyDefaults(member.config().getDefaultTestConfig());
             }
             if (!testConfig.isExcluded()) {
-                generateIntegrationTestModule(ArtifactCoords.fromString(testConfig.getArtifact()), testConfig, pom);
+                var testArtifact = ArtifactCoords.fromString(testConfig.getArtifact());
+                final String testModuleName;
+                if (pom.getModules().contains(testArtifact.getArtifactId())) {
+                    String tmp = testArtifact.getArtifactId() + "-" + testArtifact.getVersion();
+                    if (pom.getModules().contains(tmp)) {
+                        throw new MojoExecutionException("The same test " + testArtifact + " appears to be added twice");
+                    }
+                    testModuleName = tmp;
+                    getLog().warn("Using " + testModuleName + " as the module name for " + testArtifact + " since "
+                            + testArtifact.getArtifactId() + " module name already exists");
+                } else {
+                    testModuleName = testArtifact.getArtifactId();
+                }
+                pom.addModule(testModuleName);
+                if (parallelProcessing) {
+                    futures.add(CompletableFuture.runAsync(() -> {
+                        try {
+                            generateIntegrationTestModule(testModuleName, testArtifact, testConfig, pom);
+                        } catch (MojoExecutionException e) {
+                            errors.add(e);
+                        }
+                    }));
+                } else {
+                    generateIntegrationTestModule(testModuleName, testArtifact, testConfig, pom);
+                }
+            }
+        }
+        if (!futures.isEmpty()) {
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture<?>[0])).join();
+            if (!errors.isEmpty()) {
+                for (var e : errors) {
+                    getLog().error(e);
+                }
+                throw new MojoExecutionException(
+                        "Failed to generate integration test modules, please see the errors logged above");
             }
         }
 
@@ -1798,24 +1847,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         return bomDep;
     }
 
-    private void generateIntegrationTestModule(ArtifactCoords testArtifact,
-            PlatformMemberTestConfig testConfig,
-            Model parentPom)
-            throws MojoExecutionException {
-
-        final String moduleName;
-        if (parentPom.getModules().contains(testArtifact.getArtifactId())) {
-            String tmp = testArtifact.getArtifactId() + "-" + testArtifact.getVersion();
-            if (parentPom.getModules().contains(tmp)) {
-                throw new MojoExecutionException("The same test " + testArtifact + " appears to be added twice");
-            }
-            moduleName = tmp;
-            getLog().warn("Using " + moduleName + " as the module name for " + testArtifact + " since "
-                    + testArtifact.getArtifactId() + " module name already exists");
-        } else {
-            moduleName = testArtifact.getArtifactId();
-        }
-        parentPom.addModule(moduleName);
+    private void generateIntegrationTestModule(String moduleName, ArtifactCoords testArtifact,
+            PlatformMemberTestConfig testConfig, Model parentPom) throws MojoExecutionException {
 
         final Model pom = newModel();
         pom.setArtifactId(moduleName);
@@ -2005,7 +2038,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         persistPom(pom);
 
         if (testConfig.getTransformWith() != null) {
-            final Path xsl = Paths.get(testConfig.getTransformWith()).toAbsolutePath();
+            final Path xsl = Path.of(testConfig.getTransformWith()).toAbsolutePath();
             if (!Files.exists(xsl)) {
                 throw new MojoExecutionException("Failed to locate " + xsl);
             }
