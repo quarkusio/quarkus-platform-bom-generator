@@ -238,11 +238,6 @@ public class ProjectDependencyResolver {
     private final Path logOutputFile;
     private final boolean appendOutput;
 
-    /*
-     * Whether to include test JARs
-     */
-    private boolean includeTestJars;
-
     private Function<ArtifactCoords, List<Dependency>> artifactConstraintsProvider;
     private Set<ArtifactCoords> projectBomConstraints;
     private final Map<ArtifactCoords, ResolvedDependency> allDepsToBuild = new HashMap<>();
@@ -1202,8 +1197,11 @@ public class ProjectDependencyResolver {
         final DependencyNode winner = (DependencyNode) node.getData().get(ConflictResolver.NODE_DATA_WINNER);
         if (winner != null) {
             final ArtifactCoords coords = toCoords(winner.getArtifact());
-            for (DependencyTreeVisitor v : treeVisitors) {
-                v.linkDependency(coords);
+            // linked dependencies should also be checked for exclusions
+            if (!isExcluded(coords)) {
+                for (DependencyTreeVisitor v : treeVisitors) {
+                    v.linkDependency(coords);
+                }
             }
             return;
         }
@@ -1412,12 +1410,11 @@ public class ProjectDependencyResolver {
 
     private boolean isExcluded(ArtifactCoords coords) {
         for (ArtifactCoordsPattern pattern : excludeSet) {
-            boolean matches = pattern.matches(coords);
-            if (matches) {
+            if (pattern.matches(coords)) {
                 return true;
             }
         }
-        return !includeTestJars && coords.getClassifier().equals("tests");
+        return false;
     }
 
     private boolean isIncluded(ArtifactCoords coords) {
