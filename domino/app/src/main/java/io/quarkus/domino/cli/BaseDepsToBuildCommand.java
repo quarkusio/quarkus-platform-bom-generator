@@ -1,6 +1,5 @@
 package io.quarkus.domino.cli;
 
-import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.options.BootstrapMavenOptions;
 import io.quarkus.devtools.messagewriter.MessageWriter;
@@ -245,7 +244,7 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
             if (!projectDir.isDirectory()) {
                 throw new RuntimeException(projectDir + " is not a directory");
             }
-            config.setProjectDir(projectDir.toPath());
+            config.setProjectDir(projectDir.toPath().normalize().toAbsolutePath());
         }
 
         final Set<ArtifactKey> excludeKeys;
@@ -346,11 +345,11 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
                 return artifactResolver = MavenArtifactResolver.builder().setWorkspaceDiscovery(false).build();
             }
             return MavenArtifactResolver.builder()
-                    .setCurrentProject(projectDir.getAbsolutePath())
+                    .setCurrentProject(projectDir.getCanonicalPath())
                     .setEffectiveModelBuilder(true)
                     .setPreferPomsFromWorkspace(true)
                     .build();
-        } catch (BootstrapMavenException e) {
+        } catch (Exception e) {
             throw new RuntimeException("Failed to initialize Maven artifact resolver", e);
         }
     }
