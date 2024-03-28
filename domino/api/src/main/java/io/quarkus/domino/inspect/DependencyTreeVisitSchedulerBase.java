@@ -1,8 +1,8 @@
 package io.quarkus.domino.inspect;
 
-import java.util.ArrayList;
+import java.util.Deque;
 import java.util.Formatter;
-import java.util.List;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.eclipse.aether.artifact.Artifact;
 
@@ -10,7 +10,7 @@ abstract class DependencyTreeVisitSchedulerBase<E> implements DependencyTreeVisi
 
     private static final String FORMAT_BASE = "[%s/%s %.1f%%] ";
 
-    protected final List<DependencyTreeError> errors = new ArrayList<>();
+    protected final Deque<DependencyTreeError> errors = new ConcurrentLinkedDeque<>();
     protected final DependencyTreeVisitContext<E> ctx;
     protected final AtomicInteger counter = new AtomicInteger();
     protected final int rootsTotal;
@@ -23,7 +23,7 @@ abstract class DependencyTreeVisitSchedulerBase<E> implements DependencyTreeVisi
     }
 
     @Override
-    public List<DependencyTreeError> getResolutionFailures() {
+    public Deque<DependencyTreeError> getResolutionFailures() {
         return errors;
     }
 
