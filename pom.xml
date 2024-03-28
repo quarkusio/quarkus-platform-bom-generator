@@ -53,9 +53,9 @@
     <commons-text.version>1.10.0</commons-text.version>
     <cyclonedx.version>8.0.3</cyclonedx.version>
     <gradle-tooling.version>8.1.1</gradle-tooling.version>
-    <quarkus.version>3.8.2</quarkus.version>
-    <quarkus-jgit.version>2.3.2</quarkus-jgit.version>
-    <jgit.version>6.4.0.202211300538-r</jgit.version>
+    <quarkus.version>3.8.3</quarkus.version>
+    <quarkus-jgit.version>3.1.0</quarkus-jgit.version>
+    <jgit.version>6.9.0.202403050737-r</jgit.version>
     <json-unit-assertj.version>3.2.7</json-unit-assertj.version>
     <junit.jupiter.version>5.10.2</junit.jupiter.version>
     <hacbs-recipies-database.version>0.7</hacbs-recipies-database.version>
