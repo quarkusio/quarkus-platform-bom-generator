@@ -115,7 +115,12 @@ import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
+import org.eclipse.aether.collection.CollectRequest;
+import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.repository.RemoteRepository;
+import org.eclipse.aether.resolution.DependencyRequest;
+import org.eclipse.aether.resolution.DependencyResolutionException;
+import org.eclipse.aether.util.artifact.JavaScopes;
 
 @Mojo(name = "generate-platform-project", defaultPhase = LifecyclePhase.INITIALIZE, requiresDependencyCollection = ResolutionScope.NONE)
 public class GeneratePlatformProjectMojo extends AbstractMojo {
@@ -399,6 +404,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 excludePatterns = ArtifactCoordsPattern.toPatterns(dominoConfig.getExcludePatterns());
             }
 
+            Set<ArtifactKey> selectedKeys = Set.of();
             if (sbomConfig != null && sbomConfig.isSupportedExtensionsOnly()) {
                 List<Path> metadataOverrides = new ArrayList<>();
                 for (String s : member.config().getMetadataOverrideFiles()) {
@@ -416,7 +422,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                     throw new IllegalStateException("The SBOM generator for member " + member.config().getName()
                             + " is configured to include only supported extensions but no support metadata override sources were provided");
                 }
-                final Set<ArtifactKey> selectedKeys = new HashSet<>(metadataOverrides.size());
+                selectedKeys = new HashSet<>(metadataOverrides.size());
                 final List<ExtensionCatalog> overrides = new ArrayList<>(metadataOverrides.size());
                 for (Path p : metadataOverrides) {
                     try {
@@ -434,54 +440,13 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                                 key.getClassifier(), key.getType()));
                     }
                 }
-                for (ProjectRelease r : member.getAlignedDecomposedBom().releases()) {
-                    for (ProjectDependency d : r.dependencies()) {
-                        var a = d.artifact();
-                        if (selectedKeys.contains(d.key())
-                                && isExtensionCandidate(a, member.config().getExtensionGroupIds(), excludePatterns)) {
-                            dominoConfig.addProjectArtifacts(ArtifactCoords.of(a.getGroupId(), a.getArtifactId(),
-                                    a.getClassifier(), a.getExtension(), a.getVersion()));
-                            dominoConfig
-                                    .addProjectArtifacts(ArtifactCoords.of(a.getGroupId(), a.getArtifactId() + "-deployment",
-                                            a.getClassifier(), a.getExtension(), a.getVersion()));
-                        }
-                    }
-                }
-            } else {
-                for (ProjectRelease r : member.getAlignedDecomposedBom().releases()) {
-                    for (ProjectDependency d : r.dependencies()) {
-                        var a = d.artifact();
-                        if (!isExtensionCandidate(a, member.getExtensionGroupIds(), excludePatterns)) {
-                            continue;
-                        }
-                        if (a.getFile() == null) {
-                            try {
-                                a = getNonWorkspaceResolver().resolve(a).getArtifact();
-                            } catch (BootstrapMavenException e) {
-                                throw new RuntimeException("Failed to resolve " + a, e);
-                            }
-                        }
-                        var resolvedArtifact = a;
-                        PathTree.ofArchive(a.getFile().toPath()).accept(BootstrapConstants.DESCRIPTOR_PATH, visit -> {
-                            if (visit != null) {
-                                var props = new Properties();
-                                try (BufferedReader reader = Files.newBufferedReader(visit.getPath())) {
-                                    props.load(reader);
-                                } catch (IOException e) {
-                                    throw new UncheckedIOException(e);
-                                }
-                                dominoConfig.addProjectArtifacts(ArtifactCoords.of(resolvedArtifact.getGroupId(),
-                                        resolvedArtifact.getArtifactId(), resolvedArtifact.getClassifier(),
-                                        resolvedArtifact.getExtension(), resolvedArtifact.getVersion()));
-                                var deploymentArtifact = props.getProperty(BootstrapConstants.PROP_DEPLOYMENT_ARTIFACT);
-                                if (deploymentArtifact == null) {
-                                    getLog().warn("Failed to identify the deployment artifact for " + resolvedArtifact + " in "
-                                            + visit.getUrl());
-                                } else {
-                                    dominoConfig.addProjectArtifacts(ArtifactCoords.fromString(deploymentArtifact));
-                                }
-                            }
-                        });
+            }
+            for (ProjectRelease r : member.getAlignedDecomposedBom().releases()) {
+                for (ProjectDependency d : r.dependencies()) {
+                    var a = d.artifact();
+                    if ((selectedKeys.isEmpty() || selectedKeys.contains(d.key()))
+                            && isExtensionCandidate(a, member.config().getExtensionGroupIds(), excludePatterns)) {
+                        manifestExtensionArtifacts(a, dominoConfig);
                     }
                 }
             }
@@ -493,6 +458,60 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 throw new MojoExecutionException("Failed to persist Domino config", e);
             }
         }
+    }
+
+    private void manifestExtensionArtifacts(Artifact a, ProjectDependencyConfig.Mutable dominoConfig) {
+        final Artifact resolved;
+        final boolean relocated;
+        if (a.getFile() == null) {
+            var resolver = getNonWorkspaceResolver();
+            // this trick is done to capture relocations, i.e. when {@code a} was relocated to another artifact
+            var request = new DependencyRequest()
+                    .setCollectRequest(new CollectRequest()
+                            .setRootArtifact(a)
+                            .setDependencies(List.of(new org.eclipse.aether.graph.Dependency(a, JavaScopes.COMPILE, false,
+                                    List.of(new org.eclipse.aether.graph.Exclusion("*", "*", "*", "*")))))
+                            .setRepositories(resolver.getRepositories()));
+            List<DependencyNode> resolvedDeps;
+            try {
+                resolvedDeps = resolver.getSystem().resolveDependencies(resolver.getSession(), request).getRoot().getChildren();
+            } catch (DependencyResolutionException e) {
+                throw new RuntimeException("Failed to resolve " + a, e);
+            }
+            if (resolvedDeps.size() != 1) {
+                throw new IllegalStateException("Expected a single dependency but got " + resolvedDeps);
+            }
+            var node = resolvedDeps.get(0);
+            resolved = node.getArtifact();
+            relocated = !node.getRelocations().isEmpty();
+        } else {
+            resolved = a;
+            relocated = false;
+        }
+        PathTree.ofArchive(resolved.getFile().toPath()).accept(BootstrapConstants.DESCRIPTOR_PATH, visit -> {
+            if (visit != null) {
+                var props = new Properties();
+                try (BufferedReader reader = Files.newBufferedReader(visit.getPath())) {
+                    props.load(reader);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+                if (relocated) {
+                    dominoConfig.addProjectArtifacts(ArtifactCoords.of(a.getGroupId(),
+                            a.getArtifactId(), a.getClassifier(), a.getExtension(), a.getVersion()));
+                }
+                dominoConfig.addProjectArtifacts(ArtifactCoords.of(resolved.getGroupId(),
+                        resolved.getArtifactId(), resolved.getClassifier(),
+                        resolved.getExtension(), resolved.getVersion()));
+                var deploymentArtifact = props.getProperty(BootstrapConstants.PROP_DEPLOYMENT_ARTIFACT);
+                if (deploymentArtifact == null) {
+                    getLog().warn("Failed to identify the deployment artifact for " + resolved + " in "
+                            + visit.getUrl());
+                } else {
+                    dominoConfig.addProjectArtifacts(ArtifactCoords.fromString(deploymentArtifact));
+                }
+            }
+        });
     }
 
     private static boolean isExtensionCandidate(Artifact a, Collection<String> extensionGroupIds,
