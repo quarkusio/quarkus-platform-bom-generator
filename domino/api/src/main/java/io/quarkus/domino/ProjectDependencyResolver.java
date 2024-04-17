@@ -774,8 +774,7 @@ public class ProjectDependencyResolver {
         }
 
         try {
-            final Artifact a = toAetherArtifact(coords);
-            var descr = resolver.resolveDescriptor(a);
+            var descr = resolver.resolveDescriptor(toAetherArtifact(coords));
             final Map<ArtifactKey, Dependency> map = new LinkedHashMap<>();
             for (var d : managedDeps) {
                 var art = d.getArtifact();
@@ -810,11 +809,12 @@ public class ProjectDependencyResolver {
                     resolver.newResolutionRepositories(descr.getRepositories()));
 
             root = resolver.getSystem().collectDependencies(resolver.getSession(),
-                    MavenArtifactResolver.newCollectRequest(a, directDeps, constraints, List.of(), aggregatedRepos))
+                    MavenArtifactResolver.newCollectRequest(descr.getArtifact(), directDeps, constraints, List.of(),
+                            aggregatedRepos))
                     .getRoot();
             // if the dependencies are not found, make sure the artifact actually exists
             if (root.getChildren().isEmpty()) {
-                resolver.resolve(a);
+                resolver.resolve(descr.getArtifact());
             }
         } catch (Exception e) {
             if (config.isWarnOnResolutionErrors()) {
