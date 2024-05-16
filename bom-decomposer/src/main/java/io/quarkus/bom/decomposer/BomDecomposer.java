@@ -17,6 +17,7 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.Phaser;
 import org.apache.maven.model.DistributionManagement;
 import org.apache.maven.model.Model;
 import org.apache.maven.project.ProjectBuildingRequest;
@@ -179,18 +180,21 @@ public class BomDecomposer {
     }
 
     private void addConcurrently(DecomposedBomBuilder bomBuilder, Collection<Dependency> deps) {
-        final List<CompletableFuture<?>> tasks = new ArrayList<>(deps.size());
         final Queue<Map.Entry<Dependency, Exception>> failed = new ConcurrentLinkedDeque<>();
+        var phaser = new Phaser(1);
         for (var dep : deps) {
-            tasks.add(CompletableFuture.runAsync(() -> {
+            phaser.register();
+            CompletableFuture.runAsync(() -> {
                 try {
                     addDependency(bomBuilder, dep);
                 } catch (Exception e) {
                     failed.add(Map.entry(dep, e));
+                } finally {
+                    phaser.arriveAndDeregister();
                 }
-            }));
+            });
         }
-        CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0])).join();
+        phaser.arriveAndAwaitAdvance();
         if (!failed.isEmpty()) {
             for (var d : failed) {
                 logger.error("Failed to process dependency " + d.getKey(), d.getValue());
@@ -205,7 +209,7 @@ public class BomDecomposer {
             // if an artifact has a classifier we resolve the artifact itself
             // if an artifact does not have a classifier we will try resolving its pom
             validateArtifact(dep.getArtifact());
-            ScmRevision revision = resolveRevision(dep.getArtifact());
+            final ScmRevision revision = resolveRevision(dep.getArtifact());
             bomBuilder.bomDependency(revision, dep);
         } catch (ArtifactNotFoundException e) {
             // there are plenty of BOMs that include artifacts that don't exist
