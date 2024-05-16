@@ -73,6 +73,7 @@ import java.util.Set;
 import java.util.StringJoiner;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.Phaser;
 import java.util.stream.Collectors;
 import javax.xml.transform.Result;
 import javax.xml.transform.Source;
@@ -1798,13 +1799,13 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         final boolean parallelProcessing = testConfigs.size() > 1 && BomDecomposer.isParallelProcessing();
-        final List<CompletableFuture<?>> futures;
+        final Phaser phaser;
         final Deque<Throwable> errors;
         if (parallelProcessing) {
-            futures = new ArrayList<>(testConfigs.size());
+            phaser = new Phaser(1);
             errors = new ConcurrentLinkedDeque<>();
         } else {
-            futures = List.of();
+            phaser = null;
             errors = null;
         }
 
@@ -1828,20 +1829,23 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 }
                 pom.addModule(testModuleName);
                 if (parallelProcessing) {
-                    futures.add(CompletableFuture.runAsync(() -> {
+                    phaser.register();
+                    CompletableFuture.runAsync(() -> {
                         try {
                             generateIntegrationTestModule(testModuleName, testArtifact, testConfig, pom);
                         } catch (MojoExecutionException e) {
                             errors.add(e);
+                        } finally {
+                            phaser.arriveAndDeregister();
                         }
-                    }));
+                    });
                 } else {
                     generateIntegrationTestModule(testModuleName, testArtifact, testConfig, pom);
                 }
             }
         }
-        if (!futures.isEmpty()) {
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture<?>[0])).join();
+        if (phaser != null) {
+            phaser.arriveAndAwaitAdvance();
             if (!errors.isEmpty()) {
                 for (var e : errors) {
                     getLog().error(e);
