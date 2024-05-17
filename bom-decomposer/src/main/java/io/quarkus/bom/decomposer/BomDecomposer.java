@@ -5,6 +5,7 @@ import io.quarkus.bom.PomSource;
 import io.quarkus.bom.resolver.ArtifactNotFoundException;
 import io.quarkus.bom.resolver.ArtifactResolver;
 import io.quarkus.bom.resolver.ArtifactResolverProvider;
+import io.quarkus.bom.task.PlatformGenTaskScheduler;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
@@ -15,9 +16,6 @@ import io.quarkus.domino.scm.ScmRevisionResolver;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.Phaser;
 import org.apache.maven.model.DistributionManagement;
 import org.apache.maven.model.Model;
 import org.apache.maven.project.ProjectBuildingRequest;
@@ -169,38 +167,26 @@ public class BomDecomposer {
         bomBuilder.bomArtifact(bomArtifact);
         //bomBuilder.bomSource(PomSource.of(resolve(bomArtifact).getFile().toPath()));
         var artifacts = this.artifacts == null ? bomManagedDeps() : this.artifacts;
-        if (isParallelProcessing()) {
-            addConcurrently(bomBuilder, artifacts);
-        } else {
-            for (Dependency dep : artifacts) {
-                addDependency(bomBuilder, dep);
-            }
-        }
-        return transformer == null ? bomBuilder.build() : transformer.transform(bomBuilder.build());
-    }
 
-    private void addConcurrently(DecomposedBomBuilder bomBuilder, Collection<Dependency> deps) {
-        final Queue<Map.Entry<Dependency, Exception>> failed = new ConcurrentLinkedDeque<>();
-        var phaser = new Phaser(1);
-        for (var dep : deps) {
-            phaser.register();
-            CompletableFuture.runAsync(() -> {
-                try {
-                    addDependency(bomBuilder, dep);
-                } catch (Exception e) {
-                    failed.add(Map.entry(dep, e));
-                } finally {
-                    phaser.arriveAndDeregister();
-                }
-            });
-        }
-        phaser.arriveAndAwaitAdvance();
-        if (!failed.isEmpty()) {
-            for (var d : failed) {
-                logger.error("Failed to process dependency " + d.getKey(), d.getValue());
+        var scheduler = PlatformGenTaskScheduler.getInstance();
+        try {
+            for (Dependency dep : artifacts) {
+                scheduler.schedule(() -> addDependency(bomBuilder, dep));
             }
-            throw new RuntimeException("Failed to process dependencies reported above");
+            scheduler.waitForCompletion();
+        } catch (BomDecomposerException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BomDecomposerException("Failed to process dependency constraints", e);
         }
+        if (scheduler.hasErrors()) {
+            for (var e : scheduler.getErrors()) {
+                logger.error("Failed to process dependency constraint", e);
+            }
+            throw new BomDecomposerException("Failed to process dependency constraints reported above");
+        }
+
+        return transformer == null ? bomBuilder.build() : transformer.transform(bomBuilder.build());
     }
 
     private void addDependency(DecomposedBomBuilder bomBuilder, Dependency dep) throws BomDecomposerException {

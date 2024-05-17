@@ -5,8 +5,8 @@ import io.quarkus.bom.decomposer.FileReportWriter;
 import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Collection;
+import java.util.concurrent.ConcurrentLinkedDeque;
 
 public class ReportIndexPageGenerator extends FileReportWriter implements AutoCloseable {
 
@@ -17,17 +17,7 @@ public class ReportIndexPageGenerator extends FileReportWriter implements AutoCl
     private DecomposedBom mainBom;
     private Path mainBomReleasesHtml;
 
-    private List<URL> mainUrl = new ArrayList<>();
-    private List<URL> toUrl = new ArrayList<>();
-    private List<DecomposedBom> toBoms = new ArrayList<>();
-    private List<Path> mainReleasesHtml = new ArrayList<>();
-    private List<Path> toReleasesHtml = new ArrayList<>();
-    private List<Path> diffHtml = new ArrayList<>();
-
-    public ReportIndexPageGenerator(String name) throws IOException {
-        super(name);
-        initHtmlBody();
-    }
+    private final Collection<MemberData> memberData = new ConcurrentLinkedDeque<>();
 
     public ReportIndexPageGenerator(Path file) throws IOException {
         super(file);
@@ -78,19 +68,17 @@ public class ReportIndexPageGenerator extends FileReportWriter implements AutoCl
         writeTag("p", "");
         openTag("table");
         writeTag("caption", "text-align:left;font-weight:bold", "Extension BOMs");
-        int i = 0;
-        while (i < toBoms.size()) {
+        for (var member : memberData) {
             openTag("tr", listBackground[backgroundIndex ^= 1]);
-            writeTag("td", "text-align:left;font-weight:bold;color:gray", toBoms.get(i).bomArtifact());
-            writeTag("td", "text-align:left", generateAnchor(mainUrl.get(i).toExternalForm(), "original"));
+            writeTag("td", "text-align:left;font-weight:bold;color:gray", member.toBom.bomArtifact());
+            writeTag("td", "text-align:left", generateAnchor(member.mainUrl.toExternalForm(), "original"));
             writeTag("td", "text-align:left",
-                    generateAnchor(mainReleasesHtml.get(i).toUri().toURL().toExternalForm(), "decomposed"));
-            writeTag("td", "text-align:left", generateAnchor(toUrl.get(i).toExternalForm(), "generated"));
+                    generateAnchor(member.mainReleasesHtml.toUri().toURL().toExternalForm(), "decomposed"));
+            writeTag("td", "text-align:left", generateAnchor(member.toUrl.toExternalForm(), "generated"));
             writeTag("td", "text-align:left",
-                    generateAnchor(toReleasesHtml.get(i).toUri().toURL().toExternalForm(), "decomposed"));
-            writeTag("td", "text-align:left", generateAnchor(diffHtml.get(i).toUri().toURL().toExternalForm(), "diff"));
+                    generateAnchor(member.toReleasesHtml.toUri().toURL().toExternalForm(), "decomposed"));
+            writeTag("td", "text-align:left", generateAnchor(member.diffHtml.toUri().toURL().toExternalForm(), "diff"));
             closeTag("tr");
-            ++i;
         }
         closeTag("table");
     }
@@ -103,12 +91,7 @@ public class ReportIndexPageGenerator extends FileReportWriter implements AutoCl
 
     public void bomReport(URL mainUrl, URL toUrl, DecomposedBom toBom, Path mainReleasesHtml, Path toReleasesHtml,
             Path diffHtml) {
-        this.mainUrl.add(mainUrl);
-        this.toUrl.add(toUrl);
-        this.toBoms.add(toBom);
-        this.mainReleasesHtml.add(mainReleasesHtml);
-        this.toReleasesHtml.add(toReleasesHtml);
-        this.diffHtml.add(diffHtml);
+        memberData.add(new MemberData(mainUrl, toUrl, toBom, mainReleasesHtml, toReleasesHtml, diffHtml));
     }
 
     @Override
@@ -120,5 +103,24 @@ public class ReportIndexPageGenerator extends FileReportWriter implements AutoCl
             }
         }
         super.close();
+    }
+
+    private static class MemberData {
+        final URL mainUrl;
+        final URL toUrl;
+        final DecomposedBom toBom;
+        final Path mainReleasesHtml;
+        final Path toReleasesHtml;
+        final Path diffHtml;
+
+        public MemberData(URL mainUrl, URL toUrl, DecomposedBom toBom, Path mainReleasesHtml, Path toReleasesHtml,
+                Path diffHtml) {
+            this.mainUrl = mainUrl;
+            this.toUrl = toUrl;
+            this.toBom = toBom;
+            this.mainReleasesHtml = mainReleasesHtml;
+            this.toReleasesHtml = toReleasesHtml;
+            this.diffHtml = diffHtml;
+        }
     }
 }
