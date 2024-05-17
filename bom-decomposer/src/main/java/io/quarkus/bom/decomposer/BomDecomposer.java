@@ -29,10 +29,6 @@ import org.eclipse.aether.resolution.ArtifactResult;
 
 public class BomDecomposer {
 
-    public static boolean isParallelProcessing() {
-        return Boolean.getBoolean("parallelProcessing");
-    }
-
     public static BomDecomposerConfig config() {
         return new BomDecomposer().new BomDecomposerConfig();
     }

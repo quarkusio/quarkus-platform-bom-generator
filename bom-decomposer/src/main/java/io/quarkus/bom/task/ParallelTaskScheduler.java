@@ -6,7 +6,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.Phaser;
 
-public class ConcurrentTaskScheduler implements PlatformGenTaskScheduler {
+public class ParallelTaskScheduler implements PlatformGenTaskScheduler {
 
     private final Phaser phaser = new Phaser(1);
     private final Deque<Exception> errors = new ConcurrentLinkedDeque<>();
