@@ -5,7 +5,6 @@ import static io.quarkus.bom.decomposer.maven.util.Utils.newModel;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.quarkus.bom.PomSource;
-import io.quarkus.bom.decomposer.BomDecomposer;
 import io.quarkus.bom.decomposer.BomDecomposerException;
 import io.quarkus.bom.decomposer.DecomposedBom;
 import io.quarkus.bom.decomposer.DecomposedBomHtmlReportGenerator;
@@ -33,6 +32,7 @@ import io.quarkus.bom.platform.SbomConfig;
 import io.quarkus.bom.resolver.ArtifactResolver;
 import io.quarkus.bom.resolver.ArtifactResolverProvider;
 import io.quarkus.bom.resolver.EffectiveModelResolver;
+import io.quarkus.bom.task.PlatformGenTaskScheduler;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
@@ -50,6 +50,7 @@ import io.quarkus.registry.catalog.CatalogMapperHelper;
 import io.quarkus.registry.catalog.ExtensionCatalog;
 import io.quarkus.registry.util.PlatformArtifacts;
 import java.io.*;
+import java.net.MalformedURLException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -61,7 +62,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -71,9 +71,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.StringJoiner;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.Phaser;
 import java.util.stream.Collectors;
 import javax.xml.transform.Result;
 import javax.xml.transform.Source;
@@ -263,17 +260,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         persistPom(pom);
 
         generateUniversalPlatformModule(pom);
-
-        for (PlatformMemberImpl member : members.values()) {
-            generateMemberModule(member, pom);
-        }
-
-        for (PlatformMemberImpl member : members.values()) {
-            generatePlatformDescriptorModule(member.descriptorCoords(), member.baseModel,
-                    quarkusCore.getInputBom().equals(member.getInputBom()),
-                    platformConfig.getAttachedMavenPlugin(), member);
-            generatePlatformPropertiesModule(member, true);
-            persistPom(member.baseModel);
+        try {
+            generateMemberModules(pom);
+        } catch (MojoExecutionException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new MojoExecutionException("Failed to generate platform project", e);
         }
 
         if (dependenciesToBuild != null) {
@@ -301,8 +293,40 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         persistPom(pom);
 
         recordUpdatedBoms();
-        generateBomReports();
         generateDominoCliConfig();
+    }
+
+    private void generateMemberModules(Model parentPom) throws Exception {
+        final PlatformGenTaskScheduler scheduler = PlatformGenTaskScheduler.getInstance();
+        for (PlatformMemberImpl member : members.values()) {
+            final String moduleName = getArtifactIdBase(member.getGeneratedPlatformBom().getArtifactId());
+            parentPom.addModule(moduleName);
+            scheduler.schedule(() -> generateMemberModule(parentPom, member, moduleName, scheduler));
+        }
+        scheduler.schedule(() -> generateBomReports(scheduler));
+        scheduler.waitForCompletion();
+        if (scheduler.hasErrors()) {
+            for (var e : scheduler.getErrors()) {
+                getLog().error(e);
+            }
+            throw new MojoExecutionException("Failed to generate platform project, please see the errors logged above");
+        }
+    }
+
+    private void generateMemberModule(Model parentPom, PlatformMemberImpl member, String moduleName,
+            PlatformGenTaskScheduler scheduler) throws Exception {
+        generateMemberModule(member, moduleName, parentPom);
+        generateMemberBom(member);
+        if (member.config().hasTests()) {
+            generateMemberIntegrationTestsModule(member, scheduler);
+        }
+        scheduler.schedule(() -> {
+            generatePlatformDescriptorModule(member.descriptorCoords(), member.baseModel,
+                    quarkusCore.getInputBom().equals(member.getInputBom()),
+                    platformConfig.getAttachedMavenPlugin(), member);
+            generatePlatformPropertiesModule(member, true);
+        });
+        scheduler.addFinializingTask(() -> persistPom(member.baseModel));
     }
 
     private static void setParentVersion(Model model, Model parentModel) {
@@ -318,44 +342,51 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         parent.setVersion(version);
     }
 
-    private void generateBomReports() throws MojoExecutionException {
+    private void generateBomReports(PlatformGenTaskScheduler scheduler) throws Exception {
         if (!(platformConfig.isGenerateBomReports() || platformConfig.getGenerateBomReportsZip() != null)) {
             return;
         }
         final Path reportsOutputDir = reportsDir.toPath();
         // reset the resolver to pick up all the generated platform modules
         //resetResolver();
-        try (ReportIndexPageGenerator index = new ReportIndexPageGenerator(
-                reportsOutputDir.resolve("index.html"))) {
-
-            final Path releasesReport = reportsOutputDir.resolve("main").resolve("generated-releases.html");
-            generateReleasesReport(universalGeneratedBom, releasesReport);
-            index.universalBom(universalPlatformBomXml.toUri().toURL(), universalGeneratedBom, releasesReport);
-
-            var artifactResolver = ArtifactResolverProvider.get(getWorkspaceAwareMavenResolver());
-            for (PlatformMemberImpl member : members.values()) {
-                if (member.getInputBom() == null) {
-                    continue;
-                }
-                generateBomReports(member.originalBom, member.generatedBom,
-                        reportsOutputDir.resolve(member.config().getName().toLowerCase()), index,
-                        member.generatedPomFile, artifactResolver);
-            }
-        } catch (Exception e) {
-            throw new MojoExecutionException("Failed to generate platform member BOM reports", e);
+        final ReportIndexPageGenerator index;
+        try {
+            index = new ReportIndexPageGenerator(reportsOutputDir.resolve("index.html"));
+        } catch (IOException e) {
+            throw new MojoExecutionException(e);
         }
 
+        final Path releasesReport = reportsOutputDir.resolve("main").resolve("generated-releases.html");
+        generateReleasesReport(universalGeneratedBom, releasesReport);
+        try {
+            index.universalBom(universalPlatformBomXml.toUri().toURL(), universalGeneratedBom, releasesReport);
+        } catch (MalformedURLException e) {
+            throw new MojoExecutionException(e);
+        }
+
+        var artifactResolver = ArtifactResolverProvider.get(getWorkspaceAwareMavenResolver());
+        for (PlatformMemberImpl member : members.values()) {
+            if (member.getInputBom() != null) {
+                scheduler.schedule(() -> generateBomReports(member.originalBom, member.generatedBom,
+                        reportsOutputDir.resolve(member.config().getName().toLowerCase()), index,
+                        member.generatedPomFile, artifactResolver));
+            }
+        }
+        scheduler.addFinializingTask(index::close);
+
         if (platformConfig.getGenerateBomReportsZip() != null) {
-            Path zip = Paths.get(platformConfig.getGenerateBomReportsZip());
-            if (!zip.isAbsolute()) {
-                zip = reportsOutputDir.getParent().resolve(zip);
-            }
-            try {
-                Files.createDirectories(zip.getParent());
-                ZipUtils.zip(reportsOutputDir, zip);
-            } catch (Exception e) {
-                throw new MojoExecutionException("Failed to ZIP platform member BOM reports", e);
-            }
+            scheduler.addFinializingTask(() -> {
+                Path zip = Paths.get(platformConfig.getGenerateBomReportsZip());
+                if (!zip.isAbsolute()) {
+                    zip = reportsOutputDir.getParent().resolve(zip);
+                }
+                try {
+                    Files.createDirectories(zip.getParent());
+                    ZipUtils.zip(reportsOutputDir, zip);
+                } catch (Exception e) {
+                    throw new MojoExecutionException("Failed to ZIP platform member BOM reports", e);
+                }
+            });
         }
     }
 
@@ -873,14 +904,18 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private static void generateReleasesReport(DecomposedBom originalBom, Path outputFile)
-            throws BomDecomposerException {
-        originalBom.visit(DecomposedBomHtmlReportGenerator.builder(outputFile)
-                .skipOriginsWithSingleRelease().build());
+            throws MojoExecutionException {
+        try {
+            originalBom.visit(DecomposedBomHtmlReportGenerator.builder(outputFile)
+                    .skipOriginsWithSingleRelease().build());
+        } catch (BomDecomposerException e) {
+            throw new MojoExecutionException("Failed to generate report " + outputFile, e);
+        }
     }
 
     private static void generateBomReports(DecomposedBom originalBom, DecomposedBom generatedBom, Path outputDir,
             ReportIndexPageGenerator index, final Path platformBomXml, ArtifactResolver resolver)
-            throws BomDecomposerException {
+            throws MojoExecutionException {
         final BomDiff.Config config = BomDiff.config();
         config.resolver(resolver);
         if (originalBom.bomResolver() != null && originalBom.bomResolver().isResolved()) {
@@ -1505,9 +1540,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         persistPom(pom);
     }
 
-    private void generateMemberModule(PlatformMemberImpl member, Model parentPom) throws MojoExecutionException {
-
-        final String moduleName = getArtifactIdBase(member.getGeneratedPlatformBom().getArtifactId());
+    private void generateMemberModule(PlatformMemberImpl member, String moduleName, Model parentPom)
+            throws MojoExecutionException {
 
         final Model pom = newModel();
 
@@ -1521,7 +1555,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         pom.setPackaging(ArtifactCoords.TYPE_POM);
         pom.setName(getNameBase(parentPom) + " " + member.config().getName() + " - Parent");
-        parentPom.addModule(moduleName);
 
         final File pomXml = getPomFile(parentPom, moduleName);
         pom.setPomFile(pomXml);
@@ -1534,12 +1567,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         setParentVersion(pom, parentPom);
 
         member.baseModel = pom;
-
-        generateMemberBom(member);
-
-        if (member.config().hasTests()) {
-            generateMemberIntegrationTestsModule(member);
-        }
 
         if (member.config().isHidden()
                 || platformConfig.getRelease() != null
@@ -1709,8 +1736,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         return fromLine == upperLimit ? -1 : fromLine;
     }
 
-    private void generateMemberIntegrationTestsModule(PlatformMemberImpl member)
-            throws MojoExecutionException {
+    private void generateMemberIntegrationTestsModule(PlatformMemberImpl member, PlatformGenTaskScheduler scheduler)
+            throws Exception {
 
         final Model parentPom = member.baseModel;
         final String moduleName = "integration-tests";
@@ -1798,17 +1825,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
         }
 
-        final boolean parallelProcessing = testConfigs.size() > 1 && BomDecomposer.isParallelProcessing();
-        final Phaser phaser;
-        final Deque<Throwable> errors;
-        if (parallelProcessing) {
-            phaser = new Phaser(1);
-            errors = new ConcurrentLinkedDeque<>();
-        } else {
-            phaser = null;
-            errors = null;
-        }
-
         for (PlatformMemberTestConfig testConfig : testConfigs.values()) {
             if (member.config().getDefaultTestConfig() != null) {
                 testConfig.applyDefaults(member.config().getDefaultTestConfig());
@@ -1828,35 +1844,14 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                     testModuleName = testArtifact.getArtifactId();
                 }
                 pom.addModule(testModuleName);
-                if (parallelProcessing) {
-                    phaser.register();
-                    CompletableFuture.runAsync(() -> {
-                        try {
-                            generateIntegrationTestModule(testModuleName, testArtifact, testConfig, pom);
-                        } catch (MojoExecutionException e) {
-                            errors.add(e);
-                        } finally {
-                            phaser.arriveAndDeregister();
-                        }
-                    });
-                } else {
-                    generateIntegrationTestModule(testModuleName, testArtifact, testConfig, pom);
-                }
-            }
-        }
-        if (phaser != null) {
-            phaser.arriveAndAwaitAdvance();
-            if (!errors.isEmpty()) {
-                for (var e : errors) {
-                    getLog().error(e);
-                }
-                throw new MojoExecutionException(
-                        "Failed to generate integration test modules, please see the errors logged above");
+                scheduler.schedule(() -> generateIntegrationTestModule(testModuleName, testArtifact, testConfig, pom));
             }
         }
 
-        Utils.skipInstallAndDeploy(pom);
-        persistPom(pom);
+        scheduler.addFinializingTask(() -> {
+            Utils.skipInstallAndDeploy(pom);
+            persistPom(pom);
+        });
     }
 
     private Dependency getUniversalBomImport() {
@@ -2420,8 +2415,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     private void generatePlatformDescriptorModule(ArtifactCoords descriptorCoords, Model parentPom,
             boolean copyQuarkusCoreMetadata, AttachedMavenPluginConfig attachedPlugin, PlatformMember member)
             throws MojoExecutionException {
-        final String moduleName = "descriptor";
+
+        var moduleName = "descriptor";
         parentPom.addModule(moduleName);
+
         final Path moduleDir = parentPom.getProjectDirectory().toPath().resolve(moduleName);
 
         final Model pom = newModel();
@@ -2689,7 +2686,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         membersConfig.addChild(textDomElement("member", value));
     }
 
-    private void generatePlatformPropertiesModule(PlatformMemberImpl member, boolean addPlatformReleaseConfig)
+    private void generatePlatformPropertiesModule(PlatformMemberImpl member,
+            boolean addPlatformReleaseConfig)
             throws MojoExecutionException {
 
         final ArtifactCoords propertiesCoords = member.propertiesCoords();
@@ -2697,6 +2695,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         final String moduleName = "properties";
         parentPom.addModule(moduleName);
+
         final Path moduleDir = parentPom.getProjectDirectory().toPath().resolve(moduleName);
 
         final Model pom = newModel();
