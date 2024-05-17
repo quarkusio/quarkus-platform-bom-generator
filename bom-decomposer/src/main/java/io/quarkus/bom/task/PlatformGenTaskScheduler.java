@@ -1,12 +1,13 @@
 package io.quarkus.bom.task;
 
-import io.quarkus.bom.decomposer.BomDecomposer;
 import java.util.Collection;
 
 public interface PlatformGenTaskScheduler {
 
+    boolean IS_PARALLEL_DEFAULT = !Boolean.getBoolean("sequentialTaskScheduler");
+
     static PlatformGenTaskScheduler getInstance() {
-        return BomDecomposer.isParallelProcessing() ? new ConcurrentTaskScheduler() : new SequentialTaskScheduler();
+        return IS_PARALLEL_DEFAULT ? new ParallelTaskScheduler() : new SequentialTaskScheduler();
     }
 
     void schedule(PlatformGenTask task) throws Exception;
