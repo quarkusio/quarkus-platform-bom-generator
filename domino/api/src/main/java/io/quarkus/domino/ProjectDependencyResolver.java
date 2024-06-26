@@ -57,6 +57,7 @@ import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.DependencyNode;
+import org.eclipse.aether.graph.Exclusion;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.resolution.ArtifactDescriptorResult;
 import org.eclipse.aether.util.graph.manager.DependencyManagerUtils;
@@ -784,15 +785,20 @@ public class ProjectDependencyResolver {
             if (descr.getManagedDependencies().isEmpty()) {
                 constraints = managedDeps;
             } else {
-                constraints = new ArrayList<>(managedDeps.size());
-                constraints.addAll(managedDeps);
                 for (var d : descr.getManagedDependencies()) {
                     var art = d.getArtifact();
-                    if (!map.containsKey(
-                            ArtifactKey.of(art.getGroupId(), art.getArtifactId(), art.getClassifier(), art.getExtension()))) {
-                        constraints.add(d);
+                    var artKey = ArtifactKey.of(art.getGroupId(), art.getArtifactId(), art.getClassifier(), art.getExtension());
+                    var constraint = map.get(artKey);
+                    if (constraint == null) {
+                        map.put(artKey, d);
+                    } else {
+                        var merged = merge(constraint, d);
+                        if (merged != d) {
+                            map.put(artKey, merged);
+                        }
                     }
                 }
+                constraints = new ArrayList<>(map.values());
             }
             final List<Dependency> directDeps = new ArrayList<>(descr.getDependencies().size());
             for (var d : descr.getDependencies()) {
@@ -803,11 +809,16 @@ public class ProjectDependencyResolver {
                 var da = d.getArtifact();
                 var constraint = map
                         .get(ArtifactKey.of(da.getGroupId(), da.getArtifactId(), da.getClassifier(), da.getExtension()));
-                directDeps.add(constraint == null ? d : constraint);
+                if (constraint == null) {
+                    directDeps.add(d);
+                } else if (d.getExclusions().isEmpty()) {
+                    directDeps.add(constraint);
+                } else {
+                    directDeps.add(merge(constraint, d));
+                }
             }
             var aggregatedRepos = resolver.aggregateRepositories(resolver.getRepositories(),
                     resolver.newResolutionRepositories(descr.getRepositories()));
-
             root = resolver.getSystem().collectDependencies(resolver.getSession(),
                     MavenArtifactResolver.newCollectRequest(descr.getArtifact(), directDeps, constraints, List.of(),
                             aggregatedRepos))
@@ -825,6 +836,35 @@ public class ProjectDependencyResolver {
             throw new RuntimeException("Failed to collect dependencies of " + coords.toCompactCoords(), e);
         }
         return root;
+    }
+
+    private static Dependency merge(Dependency dominant, Dependency recessive) {
+        if (dominant == null) {
+            return recessive;
+        }
+        if (recessive.getExclusions().isEmpty()) {
+            return dominant;
+        }
+        if (dominant.getArtifact().getVersion().equals(recessive.getArtifact().getVersion())) {
+            if (dominant.getExclusions().isEmpty()) {
+                return recessive;
+            }
+            return new Dependency(dominant.getArtifact(), recessive.getScope(), recessive.isOptional(),
+                    mergeExclusions(dominant, recessive));
+        }
+        if (dominant.getExclusions().isEmpty()) {
+            return new Dependency(dominant.getArtifact(), recessive.getScope(), recessive.isOptional(),
+                    recessive.getExclusions());
+        }
+        return new Dependency(dominant.getArtifact(), recessive.getScope(), recessive.isOptional(),
+                mergeExclusions(dominant, recessive));
+    }
+
+    private static List<Exclusion> mergeExclusions(Dependency dominant, Dependency recessive) {
+        var merged = new ArrayList<Exclusion>(dominant.getExclusions().size() + recessive.getExclusions().size());
+        merged.addAll(dominant.getExclusions());
+        merged.addAll(recessive.getExclusions());
+        return merged;
     }
 
     private boolean isCollectNonManagedVisited() {
