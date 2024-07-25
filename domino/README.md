@@ -176,6 +176,8 @@ Total number of dependencies: 1075
 Red Hat version rate: 82.3%
 ```
 
+A list of non Red Hat version artifacts is provided when `--log-not-matched` option is added to the command.
+
 ##### Red Hat build of Apache Camel for Quarkus productization rate
 
 The following command will inspect dependencies of all the Camel Quarkus extensions that are managed by `quarkus-camel-bom` and calculate the rate of artifacts containing `redhat` version qualifier:
