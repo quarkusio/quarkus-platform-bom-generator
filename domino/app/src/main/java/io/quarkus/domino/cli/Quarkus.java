@@ -25,6 +25,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -103,6 +104,10 @@ public class Quarkus implements Callable<Integer> {
     @CommandLine.Option(names = {
             "--redhat-version-rate" }, description = "Calculate the rate of redhat versions among the inspected dependencies")
     public boolean redhatVersionRate;
+
+    @CommandLine.Option(names = {
+            "--log-not-matched" }, description = "Provide more details in combination with other options", defaultValue = "false")
+    public boolean logNotMatched;
 
     @CommandLine.Option(names = {
             "--info" }, description = "Log basic Quarkus platform release information")
@@ -254,6 +259,15 @@ public class Quarkus implements Callable<Integer> {
             if (!allNodes.isEmpty()) {
                 log.info(String.format("%-32s: %s (%.1f%%)", "Artifacts with Red Hat versions",
                         redhatVersions, ((double) redhatVersions.get() * 100) / allNodes.size()));
+
+                if (logNotMatched) {
+                    log.info("");
+                    log.info("Non Red Hat version artifacts:");
+                    allNodes.keySet()
+                            .stream().sorted(Comparator.comparing(Object::toString))
+                            .filter(coords -> !RhVersionPattern.isRhVersion(coords.getVersion()))
+                            .forEach(coords -> log.info(String.format(" * %s", coords)));
+                }
             }
             log.info("");
         }
