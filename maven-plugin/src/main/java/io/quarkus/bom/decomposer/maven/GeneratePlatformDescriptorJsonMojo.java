@@ -103,6 +103,16 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
     PlatformReleaseWithMembersConfig platformRelease;
 
     /**
+     * Enabling this parameter will generate platform release metadata for the platform descriptor.
+     * The release info will include only this descriptor as a member.
+     * <p/>
+     * If this parameter is enabled and {@link #platformRelease} parameter is provided, the goal execution
+     * will fail with an error indicating that only one of these two parameters can be used at a time.
+     */
+    @Parameter
+    boolean generateReleaseInfo;
+
+    /**
      * A set of artifact group ID's that should be excluded from of the BOM and the descriptor.
      * This can speed up the process by preventing the download of artifacts that are not required.
      */
@@ -331,6 +341,11 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
                 continue;
             }
 
+            if (quarkusCoreVersion == null && artifact.getArtifactId().equals(quarkusCoreArtifactId)
+                    && artifact.getGroupId().equals(quarkusCoreGroupId)) {
+                quarkusCoreVersion = artifact.getVersion();
+            }
+
             if (processGroupIds.isEmpty()) {
                 if (ignoredGroupIds.contains(artifact.getGroupId())) {
                     continue;
@@ -355,11 +370,6 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
                 if (ignore) {
                     continue;
                 }
-            }
-
-            if (quarkusCoreVersion == null && artifact.getArtifactId().equals(quarkusCoreArtifactId)
-                    && artifact.getGroupId().equals(quarkusCoreGroupId)) {
-                quarkusCoreVersion = artifact.getVersion();
             }
 
             var ext = inheritedExtensions.isEmpty() ? null
@@ -469,28 +479,8 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
             }
         }
 
-        if (platformRelease != null) {
-            platformJson.getMetadata().put("platform-release", platformRelease);
-        }
-
-        // make sure all the categories referenced by extensions are actually present in
-        // the platform descriptor
-        if (!skipCategoryCheck) {
-            final Set<String> catalogCategories = platformJson.getCategories().stream().map(c -> c.getId())
-                    .collect(Collectors.toSet());
-            if (!catalogCategories.containsAll(referencedCategories)) {
-                final List<String> missing = referencedCategories.stream().filter(c -> !catalogCategories.contains(c))
-                        .collect(Collectors.toList());
-                final StringBuilder buf = new StringBuilder();
-                buf.append(
-                        "The following categories referenced from extensions are missing from the generated catalog: ");
-                buf.append(missing.get(0));
-                for (int i = 1; i < missing.size(); ++i) {
-                    buf.append(", ").append(missing.get(i));
-                }
-                throw new MojoExecutionException(buf.toString());
-            }
-        }
+        addReleaseInfo(platformJson);
+        validateCategories(platformJson, referencedCategories);
 
         // Write the JSON to the output file
         final File outputDir = outputFile.getParentFile();
@@ -536,6 +526,55 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
                 }
                 throw new MojoExecutionException(
                         "Extension dependency version pattern check has failed. Please consult the error messages logged above.");
+            }
+        }
+    }
+
+    private void addReleaseInfo(ExtensionCatalog.Mutable platformJson) throws MojoExecutionException {
+        if (platformRelease == null) {
+            if (generateReleaseInfo) {
+                var version = platformJson.getBom().getVersion();
+                var dot = version.indexOf('.');
+                if (dot > 0) {
+                    var nextDot = version.indexOf('.', dot + 1);
+                    if (nextDot > 0) {
+                        dot = nextDot;
+                    }
+                }
+                var stream = dot <= 0 ? version : version.substring(0, dot);
+                platformRelease = new PlatformReleaseWithMembersConfig();
+                platformRelease.setPlatformKey(platformJson.getBom().getGroupId());
+                platformRelease.setStream(stream);
+                platformRelease.setVersion(version);
+                platformRelease.addMember(platformJson.getId());
+            } else {
+                return;
+            }
+        } else if (generateReleaseInfo) {
+            throw new MojoExecutionException(
+                    "Parameter generateReleaseInfo can't be set to true when platformRelease is configured explicitly");
+        }
+        platformJson.getMetadata().put("platform-release", platformRelease);
+    }
+
+    private void validateCategories(ExtensionCatalog.Mutable platformJson, Set<String> referencedCategories)
+            throws MojoExecutionException {
+        // make sure all the categories referenced by extensions are actually present in
+        // the platform descriptor
+        if (!skipCategoryCheck) {
+            final Set<String> catalogCategories = platformJson.getCategories().stream().map(Category::getId)
+                    .collect(Collectors.toSet());
+            if (!catalogCategories.containsAll(referencedCategories)) {
+                final List<String> missing = referencedCategories.stream().filter(c -> !catalogCategories.contains(c))
+                        .collect(Collectors.toList());
+                final StringBuilder buf = new StringBuilder();
+                buf.append(
+                        "The following categories referenced from extensions are missing from the generated catalog: ");
+                buf.append(missing.get(0));
+                for (int i = 1; i < missing.size(); ++i) {
+                    buf.append(", ").append(missing.get(i));
+                }
+                throw new MojoExecutionException(buf.toString());
             }
         }
     }
