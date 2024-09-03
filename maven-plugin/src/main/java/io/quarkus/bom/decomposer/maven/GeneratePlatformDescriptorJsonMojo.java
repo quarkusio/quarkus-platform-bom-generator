@@ -641,8 +641,8 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
 
         // if the POM has a parent then we better resolve the descriptor
         if (bomModel.getParent() != null) {
-            throw new MojoExecutionException(pomXml
-                    + " has a parent, in which case it is recommended to set 'resolveDependencyManagement' parameter to true");
+            getLog().warn(pomXml
+                    + " has a parent but the resolveDependencyManagement is false, dependency constraints from the parent hierarchy will be ignored");
         }
 
         if (bomModel.getDependencyManagement() == null) {
