@@ -27,9 +27,11 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import org.apache.maven.execution.MavenSession;
 import org.apache.maven.model.Model;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -95,6 +97,9 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
     MavenProject project;
     @Component
     MavenProjectHelper projectHelper;
+
+    @Parameter(defaultValue = "${session}", readonly = true)
+    MavenSession session;
 
     /**
      * Platform stack info
@@ -213,10 +218,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
             getLog().debug("Resolving dependencyManagement from the artifact descriptor");
             deps = dependencyManagementFromDescriptor(bomArtifact);
         } else {
-            deps = dependencyManagementFromProject();
-            if (deps == null) {
-                deps = dependencyManagementFromResolvedPom(bomArtifact);
-            }
+            deps = dependencyManagementFromResolvedPom(bomArtifact);
         }
         if (deps.isEmpty()) {
             getLog().warn("BOM " + bomArtifact + " does not include any dependency");
@@ -605,46 +607,54 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
     }
 
     private List<Dependency> dependencyManagementFromResolvedPom(Artifact bomArtifact) throws MojoExecutionException {
-        final Path pomXml;
-        try {
-            pomXml = repoSystem.resolveArtifact(repoSession,
-                    new ArtifactRequest().setArtifact(bomArtifact).setRepositories(repos))
-                    .getArtifact().getFile().toPath();
-        } catch (ArtifactResolutionException e) {
-            throw new MojoExecutionException("Failed to resolve " + bomArtifact, e);
+        Model rawModel = null;
+        Properties projectProperties = null;
+        for (var project : session.getAllProjects()) {
+            if (project.getArtifactId().equals(bomArtifact.getArtifactId())
+                    && project.getVersion().equals(bomArtifact.getVersion())
+                    && project.getGroupId().equals(bomArtifact.getGroupId())) {
+                if (getLog().isDebugEnabled()) {
+                    getLog().debug("Found a project module for " + bomArtifact);
+                }
+                rawModel = project.getOriginalModel();
+                projectProperties = project.getProperties();
+                projectProperties.setProperty("project.groupId", project.getGroupId());
+                projectProperties.setProperty("project.artifactId", project.getArtifactId());
+                projectProperties.setProperty("project.version", project.getVersion());
+                break;
+            }
         }
-        return readDependencyManagement(pomXml);
+        if (rawModel == null) {
+            final Path pomXml;
+            try {
+                pomXml = repoSystem.resolveArtifact(repoSession,
+                        new ArtifactRequest().setArtifact(bomArtifact).setRepositories(repos))
+                        .getArtifact().getFile().toPath();
+            } catch (ArtifactResolutionException e) {
+                throw new MojoExecutionException("Failed to resolve " + bomArtifact, e);
+            }
+            try {
+                if (getLog().isDebugEnabled()) {
+                    getLog().debug("Reading dependencyManagement from " + pomXml);
+                }
+                rawModel = ModelUtils.readModel(pomXml);
+            } catch (IOException e) {
+                throw new MojoExecutionException("Failed to parse " + pomXml, e);
+            }
+            projectProperties = rawModel.getProperties();
+            projectProperties.setProperty("project.groupId", ModelUtils.getGroupId(rawModel));
+            projectProperties.setProperty("project.artifactId", rawModel.getArtifactId());
+            projectProperties.setProperty("project.version", ModelUtils.getVersion(rawModel));
+        }
+        return readDependencyManagement(rawModel, projectProperties);
     }
 
-    private List<Dependency> dependencyManagementFromProject() throws MojoExecutionException {
-        // if the configured BOM coordinates are not matching the current project
-        // the current project's POM isn't the right source
-        if (!project.getArtifact().getArtifactId().equals(bomArtifactId)
-                || !project.getArtifact().getVersion().equals(bomVersion)
-                || !project.getArtifact().getGroupId().equals(bomGroupId)
-                || !project.getFile().exists()) {
-            return null;
-        }
-        return readDependencyManagement(project.getFile().toPath());
-    }
-
-    private List<Dependency> readDependencyManagement(Path pomXml) throws MojoExecutionException {
-        if (getLog().isDebugEnabled()) {
-            getLog().debug("Reading dependencyManagement from " + pomXml);
-        }
-        final Model bomModel;
-        try {
-            bomModel = ModelUtils.readModel(pomXml);
-        } catch (IOException e) {
-            throw new MojoExecutionException("Failed to parse " + project.getFile(), e);
-        }
-
+    private List<Dependency> readDependencyManagement(Model bomModel, Properties bomProperties) throws MojoExecutionException {
         // if the POM has a parent then we better resolve the descriptor
         if (bomModel.getParent() != null) {
-            getLog().warn(pomXml
+            getLog().warn(bomModel.getPomFile()
                     + " has a parent but the resolveDependencyManagement is false, dependency constraints from the parent hierarchy will be ignored");
         }
-
         if (bomModel.getDependencyManagement() == null) {
             return List.of();
         }
@@ -652,15 +662,56 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
         if (modelDeps.isEmpty()) {
             return List.of();
         }
-
         final List<Dependency> deps = new ArrayList<>(modelDeps.size());
         for (org.apache.maven.model.Dependency modelDep : modelDeps) {
-            final Artifact artifact = new DefaultArtifact(modelDep.getGroupId(), modelDep.getArtifactId(),
-                    modelDep.getClassifier(), modelDep.getType(), modelDep.getVersion());
+            final Artifact artifact = new DefaultArtifact(resolvePropertyValue(modelDep.getGroupId(), bomProperties),
+                    resolvePropertyValue(modelDep.getArtifactId(), bomProperties),
+                    resolvePropertyValue(modelDep.getClassifier(), bomProperties),
+                    resolvePropertyValue(modelDep.getType(), bomProperties),
+                    resolvePropertyValue(modelDep.getVersion(), bomProperties));
             // exclusions aren't relevant in this context
             deps.add(new Dependency(artifact, modelDep.getScope(), modelDep.isOptional(), List.of()));
         }
         return deps;
+    }
+
+    private static String resolvePropertyValue(String value, Properties props) {
+        if (value == null || value.isEmpty()) {
+            return value;
+        }
+        StringBuilder sb = null;
+        int offset = 0;
+        int lastAppend = 0;
+        while (offset < value.length()) {
+            int start = value.indexOf("${", offset);
+            if (start < 0) {
+                break;
+            }
+            int end = value.indexOf('}', start + 1);
+            if (end < 0) {
+                break;
+            }
+            var propName = value.substring(start + 2, end);
+            var propValue = props.getProperty(propName);
+            if (propValue != null) {
+                if (sb == null) {
+                    sb = new StringBuilder(value.length());
+                }
+                if (start > lastAppend) {
+                    sb.append(value, lastAppend, start);
+                }
+                sb.append(propValue);
+                lastAppend = end + 1;
+            }
+            offset = end + 1;
+        }
+        if (sb != null) {
+            if (lastAppend < value.length()) {
+                sb.append(value, lastAppend, value.length());
+            }
+            return sb.toString();
+        }
+        return value;
     }
 
     private Extension.Mutable processDependency(Artifact artifact) throws IOException, MojoExecutionException {
