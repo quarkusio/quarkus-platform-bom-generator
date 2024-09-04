@@ -44,7 +44,6 @@ import io.quarkus.fs.util.ZipUtils;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.paths.PathTree;
-import io.quarkus.registry.CatalogMergeUtility;
 import io.quarkus.registry.Constants;
 import io.quarkus.registry.catalog.CatalogMapperHelper;
 import io.quarkus.registry.catalog.ExtensionCatalog;
@@ -455,21 +454,19 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                             + " is configured to include only supported extensions but no support metadata override sources were provided");
                 }
                 selectedKeys = new HashSet<>(metadataOverrides.size());
-                final List<ExtensionCatalog> overrides = new ArrayList<>(metadataOverrides.size());
                 for (Path p : metadataOverrides) {
                     try {
-                        overrides.add(ExtensionCatalog.fromFile(p));
+                        ExtensionCatalog c = ExtensionCatalog.fromFile(p);
+                        for (var e : c.getExtensions()) {
+                            if (e.getMetadata().containsKey("redhat-support")) {
+                                var key = e.getArtifact().getKey();
+                                selectedKeys.add(key);
+                                selectedKeys.add(ArtifactKey.of(key.getGroupId(), key.getArtifactId() + "-deployment",
+                                        key.getClassifier(), key.getType()));
+                            }
+                        }
                     } catch (IOException e) {
                         throw new MojoExecutionException("Failed to deserialize " + p, e);
-                    }
-                }
-                var catalog = CatalogMergeUtility.merge(overrides);
-                for (var e : catalog.getExtensions()) {
-                    if (e.getMetadata().containsKey("redhat-support")) {
-                        var key = e.getArtifact().getKey();
-                        selectedKeys.add(key);
-                        selectedKeys.add(ArtifactKey.of(key.getGroupId(), key.getArtifactId() + "-deployment",
-                                key.getClassifier(), key.getType()));
                     }
                 }
             }
