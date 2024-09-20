@@ -1685,13 +1685,25 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     private Plugin clonePluginConfig(Plugin plugin) {
         if (plugin.getVersion() == null) {
             final Plugin managedPlugin = project.getPluginManagement().getPluginsAsMap().get(plugin.getKey());
-            if (managedPlugin == null) {
+            if (managedPlugin == null || managedPlugin.getVersion() == null) {
                 getLog().warn("Failed to determine the version for " + plugin.getKey());
+            } else {
+                var version = managedPlugin.getVersion();
+                if (!version.startsWith("$")) {
+                    version = toPropertyOrSelf(version);
+                }
+                plugin = plugin.clone();
+                plugin.setVersion(version);
             }
-            plugin = plugin.clone();
-            plugin.setVersion(managedPlugin.getVersion());
+        } else if (!plugin.getVersion().startsWith("$")) {
+            plugin.setVersion(toPropertyOrSelf(plugin.getVersion()));
         }
         return plugin;
+    }
+
+    private String toPropertyOrSelf(String version) {
+        var prop = pomPropsByValues.get(version);
+        return prop == null ? version : "${" + prop + "}";
     }
 
     private static ArtifactCoords toCoords(final Artifact a) {
