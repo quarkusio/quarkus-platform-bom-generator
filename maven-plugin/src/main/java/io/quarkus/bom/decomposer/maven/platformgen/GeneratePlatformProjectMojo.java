@@ -129,6 +129,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     private static final String PLATFORM_STREAM_PROP = "platform.stream";
     private static final String PLATFORM_RELEASE_PROP = "platform.release";
     private static final String DEPENDENCIES_TO_BUILD = "dependenciesToBuild";
+    private static final String COLON = ":";
 
     @Component
     RepositorySystem repoSystem;
@@ -631,7 +632,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             final Xpp3Dom config = new Xpp3Dom("configuration");
             exec.setConfiguration(config);
             config.addChild(textDomElement("bom",
-                    m.getConfiguredPlatformBom().getGroupId() + ":" + m.getConfiguredPlatformBom().getArtifactId() + ":"
+                    m.getConfiguredPlatformBom().getGroupId() + COLON + m.getConfiguredPlatformBom().getArtifactId() + COLON
                             + getDependencyVersion(pom, m.descriptorCoords())));
             config.addChild(
                     textDomElement("outputFile",
@@ -719,7 +720,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             final Xpp3Dom config = new Xpp3Dom("configuration");
             exec.setConfiguration(config);
             config.addChild(textDomElement("bom",
-                    m.getConfiguredPlatformBom().getGroupId() + ":" + m.getConfiguredPlatformBom().getArtifactId() + ":"
+                    m.getConfiguredPlatformBom().getGroupId() + COLON + m.getConfiguredPlatformBom().getArtifactId() + COLON
                             + getDependencyVersion(pom, m.descriptorCoords())));
             config.addChild(
                     textDomElement("outputFile",
@@ -1026,8 +1027,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             buf.append(l.charAt(i));
         }
         var generatedBom = member.getAlignedDecomposedBom().bomArtifact();
-        buf.append("    <lastDetectedBomUpdate>").append(generatedBom.getGroupId()).append(":")
-                .append(generatedBom.getArtifactId()).append(":")
+        buf.append("    <lastDetectedBomUpdate>").append(generatedBom.getGroupId()).append(COLON)
+                .append(generatedBom.getArtifactId()).append(COLON)
                 .append(generatedBom.getVersion()).append("</lastDetectedBomUpdate>");
         int prevIndex = pomLineContaining("<lastDetectedBomUpdate>", releaseIndex, releaseEnd);
         if (prevIndex < 0) {
@@ -1227,7 +1228,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             pom.setProperties(new Properties());
             for (Map.Entry<?, ?> originalProp : originalProps.entrySet()) {
                 final String propName = originalProp.getKey().toString();
-                if (getTestArtifactGroupIdForProperty(propName) == null) {
+                if (!project.getOriginalModel().getProperties().containsKey(propName)) {
                     pom.getProperties().setProperty(propName, originalProp.getValue().toString());
                 }
             }
@@ -1828,7 +1829,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 if (testConfig == null) {
                     testConfig = new PlatformMemberTestConfig();
                     testConfig.setArtifact(
-                            testCoords.getGroupId() + ":" + testCoords.getArtifactId() + ":" + testCoords.getVersion());
+                            testCoords.getGroupId() + COLON + testCoords.getArtifactId() + COLON + testCoords.getVersion());
                     testConfigs.put(testCoords.getKey(), testConfig);
                 }
             }
@@ -1924,7 +1925,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         addDependencies(pom, testConfig.getTestDependencies(), true);
 
         final Xpp3Dom depsToScan = new Xpp3Dom("dependenciesToScan");
-        depsToScan.addChild(textDomElement("dependency", testArtifact.getGroupId() + ":" + testArtifact.getArtifactId()));
+        depsToScan.addChild(textDomElement("dependency", testArtifact.getGroupId() + COLON + testArtifact.getArtifactId()));
 
         if (!testConfig.isSkipJvm()) {
             final Build build = new Build();
@@ -2054,7 +2055,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 config.addChild(textDomElement("skip", "true"));
             }
             config.addChild(textDomElement("appArtifact",
-                    testArtifact.getGroupId() + ":" + testArtifact.getArtifactId() + ":" + testArtifactVersion));
+                    testArtifact.getGroupId() + COLON + testArtifact.getArtifactId() + COLON + testArtifactVersion));
         }
 
         Utils.disablePlugin(pom, "maven-jar-plugin", "default-jar");
@@ -2165,7 +2166,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             return version;
         }
         if (versionProp.isEmpty()) {
-            versionProp = pomPropsByValues.get(artifactGroupId + ":" + version);
+            versionProp = pomPropsByValues.get(artifactGroupId + COLON + version);
             if (versionProp == null) {
                 return version;
             }
@@ -2179,44 +2180,50 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             final String value = prop.getValue().toString();
             final String previous = pomPropsByValues.putIfAbsent(value, name);
             if (previous != null) {
-                final String groupId = getTestArtifactGroupIdForProperty(name);
-                if (groupId == null) {
+                Collection<String> groupIds = getArtifactGroupIdsForVersionProperty(name);
+                if (groupIds.isEmpty()) {
                     continue;
+                }
+                for (var groupId : groupIds) {
+                    pomPropsByValues.put(groupId + COLON + value, name);
                 }
                 if (previous.isEmpty()) {
-                    pomPropsByValues.putIfAbsent(groupId + ":" + value, name);
                     continue;
                 }
-                final String previousGroupId = getTestArtifactGroupIdForProperty(previous);
-                if (previousGroupId == null) {
-                    pomPropsByValues.putIfAbsent(value, name);
+                groupIds = getArtifactGroupIdsForVersionProperty(previous);
+                for (var groupId : groupIds) {
+                    pomPropsByValues.put(groupId + COLON + value, previous);
                 }
-
                 pomPropsByValues.put(value, "");
-                pomPropsByValues.put(previousGroupId + ":" + value, previous);
-                pomPropsByValues.putIfAbsent(groupId + ":" + value, name);
             }
         }
     }
 
-    private String getTestArtifactGroupIdForProperty(final String versionProperty) {
+    private Collection<String> getArtifactGroupIdsForVersionProperty(final String versionProperty) {
+        var propExpr = "${" + versionProperty + "}";
+        Set<String> result = new HashSet<>();
         for (String s : pomLines()) {
-            int coordsEnd = s.indexOf(versionProperty);
+            int coordsEnd = s.indexOf(propExpr);
+            // looking for <p>propExpr</p>, min length will be propExpr.length() + 3 + 4
+            if (coordsEnd < 0
+                    || s.length() < propExpr.length() + 7) {
+                continue;
+            }
+            coordsEnd = s.indexOf("</", coordsEnd);
             if (coordsEnd < 0) {
                 continue;
             }
-            coordsEnd = s.indexOf("</artifact>", coordsEnd);
-            if (coordsEnd < 0) {
-                continue;
-            }
-            int coordsStart = s.indexOf("<artifact>");
+            int coordsStart = s.indexOf(">");
             if (coordsStart < 0) {
                 continue;
             }
-            coordsStart += "<artifact>".length();
-            return ArtifactCoords.fromString(s.substring(coordsStart, coordsEnd)).getGroupId();
+            var coords = s.substring(coordsStart + 1, coordsEnd);
+            var arr = coords.split(COLON);
+            if (arr.length > 2 && arr.length < 6) {
+                result.add(arr[0]);
+            }
         }
-        return null;
+        return result;
     }
 
     private void addDependencies(final Model pom, List<String> dependencies, boolean test) {
@@ -2543,8 +2550,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         if (member != null) {
             // Update last-bom-update
             var lastUpdatedBom = member.latestBomRelease();
-            pom.getProperties().setProperty(MEMBER_LAST_BOM_UPDATE_PROP, lastUpdatedBom.getGroupId() + ":"
-                    + lastUpdatedBom.getArtifactId() + ":" + lastUpdatedBom.getVersion());
+            pom.getProperties().setProperty(MEMBER_LAST_BOM_UPDATE_PROP, lastUpdatedBom.getGroupId() + COLON
+                    + lastUpdatedBom.getArtifactId() + COLON + lastUpdatedBom.getVersion());
             if (overrides == null) {
                 overrides = CatalogMapperHelper.mapper().createObjectNode();
             }
@@ -3165,15 +3172,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             if (versionProperty == null) {
                 final Artifact quarkusBom = quarkusCore.getInputBom();
                 versionProperty = getTestArtifactVersion(quarkusBom.getGroupId(), quarkusBom.getVersion());
-                if (versionProperty.equals(quarkusBom.getVersion())) {
-                    final String ga = quarkusBom.getGroupId() + ":" + quarkusBom.getArtifactId() + ":";
-                    for (String l : pomLines()) {
-                        if (l.startsWith(ga)) {
-                            versionProperty = ArtifactCoords.fromString(l).getVersion();
-                            break;
-                        }
-                    }
-                }
             }
             return versionProperty;
         }
