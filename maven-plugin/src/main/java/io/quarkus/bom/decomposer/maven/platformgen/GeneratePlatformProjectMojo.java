@@ -67,6 +67,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
 import java.util.StringJoiner;
@@ -1652,12 +1653,11 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private List<Profile> getGeneratedBomReleaseProfile() {
-
         if (generatedBomReleaseProfile == null) {
             generatedBomReleaseProfile = new ArrayList<>(2);
-            for (Profile p : project.getModel().getProfiles()) {
-                if (p.getId().startsWith("release")) {
-                    generatedBomReleaseProfile.add(copyReleasePlugins(p));
+            for (Profile profile : project.getModel().getProfiles()) {
+                if (profile.getId().startsWith("release")) {
+                    generatedBomReleaseProfile.add(copyReleasePlugins(profile));
                 }
             }
         }
@@ -1684,22 +1684,36 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private Plugin clonePluginConfig(Plugin plugin) {
-        if (plugin.getVersion() == null) {
+        String pluginVersion = plugin.getVersion();
+        if (pluginVersion == null) {
             final Plugin managedPlugin = project.getPluginManagement().getPluginsAsMap().get(plugin.getKey());
             if (managedPlugin == null || managedPlugin.getVersion() == null) {
                 getLog().warn("Failed to determine the version for " + plugin.getKey());
             } else {
-                var version = managedPlugin.getVersion();
-                if (!version.startsWith("$")) {
-                    version = toPropertyOrSelf(version);
-                }
-                plugin = plugin.clone();
-                plugin.setVersion(version);
+                pluginVersion = getPreferredVersionValue(managedPlugin.getVersion(), false);
             }
-        } else if (!plugin.getVersion().startsWith("$")) {
-            plugin.setVersion(toPropertyOrSelf(plugin.getVersion()));
+        } else {
+            pluginVersion = getPreferredVersionValue(pluginVersion, false);
+        }
+        if (!Objects.equals(pluginVersion, plugin.getVersion())) {
+            plugin = plugin.clone();
+            plugin.setVersion(pluginVersion);
         }
         return plugin;
+    }
+
+    private String getPreferredVersionValue(String version, boolean preferVersionProperty) {
+        if (version.startsWith("${") && version.endsWith("}")) {
+            if (!preferVersionProperty) {
+                var value = project.getProperties().getProperty(version.substring(2, version.length() - 1));
+                if (value != null) {
+                    version = value;
+                }
+            }
+        } else if (preferVersionProperty) {
+            version = toPropertyOrSelf(version);
+        }
+        return version;
     }
 
     private String toPropertyOrSelf(String version) {
