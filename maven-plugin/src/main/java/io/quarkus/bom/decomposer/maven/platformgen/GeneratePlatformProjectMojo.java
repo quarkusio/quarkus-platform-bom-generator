@@ -1229,7 +1229,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             pom.setProperties(new Properties());
             for (Map.Entry<?, ?> originalProp : originalProps.entrySet()) {
                 final String propName = originalProp.getKey().toString();
-                if (!project.getOriginalModel().getProperties().containsKey(propName)) {
+                // if it's not a version property, we add it
+                if (propName.startsWith("maven.") || getArtifactGroupIdsForVersionProperty(propName).isEmpty()) {
                     pom.getProperties().setProperty(propName, originalProp.getValue().toString());
                 }
             }
@@ -2215,7 +2216,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
     private Collection<String> getArtifactGroupIdsForVersionProperty(final String versionProperty) {
         var propExpr = "${" + versionProperty + "}";
-        Set<String> result = new HashSet<>();
+        Set<String> result = null;
         for (String s : pomLines()) {
             int coordsEnd = s.indexOf(propExpr);
             // looking for <p>propExpr</p>, min length will be propExpr.length() + 3 + 4
@@ -2234,10 +2235,13 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             var coords = s.substring(coordsStart + 1, coordsEnd);
             var arr = coords.split(COLON);
             if (arr.length > 2 && arr.length < 6) {
+                if (result == null) {
+                    result = new HashSet<>(2);
+                }
                 result.add(arr[0]);
             }
         }
-        return result;
+        return result == null ? Set.of() : result;
     }
 
     private void addDependencies(final Model pom, List<String> dependencies, boolean test) {
