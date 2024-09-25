@@ -12,5 +12,6 @@
 
   <modules>
     <module>platform-generator</module>
+    <module>sample-app</module>
   </modules>
 </project>
