@@ -12,8 +12,7 @@
   <dependencies>
     <dependency>
       <groupId>io.quarkus</groupId>
-      <artifactId>quarkus-bootstrap-app-model</artifactId>
-      <version>${quarkus.version}</version>
+      <artifactId>quarkus-bootstrap-maven-resolver</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -41,7 +40,7 @@
   <build>
     <plugins>
       <plugin>
-        <artifactId>maven-surefire-plugin</artifactId>
+        <artifactId>maven-failsafe-plugin</artifactId>
         <version>${surefire-plugin.version}</version>
         <configuration>
           <systemPropertyVariables>
@@ -52,6 +51,14 @@
             <quarkus.platform.version>${quarkus.version}</quarkus.platform.version>
           </systemPropertyVariables>
         </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
       <plugin>
         <artifactId>maven-jar-plugin</artifactId>

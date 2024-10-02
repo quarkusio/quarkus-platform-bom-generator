@@ -83,6 +83,7 @@ import nu.studer.java.util.OrderedProperties;
 import nu.xom.Builder;
 import nu.xom.Document;
 import nu.xom.Element;
+import org.apache.maven.RepositoryUtils;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.model.Activation;
 import org.apache.maven.model.ActivationProperty;
@@ -114,6 +115,7 @@ import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.collection.CollectRequest;
+import org.eclipse.aether.collection.DependencyCollectionException;
 import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.resolution.DependencyRequest;
@@ -131,6 +133,15 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     private static final String PLATFORM_RELEASE_PROP = "platform.release";
     private static final String DEPENDENCIES_TO_BUILD = "dependenciesToBuild";
     private static final String COLON = ":";
+    public static final String TEST = "test";
+    public static final String ARG_LINE = "argLine";
+    public static final String ENVIRONMENT_VARIABLES = "environmentVariables";
+    public static final String SYSTEM_PROPERTY_VARIABLES = "systemPropertyVariables";
+    public static final String CONFIGURATION = "configuration";
+    public static final String INCLUDES = "includes";
+    public static final String EXCLUDES = "excludes";
+    public static final String EXCLUDE = "exclude";
+    public static final String INCLUDE = "include";
 
     @Component
     RepositorySystem repoSystem;
@@ -247,8 +258,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             pom.addProperty("revision", project.getVersion());
         }
 
-        final Build build = new Build();
-        pom.setBuild(build);
+        final Build build = getOrCreateBuild(pom);
         final PluginManagement pm = new PluginManagement();
         pom.getBuild().setPluginManagement(pm);
         final Plugin plugin = new Plugin();
@@ -572,20 +582,11 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         parentPom.addModule(artifactId);
         final File pomXml = getPomFile(parentPom, artifactId);
         pom.setPomFile(pomXml);
-        final Parent parent = new Parent();
-        parent.setGroupId(ModelUtils.getGroupId(parentPom));
-        parent.setArtifactId(parentPom.getArtifactId());
-        parent.setRelativePath(pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
-        pom.setParent(parent);
-        setParentVersion(pom, parentPom);
+        setParent(pom, parentPom);
         Utils.skipInstallAndDeploy(pom);
 
         Plugin plugin = new Plugin();
-        Build build = pom.getBuild();
-        if (build == null) {
-            build = new Build();
-            pom.setBuild(build);
-        }
+        Build build = getOrCreateBuild(pom);
         build.addPlugin(plugin);
         plugin.setGroupId(pluginDescriptor().getGroupId());
         plugin.setArtifactId(pluginDescriptor().getArtifactId());
@@ -600,8 +601,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         activation.setProperty(ap);
         ap.setName(profileId);
 
-        build = new Build();
-        profile.setBuild(build);
+        build = getOrCreateBuild(profile);
 
         PluginManagement pm = new PluginManagement();
         build.setPluginManagement(pm);
@@ -630,7 +630,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             exec.setId(m.getConfiguredPlatformBom().getArtifactId());
             exec.setPhase("process-resources");
             exec.addGoal("extension-changes");
-            final Xpp3Dom config = new Xpp3Dom("configuration");
+            final Xpp3Dom config = new Xpp3Dom(CONFIGURATION);
             exec.setConfiguration(config);
             config.addChild(textDomElement("bom",
                     m.getConfiguredPlatformBom().getGroupId() + COLON + m.getConfiguredPlatformBom().getArtifactId() + COLON
@@ -661,20 +661,11 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         parentPom.addModule(artifactId);
         final File pomXml = getPomFile(parentPom, artifactId);
         pom.setPomFile(pomXml);
-        final Parent parent = new Parent();
-        parent.setGroupId(ModelUtils.getGroupId(parentPom));
-        parent.setArtifactId(parentPom.getArtifactId());
-        parent.setRelativePath(pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
-        pom.setParent(parent);
-        setParentVersion(pom, parentPom);
+        setParent(pom, parentPom);
         Utils.skipInstallAndDeploy(pom);
 
         Plugin plugin = new Plugin();
-        Build build = pom.getBuild();
-        if (build == null) {
-            build = new Build();
-            pom.setBuild(build);
-        }
+        Build build = getOrCreateBuild(pom);
         build.addPlugin(plugin);
         plugin.setGroupId(pluginDescriptor().getGroupId());
         plugin.setArtifactId(pluginDescriptor().getArtifactId());
@@ -688,8 +679,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         activation.setProperty(ap);
         ap.setName(profileId);
 
-        build = new Build();
-        profile.setBuild(build);
+        build = getOrCreateBuild(profile);
 
         PluginManagement pm = new PluginManagement();
         build.setPluginManagement(pm);
@@ -718,7 +708,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             exec.setId(m.getConfiguredPlatformBom().getArtifactId());
             exec.setPhase("process-resources");
             exec.addGoal("dependencies-to-build");
-            final Xpp3Dom config = new Xpp3Dom("configuration");
+            final Xpp3Dom config = new Xpp3Dom(CONFIGURATION);
             exec.setConfiguration(config);
             config.addChild(textDomElement("bom",
                     m.getConfiguredPlatformBom().getGroupId() + COLON + m.getConfiguredPlatformBom().getArtifactId() + COLON
@@ -1132,19 +1122,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         pom.setPomFile(pomXml);
         pom.setGroupId(targetCoords.getGroupId());
         pom.setName(getNameBase(parentPom) + " " + artifactIdToName(targetCoords.getArtifactId()));
+        setParent(pom, parentPom);
 
-        final Parent parent = new Parent();
-        parent.setGroupId(ModelUtils.getGroupId(parentPom));
-        parent.setArtifactId(parentPom.getArtifactId());
-        parent.setRelativePath(pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
-        pom.setParent(parent);
-        setParentVersion(pom, parentPom);
-
-        DependencyManagement dm = pom.getDependencyManagement();
-        if (dm == null) {
-            dm = new DependencyManagement();
-            pom.setDependencyManagement(dm);
-        }
+        DependencyManagement dm = getOrCreateDependencyManagement(pom);
         final Artifact quarkusBom = quarkusCore.getGeneratedPlatformBom();
         final Dependency quarkusBomImport = new Dependency();
         quarkusBomImport.setGroupId(quarkusBom.getGroupId());
@@ -1154,11 +1134,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         quarkusBomImport.setScope("import");
         dm.addDependency(quarkusBomImport);
 
-        var build = pom.getBuild();
-        if (build == null) {
-            build = new Build();
-            pom.setBuild(build);
-        }
+        var build = getOrCreateBuild(pom);
         // copy the effective maven-plugin-plugin config and set expected versions
         final Model originalEffectiveModel = new EffectiveModelResolver(getNonWorkspaceResolver())
                 .resolveEffectiveModel(originalCoords);
@@ -1178,49 +1154,37 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         // copy maven.* properties
         copyMavenCompilerProperties(originalEffectiveModel, pom);
 
-        var originalDeps = originalEffectiveModel.getDependencies();
-
-        final Map<ArtifactKey, String> originalDepVersions = new HashMap<>(originalDeps.size());
-        for (Dependency d : originalDeps) {
-            originalDepVersions.put(ArtifactKey.of(d.getGroupId(), d.getArtifactId(), d.getClassifier(), d.getType()),
-                    d.getVersion());
-        }
-        final List<Dependency> managedDeps = quarkusCore.generatedBomModel.getDependencyManagement().getDependencies();
-        final Map<ArtifactKey, String> managedDepVersions = new HashMap<>(managedDeps.size());
-        for (Dependency d : managedDeps) {
-            managedDepVersions.put(getKey(d), d.getVersion());
-        }
+        final Map<ArtifactKey, String> originalDepVersions = getVersionMap(originalEffectiveModel.getDependencies());
+        final Map<ArtifactKey, String> managedDepVersions = getVersionMap(
+                quarkusCore.generatedBomModel.getDependencyManagement().getDependencies());
 
         final List<Dependency> pluginDeps = pom.getDependencies();
         pom.setDependencies(new ArrayList<>(pluginDeps.size()));
+        final List<org.eclipse.aether.graph.Dependency> directAetherDeps = new ArrayList<>(pluginDeps.size());
         for (Dependency d : pluginDeps) {
-            if ("test".equals(d.getScope())) {
+            if (TEST.equals(d.getScope())) {
                 continue;
             }
+            final ArtifactKey key = getKey(d);
+            final String managedVersion = managedDepVersions.get(key);
+            final String originalVersion = originalDepVersions.get(key);
+            if (originalVersion == null) {
+                throw new IllegalStateException(
+                        "Failed to determine version for dependency " + d + " of the Maven plugin " + originalCoords);
+            }
             if (d.getVersion() == null) {
-                final ArtifactKey key = getKey(d);
-                if (!managedDepVersions.containsKey(key)) {
-                    final String originalVersion = originalDepVersions.get(key);
-                    if (originalVersion == null) {
-                        throw new IllegalStateException("Failed to determine version for dependency " + d
-                                + " of the Maven plugin " + originalCoords);
-                    }
+                if (managedVersion == null) {
                     d.setVersion(getTestArtifactVersion(originalCoords.getGroupId(), originalVersion));
                 }
             } else if (d.getVersion().startsWith("${")) {
-                final ArtifactKey key = getKey(d);
-                final String originalVersion = originalDepVersions.get(key);
-                if (originalVersion == null) {
-                    throw new IllegalStateException(
-                            "Failed to determine version for dependency " + d + " of the Maven plugin " + originalCoords);
-                }
-                if (originalVersion.equals(managedDepVersions.get(key))) {
+                if (originalVersion.equals(managedVersion)) {
                     d.setVersion(null);
                 } else {
                     d.setVersion(getTestArtifactVersion(originalCoords.getGroupId(), originalVersion));
                 }
             }
             pom.addDependency(d);
+            directAetherDeps.add(getAlignedAetherDependency(d, managedVersion, originalVersion));
         }
 
         // make sure the original properties do not override the platform ones
@@ -1240,7 +1204,63 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             configureFlattenPlugin(pom, false, Map.of("dependencyManagement", "keep"));
         }
 
+        var testConfig = platformConfig.getAttachedMavenPlugin().getTest();
+        if (testConfig != null && !testConfig.isExcluded()) {
+            var testArtifact = ArtifactCoords.fromString(testConfig.getArtifact());
+            final Set<ArtifactKey> bannedTestDependencyKeys = collectDependencyKeys(pom, directAetherDeps);
+            bannedTestDependencyKeys.add(testArtifact.getKey());
+            configureTests(testArtifact, testConfig, pom, bannedTestDependencyKeys);
+        }
         persistPom(pom);
+    }
+
+    private Set<ArtifactKey> collectDependencyKeys(Model pom, List<org.eclipse.aether.graph.Dependency> directAetherDeps) {
+        final DependencyNode root;
+        try {
+            root = getNonWorkspaceResolver().getSystem().collectDependencies(
+                    getNonWorkspaceResolver().getSession(),
+                    MavenArtifactResolver.newCollectRequest(
+                            new DefaultArtifact(ModelUtils.getGroupId(pom), pom.getArtifactId(), ArtifactCoords.TYPE_POM,
+                                    ModelUtils.getVersion(pom)),
+                            directAetherDeps, toAetherDependencies(pom.getDependencyManagement().getDependencies()),
+                            List.of(), List.of()))
+                    .getRoot();
+        } catch (DependencyCollectionException e) {
+            throw new RuntimeException(e);
+        }
+        final Set<ArtifactKey> bannedTestDependencyKeys = new HashSet<>();
+        collectDependencyKeys(root, bannedTestDependencyKeys);
+        return bannedTestDependencyKeys;
+    }
+
+    private static void collectDependencyKeys(DependencyNode node, Set<ArtifactKey> keys) {
+        var a = node.getArtifact();
+        if (a != null) {
+            keys.add(ArtifactKey.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension()));
+        }
+        for (var c : node.getChildren()) {
+            collectDependencyKeys(c, keys);
+        }
+    }
+
+    private org.eclipse.aether.graph.Dependency getAlignedAetherDependency(Dependency d, String managedVersion,
+            String originalVersion) {
+        var aetherDep = RepositoryUtils.toDependency(d,
+                getNonWorkspaceResolver().getSession().getArtifactTypeRegistry());
+        var version = managedVersion == null ? originalVersion : managedVersion;
+        if (!version.equals(aetherDep.getArtifact().getVersion())) {
+            aetherDep = aetherDep.setArtifact(aetherDep.getArtifact().setVersion(version));
+        }
+        return aetherDep;
+    }
+
+    private static Map<ArtifactKey, String> getVersionMap(List<Dependency> deps) {
+        final Map<ArtifactKey, String> originalDepVersions = new HashMap<>(deps.size());
+        for (Dependency d : deps) {
+            originalDepVersions.put(ArtifactKey.of(d.getGroupId(), d.getArtifactId(), d.getClassifier(), d.getType()),
+                    d.getVersion());
+        }
+        return originalDepVersions;
     }
 
     private static void copyMavenCompilerProperties(Model srcModel, Model targetModel) {
@@ -1253,11 +1273,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private void configureFlattenPlugin(Model pom, boolean updatePomFile, Map<String, String> elementConfig) {
-        Build build = pom.getBuild();
-        if (build == null) {
-            build = new Build();
-            pom.setBuild(build);
-        }
+        Build build = getOrCreateBuild(pom);
         Plugin plugin = new Plugin();
         build.addPlugin(plugin);
         plugin.setGroupId("org.codehaus.mojo");
@@ -1267,7 +1283,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         e.setId("flatten");
         e.setPhase("process-resources");
         e.addGoal("flatten");
-        Xpp3Dom config = new Xpp3Dom("configuration");
+        Xpp3Dom config = new Xpp3Dom(CONFIGURATION);
         e.setConfiguration(config);
 
         config.addChild(textDomElement("flattenMode", "oss"));
@@ -1346,18 +1362,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final File pomXml = getPomFile(parentPom, moduleName);
         pom.setPomFile(pomXml);
 
-        final Parent parent = new Parent();
-        parent.setGroupId(ModelUtils.getGroupId(parentPom));
-        parent.setArtifactId(parentPom.getArtifactId());
-        parent.setRelativePath(pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
-        pom.setParent(parent);
-        setParentVersion(pom, parentPom);
+        setParent(pom, parentPom);
 
-        DependencyManagement dm = pom.getDependencyManagement();
-        if (dm == null) {
-            dm = new DependencyManagement();
-            pom.setDependencyManagement(dm);
-        }
+        DependencyManagement dm = getOrCreateDependencyManagement(pom);
         final Artifact quarkusBom = quarkusCore.getGeneratedPlatformBom();
         final Dependency quarkusBomImport = new Dependency();
         quarkusBomImport.setGroupId(quarkusBom.getGroupId());
@@ -1367,8 +1374,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         quarkusBomImport.setScope("import");
         dm.addDependency(quarkusBomImport);
 
-        final Build build = new Build();
-        pom.setBuild(build);
+        final Build build = getOrCreateBuild(pom);
         Plugin plugin = new Plugin();
         build.addPlugin(plugin);
         plugin.setGroupId(pluginDescriptor().getGroupId());
@@ -1377,7 +1383,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         plugin.addExecution(exec);
         exec.setPhase("generate-resources");
         exec.addGoal("attach-maven-plugin");
-        Xpp3Dom config = new Xpp3Dom("configuration");
+        Xpp3Dom config = new Xpp3Dom(CONFIGURATION);
         exec.setConfiguration(config);
         config.addChild(
                 textDomElement("originalPluginCoords", platformConfig.getAttachedMavenPlugin().getOriginalPluginCoords()));
@@ -1394,7 +1400,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         exec.setId("copy-plugin-help");
         exec.setPhase("process-classes");
         exec.addGoal("copy");
-        config = new Xpp3Dom("configuration");
+        config = new Xpp3Dom(CONFIGURATION);
         exec.setConfiguration(config);
         config.addChild(textDomElement("sourceFile",
                 "${project.build.outputDirectory}/META-INF/maven/" + targetCoords.getGroupId() + "/"
@@ -1414,19 +1420,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         parentPom.addModule(artifactId);
         final File pomXml = getPomFile(parentPom, artifactId);
         pom.setPomFile(pomXml);
-        final Parent parent = new Parent();
-        parent.setGroupId(ModelUtils.getGroupId(parentPom));
-        parent.setArtifactId(parentPom.getArtifactId());
-        parent.setRelativePath(pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
-        pom.setParent(parent);
-        setParentVersion(pom, parentPom);
+        setParent(pom, parentPom);
         Utils.skipInstallAndDeploy(pom);
 
-        Build build = pom.getBuild();
-        if (build == null) {
-            build = new Build();
-            pom.setBuild(build);
-        }
+        Build build = getOrCreateBuild(pom);
         Plugin plugin = new Plugin();
         build.addPlugin(plugin);
         plugin.setGroupId(pluginDescriptor().getGroupId());
@@ -1441,8 +1438,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         profile.setActivation(activation);
         pom.addProfile(profile);
 
-        build = new Build();
-        profile.setBuild(build);
+        build = getOrCreateBuild(profile);
 
         final StringBuilder sb = new StringBuilder();
         for (PlatformMemberImpl m : members.values()) {
@@ -1532,7 +1528,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 e.addChild(textDomElement("includedVersionsPattern", generateMavenRepoZip.getIncludedVersionsPattern()));
             }
 
-            final Xpp3Dom configuration = new Xpp3Dom("configuration");
+            final Xpp3Dom configuration = new Xpp3Dom(CONFIGURATION);
             configuration.addChild(e);
             exec.setConfiguration(configuration);
 
@@ -1558,13 +1554,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         final File pomXml = getPomFile(parentPom, moduleName);
         pom.setPomFile(pomXml);
-
-        final Parent parent = new Parent();
-        parent.setGroupId(ModelUtils.getGroupId(parentPom));
-        parent.setArtifactId(parentPom.getArtifactId());
-        parent.setRelativePath(pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
-        pom.setParent(parent);
-        setParentVersion(pom, parentPom);
+        setParent(pom, parentPom);
 
         member.baseModel = pom;
 
@@ -1670,8 +1660,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         memberReleaseProfile.setId(parentReleaseProfile.getId());
         memberReleaseProfile.setActivation(parentReleaseProfile.getActivation());
         if (parentReleaseProfile.getBuild() != null) {
-            final Build build = new Build();
-            memberReleaseProfile.setBuild(build);
+            final Build build = getOrCreateBuild(memberReleaseProfile);
             build.setPluginManagement(parentReleaseProfile.getBuild().getPluginManagement());
             for (Plugin plugin : parentReleaseProfile.getBuild().getPlugins()) {
                 if (plugin.getArtifactId().equals("maven-gpg-plugin")) {
@@ -1775,17 +1764,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         final File pomXml = getPomFile(parentPom, moduleName);
         pom.setPomFile(pomXml);
+        setParent(pom, parentPom);
 
-        final Parent parent = new Parent();
-        parent.setGroupId(ModelUtils.getGroupId(parentPom));
-        parent.setArtifactId(parentPom.getArtifactId());
-        parent.setRelativePath(
-                pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
-        pom.setParent(parent);
-        setParentVersion(pom, parentPom);
-
-        final DependencyManagement dm = new DependencyManagement();
-        pom.setDependencyManagement(dm);
+        final DependencyManagement dm = getOrCreateDependencyManagement(pom);
 
         Dependency managedDep = getUniversalBomImport();
         dm.addDependency(managedDep);
@@ -1899,185 +1880,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         final File pomXml = getPomFile(parentPom, moduleName);
         pom.setPomFile(pomXml);
+        setParent(pom, parentPom);
 
-        final Parent parent = new Parent();
-        parent.setGroupId(ModelUtils.getGroupId(parentPom));
-        parent.setArtifactId(parentPom.getArtifactId());
-        parent.setRelativePath(
-                pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
-        pom.setParent(parent);
-        setParentVersion(pom, parentPom);
-
-        if (!testConfig.getPomProperties().isEmpty()) {
-            pom.setProperties(testConfig.getPomProperties());
-        }
-        if (testConfig.isSkip()) {
-            pom.getProperties().setProperty("maven.test.skip", "true");
-        }
-
-        final String testArtifactVersion = getTestArtifactVersion(testArtifact.getGroupId(), testArtifact.getVersion());
-
-        final Dependency appArtifactDep = new Dependency();
-        appArtifactDep.setGroupId(testArtifact.getGroupId());
-        appArtifactDep.setArtifactId(testArtifact.getArtifactId());
-        if (!testArtifact.getClassifier().isEmpty()) {
-            appArtifactDep.setClassifier(testArtifact.getClassifier());
-        }
-        appArtifactDep.setType(testArtifact.getType());
-        appArtifactDep.setVersion(testArtifactVersion);
-        pom.addDependency(appArtifactDep);
-
-        final Dependency testArtifactDep = new Dependency();
-        testArtifactDep.setGroupId(testArtifact.getGroupId());
-        testArtifactDep.setArtifactId(testArtifact.getArtifactId());
-        testArtifactDep.setClassifier("tests");
-        testArtifactDep.setType("test-jar");
-        testArtifactDep.setVersion(testArtifactVersion);
-        testArtifactDep.setScope("test");
-        pom.addDependency(testArtifactDep);
-
-        addDependencies(pom, testConfig.getDependencies(), false);
-        addDependencies(pom, testConfig.getTestDependencies(), true);
-
-        final Xpp3Dom depsToScan = new Xpp3Dom("dependenciesToScan");
-        depsToScan.addChild(textDomElement("dependency", testArtifact.getGroupId() + COLON + testArtifact.getArtifactId()));
-
-        if (!testConfig.isSkipJvm()) {
-            final Build build = new Build();
-            pom.setBuild(build);
-
-            if (testConfig.isMavenFailsafePlugin()) {
-                build.addPlugin(createFailsafeConfig(testConfig, depsToScan, false));
-            } else {
-                Plugin plugin = new Plugin();
-                build.addPlugin(plugin);
-                plugin.setGroupId("org.apache.maven.plugins");
-                plugin.setArtifactId("maven-surefire-plugin");
-
-                Xpp3Dom config = new Xpp3Dom("configuration");
-                plugin.setConfiguration(config);
-                config.addChild(depsToScan);
-
-                if (!testConfig.getSystemProperties().isEmpty()) {
-                    addMapConfig(getOrCreateChild(config, "systemPropertyVariables"), testConfig.getSystemProperties());
-                }
-                if (!testConfig.getJvmSystemProperties().isEmpty()) {
-                    addMapConfig(getOrCreateChild(config, "systemPropertyVariables"), testConfig.getJvmSystemProperties());
-                }
-
-                if (!testConfig.getEnvironmentVariables().isEmpty()) {
-                    addMapConfig(getOrCreateChild(config, "environmentVariables"), testConfig.getEnvironmentVariables());
-                }
-                if (!testConfig.getJvmEnvironmentVariables().isEmpty()) {
-                    addMapConfig(getOrCreateChild(config, "environmentVariables"), testConfig.getJvmEnvironmentVariables());
-                }
-
-                addGroupsConfig(testConfig, config, false);
-                addIncludesExcludesConfig(testConfig, config, false);
-                if (testConfig.getJvmArgLine() != null) {
-                    config.addChild(textDomElement("argLine", testConfig.getJvmArgLine()));
-                } else if (testConfig.getArgLine() != null) {
-                    config.addChild(textDomElement("argLine", testConfig.getArgLine()));
-                }
-
-                if (testConfig.getJvmTestPattern() != null) {
-                    config.addChild(textDomElement("test", testConfig.getJvmTestPattern()));
-                } else if (testConfig.getTestPattern() != null) {
-                    config.addChild(textDomElement("test", testConfig.getTestPattern()));
-                }
-            }
-
-            try {
-                for (org.eclipse.aether.graph.Dependency d : getNonWorkspaceResolver()
-                        .resolveDescriptor(toPomArtifact(testArtifact)).getDependencies()) {
-                    if (!d.getScope().equals("test")) {
-                        continue;
-                    }
-                    final Artifact a = d.getArtifact();
-                    // filter out pom dependencies with *:* exclusions
-                    if (ArtifactCoords.TYPE_POM.equals(a.getExtension()) && !d.getExclusions().isEmpty()) {
-                        boolean skip = false;
-                        for (org.eclipse.aether.graph.Exclusion e : d.getExclusions()) {
-                            if ("*".equals(e.getGroupId()) && "*".equals(e.getArtifactId())) {
-                                skip = true;
-                                break;
-                            }
-                        }
-                        if (skip) {
-                            continue;
-                        }
-                    }
-
-                    final Dependency modelDep = new Dependency();
-                    modelDep.setGroupId(a.getGroupId());
-                    modelDep.setArtifactId(a.getArtifactId());
-                    if (!a.getClassifier().isEmpty()) {
-                        modelDep.setClassifier(a.getClassifier());
-                    }
-                    modelDep.setType(a.getExtension());
-                    if (!universalBomDepKeys.containsKey(
-                            ArtifactKey.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension()))) {
-                        modelDep.setVersion(getTestArtifactVersion(a.getGroupId(), a.getVersion()));
-                    }
-                    modelDep.setScope(d.getScope());
-                    if (d.getOptional() != null) {
-                        modelDep.setOptional(d.getOptional());
-                    }
-                    if (!d.getExclusions().isEmpty()) {
-                        for (org.eclipse.aether.graph.Exclusion e : d.getExclusions()) {
-                            final Exclusion modelEx = new Exclusion();
-                            modelEx.setGroupId(e.getGroupId());
-                            modelEx.setArtifactId(e.getArtifactId());
-                            modelDep.addExclusion(modelEx);
-                        }
-                    }
-                    pom.addDependency(modelDep);
-                }
-            } catch (Exception e) {
-                throw new MojoExecutionException("Failed to describe " + testArtifact, e);
-            }
-        }
-
-        // NATIVE
-        if (!testConfig.isSkipNative()) {
-            final Profile profile = new Profile();
-            pom.addProfile(profile);
-            profile.setId("native-image");
-            final Activation activation = new Activation();
-            profile.setActivation(activation);
-            final ActivationProperty prop = new ActivationProperty();
-            activation.setProperty(prop);
-            prop.setName("native");
-            profile.addProperty("quarkus.package.type", "native");
-            final BuildBase buildBase = new BuildBase();
-            profile.setBuild(buildBase);
-
-            buildBase.addPlugin(createFailsafeConfig(testConfig, depsToScan, true));
-
-            Plugin plugin = new Plugin();
-            buildBase.addPlugin(plugin);
-            plugin.setGroupId("io.quarkus");
-            plugin.setArtifactId("quarkus-maven-plugin");
-            plugin.setVersion(quarkusCore.getVersionProperty());
-            PluginExecution exec = new PluginExecution();
-            plugin.addExecution(exec);
-            exec.setId("native-image");
-            exec.addGoal("build");
-
-            Xpp3Dom config = new Xpp3Dom("configuration");
-            exec.setConfiguration(config);
-            if (testConfig.isSkip()) {
-                config.addChild(textDomElement("skip", "true"));
-            }
-            config.addChild(textDomElement("appArtifact",
-                    testArtifact.getGroupId() + COLON + testArtifact.getArtifactId() + COLON + testArtifactVersion));
-        }
+        configureTests(testArtifact, testConfig, pom, Set.of());
 
         Utils.disablePlugin(pom, "maven-jar-plugin", "default-jar");
         Utils.disablePlugin(pom, "maven-source-plugin", "attach-sources");
-        if (testConfig.isPackageApplication()) {
-            addQuarkusBuildConfig(pom, appArtifactDep);
-        }
         persistPom(pom);
 
         if (testConfig.getTransformWith() != null) {
@@ -2118,6 +1926,179 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         } catch (IOException e) {
             throw new MojoExecutionException("Failed to create file " + seed, e);
         }
+    }
+
+    private void configureTests(ArtifactCoords testArtifact, PlatformMemberTestConfig testConfig, Model pom,
+            Set<ArtifactKey> bannedDependencyKeys)
+            throws MojoExecutionException {
+        if (!testConfig.getPomProperties().isEmpty()) {
+            pom.setProperties(testConfig.getPomProperties());
+        }
+        if (testConfig.isSkip()) {
+            pom.getProperties().setProperty("maven.test.skip", "true");
+        }
+
+        final String testArtifactVersion = getTestArtifactVersion(testArtifact.getGroupId(), testArtifact.getVersion());
+
+        final Dependency appArtifactDep = new Dependency();
+        appArtifactDep.setGroupId(testArtifact.getGroupId());
+        appArtifactDep.setArtifactId(testArtifact.getArtifactId());
+        if (!testArtifact.getClassifier().isEmpty()) {
+            appArtifactDep.setClassifier(testArtifact.getClassifier());
+        }
+        appArtifactDep.setType(testArtifact.getType());
+        appArtifactDep.setVersion(testArtifactVersion);
+        if (!bannedDependencyKeys.contains(testArtifact.getKey())) {
+            pom.addDependency(appArtifactDep);
+        }
+
+        final Dependency testArtifactDep = new Dependency();
+        testArtifactDep.setGroupId(testArtifact.getGroupId());
+        testArtifactDep.setArtifactId(testArtifact.getArtifactId());
+        testArtifactDep.setClassifier("tests");
+        testArtifactDep.setType("test-jar");
+        testArtifactDep.setVersion(testArtifactVersion);
+        testArtifactDep.setScope(TEST);
+        pom.addDependency(testArtifactDep);
+
+        addDependencies(pom, testConfig.getDependencies(), false);
+        addDependencies(pom, testConfig.getTestDependencies(), true);
+
+        final Xpp3Dom depsToScan = new Xpp3Dom("dependenciesToScan");
+        depsToScan.addChild(textDomElement("dependency", testArtifact.getGroupId() + COLON + testArtifact.getArtifactId()));
+
+        if (!testConfig.isSkipJvm()) {
+            Build build = getOrCreateBuild(pom);
+
+            if (testConfig.isMavenFailsafePlugin()) {
+                build.addPlugin(createFailsafeConfig(testConfig, depsToScan, false));
+            } else {
+                final Plugin plugin = getOrCreatePlugin(build, "org.apache.maven.plugins", "maven-surefire-plugin");
+                final Xpp3Dom config = getOrCreateConfiguration(plugin);
+                config.addChild(depsToScan);
+
+                if (!testConfig.getSystemProperties().isEmpty()) {
+                    addMapConfig(getOrCreateChild(config, SYSTEM_PROPERTY_VARIABLES), testConfig.getSystemProperties());
+                }
+                if (!testConfig.getJvmSystemProperties().isEmpty()) {
+                    addMapConfig(getOrCreateChild(config, SYSTEM_PROPERTY_VARIABLES), testConfig.getJvmSystemProperties());
+                }
+
+                if (!testConfig.getEnvironmentVariables().isEmpty()) {
+                    addMapConfig(getOrCreateChild(config, ENVIRONMENT_VARIABLES), testConfig.getEnvironmentVariables());
+                }
+                if (!testConfig.getJvmEnvironmentVariables().isEmpty()) {
+                    addMapConfig(getOrCreateChild(config, ENVIRONMENT_VARIABLES), testConfig.getJvmEnvironmentVariables());
+                }
+
+                addGroupsConfig(testConfig, config, false);
+                addIncludesExcludesConfig(testConfig, config, false);
+                if (testConfig.getJvmArgLine() != null) {
+                    config.addChild(textDomElement(ARG_LINE, testConfig.getJvmArgLine()));
+                } else if (testConfig.getArgLine() != null) {
+                    config.addChild(textDomElement(ARG_LINE, testConfig.getArgLine()));
+                }
+
+                if (testConfig.getJvmTestPattern() != null) {
+                    config.addChild(textDomElement(TEST, testConfig.getJvmTestPattern()));
+                } else if (testConfig.getTestPattern() != null) {
+                    config.addChild(textDomElement(TEST, testConfig.getTestPattern()));
+                }
+            }
+
+            try {
+                for (org.eclipse.aether.graph.Dependency d : getNonWorkspaceResolver()
+                        .resolveDescriptor(toPomArtifact(testArtifact)).getDependencies()) {
+                    if (!d.getScope().equals(TEST)) {
+                        continue;
+                    }
+                    final Artifact a = d.getArtifact();
+                    final ArtifactKey depKey = ArtifactKey.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(),
+                            a.getExtension());
+                    if (bannedDependencyKeys.contains(depKey)) {
+                        continue;
+                    }
+
+                    // filter out pom dependencies with *:* exclusions
+                    if (ArtifactCoords.TYPE_POM.equals(a.getExtension()) && !d.getExclusions().isEmpty()) {
+                        boolean skip = false;
+                        for (org.eclipse.aether.graph.Exclusion e : d.getExclusions()) {
+                            if ("*".equals(e.getGroupId()) && "*".equals(e.getArtifactId())) {
+                                skip = true;
+                                break;
+                            }
+                        }
+                        if (skip) {
+                            continue;
+                        }
+                    }
+
+                    final Dependency modelDep = new Dependency();
+                    modelDep.setGroupId(a.getGroupId());
+                    modelDep.setArtifactId(a.getArtifactId());
+                    if (!a.getClassifier().isEmpty()) {
+                        modelDep.setClassifier(a.getClassifier());
+                    }
+                    modelDep.setType(a.getExtension());
+                    if (!universalBomDepKeys.containsKey(depKey)) {
+                        modelDep.setVersion(getTestArtifactVersion(a.getGroupId(), a.getVersion()));
+                    }
+                    modelDep.setScope(d.getScope());
+                    if (d.getOptional() != null) {
+                        modelDep.setOptional(d.getOptional());
+                    }
+                    if (!d.getExclusions().isEmpty()) {
+                        for (org.eclipse.aether.graph.Exclusion e : d.getExclusions()) {
+                            final Exclusion modelEx = new Exclusion();
+                            modelEx.setGroupId(e.getGroupId());
+                            modelEx.setArtifactId(e.getArtifactId());
+                            modelDep.addExclusion(modelEx);
+                        }
+                    }
+                    pom.addDependency(modelDep);
+                }
+            } catch (Exception e) {
+                throw new MojoExecutionException("Failed to describe " + testArtifact, e);
+            }
+        }
+
+        // NATIVE
+        if (!testConfig.isSkipNative()) {
+            final Profile profile = new Profile();
+            pom.addProfile(profile);
+            profile.setId("native-image");
+            final Activation activation = new Activation();
+            profile.setActivation(activation);
+            final ActivationProperty prop = new ActivationProperty();
+            activation.setProperty(prop);
+            prop.setName("native");
+            profile.addProperty("quarkus.package.type", "native");
+            final BuildBase buildBase = getOrCreateBuild(profile);
+
+            buildBase.addPlugin(createFailsafeConfig(testConfig, depsToScan, true));
+
+            Plugin plugin = new Plugin();
+            buildBase.addPlugin(plugin);
+            plugin.setGroupId("io.quarkus");
+            plugin.setArtifactId("quarkus-maven-plugin");
+            plugin.setVersion(quarkusCore.getVersionProperty());
+            PluginExecution exec = new PluginExecution();
+            plugin.addExecution(exec);
+            exec.setId("native-image");
+            exec.addGoal("build");
+
+            Xpp3Dom config = new Xpp3Dom(CONFIGURATION);
+            exec.setConfiguration(config);
+            if (testConfig.isSkip()) {
+                config.addChild(textDomElement("skip", "true"));
+            }
+            config.addChild(textDomElement("appArtifact",
+                    testArtifact.getGroupId() + COLON + testArtifact.getArtifactId() + COLON + testArtifactVersion));
+        }
+
+        if (testConfig.isPackageApplication()) {
+            addQuarkusBuildConfig(pom, appArtifactDep);
+        }
 
         if (!testConfig.getCopyTasks().isEmpty()) {
             for (Copy copy : testConfig.getCopyTasks()) {
@@ -2137,11 +2118,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private void addQuarkusBuildConfig(Model pom, Dependency appArtifactDep) {
-        Build build = pom.getBuild();
-        if (build == null) {
-            build = new Build();
-            pom.setBuild(build);
-        }
+        Build build = getOrCreateBuild(pom);
         Plugin plugin = new Plugin();
         build.addPlugin(plugin);
         plugin.setGroupId(quarkusCore.getInputBom().getGroupId());
@@ -2150,7 +2127,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         PluginExecution e = new PluginExecution();
         plugin.addExecution(e);
         e.addGoal("build");
-        final Xpp3Dom config = new Xpp3Dom("configuration");
+        final Xpp3Dom config = new Xpp3Dom(CONFIGURATION);
         e.setConfiguration(config);
         final StringBuilder sb = new StringBuilder();
         sb.append(appArtifactDep.getGroupId()).append(':').append(appArtifactDep.getArtifactId()).append(':');
@@ -2245,28 +2222,37 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private void addDependencies(final Model pom, List<String> dependencies, boolean test) {
-        Dependency dep;
-        if (!dependencies.isEmpty()) {
-            for (String depStr : dependencies) {
-                final ArtifactCoords coords = ArtifactCoords.fromString(depStr);
-                dep = new Dependency();
-                dep.setGroupId(coords.getGroupId());
-                dep.setArtifactId(coords.getArtifactId());
-                if (!coords.getClassifier().isEmpty()) {
-                    dep.setClassifier(coords.getClassifier());
-                }
-                if (!ArtifactCoords.TYPE_JAR.equals(coords.getType())) {
-                    dep.setType(coords.getType());
-                }
-                if (!universalBomDepKeys.containsKey(ArtifactKey.of(coords.getGroupId(), coords.getArtifactId(),
-                        coords.getClassifier(), coords.getType()))) {
-                    dep.setVersion(coords.getVersion());
-                }
-                if (test) {
-                    dep.setScope("test");
-                }
-                pom.addDependency(dep);
+        if (dependencies.isEmpty()) {
+            return;
+        }
+        var existingDeps = new HashMap<>(pom.getDependencies().size());
+        for (var d : pom.getDependencies()) {
+            existingDeps.put(ArtifactKey.of(d.getGroupId(), d.getArtifactId(),
+                    d.getClassifier() == null ? ArtifactCoords.DEFAULT_CLASSIFIER : d.getClassifier(),
+                    d.getType() == null ? ArtifactCoords.TYPE_JAR : d.getType()), d);
+        }
+        for (String depStr : dependencies) {
+            final ArtifactCoords coords = ArtifactCoords.fromString(depStr);
+            if (existingDeps.containsKey(coords.getKey())) {
+                continue;
             }
+            final Dependency dep = new Dependency();
+            dep.setGroupId(coords.getGroupId());
+            dep.setArtifactId(coords.getArtifactId());
+            if (!coords.getClassifier().isEmpty()) {
+                dep.setClassifier(coords.getClassifier());
+            }
+            if (!ArtifactCoords.TYPE_JAR.equals(coords.getType())) {
+                dep.setType(coords.getType());
+            }
+            if (!universalBomDepKeys.containsKey(ArtifactKey.of(coords.getGroupId(), coords.getArtifactId(),
+                    coords.getClassifier(), coords.getType()))) {
+                dep.setVersion(coords.getVersion());
+            }
+            if (test) {
+                dep.setScope(TEST);
+            }
+            pom.addDependency(dep);
         }
     }
 
@@ -2284,17 +2270,17 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     private static void addIncludesExcludesConfig(PlatformMemberTestConfig testConfig, Xpp3Dom config, boolean nativeTest) {
         if (nativeTest) {
             if (!testConfig.getNativeIncludes().isEmpty()) {
-                addElements(config, "includes", "include", testConfig.getNativeIncludes());
+                addElements(config, INCLUDES, INCLUDE, testConfig.getNativeIncludes());
             }
             if (!testConfig.getNativeExcludes().isEmpty()) {
-                addElements(config, "excludes", "exclude", testConfig.getNativeExcludes());
+                addElements(config, EXCLUDES, EXCLUDE, testConfig.getNativeExcludes());
             }
         } else {
             if (!testConfig.getJvmIncludes().isEmpty()) {
-                addElements(config, "includes", "include", testConfig.getJvmIncludes());
+                addElements(config, INCLUDES, INCLUDE, testConfig.getJvmIncludes());
             }
             if (!testConfig.getJvmExcludes().isEmpty()) {
-                addElements(config, "excludes", "exclude", testConfig.getJvmExcludes());
+                addElements(config, EXCLUDES, EXCLUDE, testConfig.getJvmExcludes());
             }
         }
     }
@@ -2316,7 +2302,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         plugin.setGroupId("org.apache.maven.plugins");
         plugin.setArtifactId("maven-failsafe-plugin");
 
-        Xpp3Dom config = new Xpp3Dom("configuration");
+        Xpp3Dom config = new Xpp3Dom(CONFIGURATION);
         plugin.setConfiguration(config);
         config.addChild(depsToScan);
 
@@ -2326,58 +2312,58 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         exec.addGoal("integration-test");
         exec.addGoal("verify");
 
-        config = new Xpp3Dom("configuration");
+        config = new Xpp3Dom(CONFIGURATION);
         exec.setConfiguration(config);
         if (nativeTest) {
             final Xpp3Dom nativeImagePath = new Xpp3Dom("native.image.path");
-            getOrCreateChild(config, "systemProperties").addChild(nativeImagePath);
+            getOrCreateChild(config, SYSTEM_PROPERTY_VARIABLES).addChild(nativeImagePath);
             nativeImagePath.setValue("${project.build.directory}/${project.build.finalName}-runner");
         }
         if (!testConfig.getSystemProperties().isEmpty()) {
-            addMapConfig(getOrCreateChild(config, "systemProperties"), testConfig.getSystemProperties());
+            addMapConfig(getOrCreateChild(config, SYSTEM_PROPERTY_VARIABLES), testConfig.getSystemProperties());
         }
         if (!testConfig.getEnvironmentVariables().isEmpty()) {
-            addMapConfig(getOrCreateChild(config, "environmentVariables"), testConfig.getEnvironmentVariables());
+            addMapConfig(getOrCreateChild(config, ENVIRONMENT_VARIABLES), testConfig.getEnvironmentVariables());
         }
 
         if (nativeTest) {
             if (!testConfig.getNativeSystemProperties().isEmpty()) {
-                addMapConfig(getOrCreateChild(config, "systemProperties"), testConfig.getNativeSystemProperties());
+                addMapConfig(getOrCreateChild(config, SYSTEM_PROPERTY_VARIABLES), testConfig.getNativeSystemProperties());
             }
         } else if (!testConfig.getJvmSystemProperties().isEmpty()) {
-            addMapConfig(getOrCreateChild(config, "systemProperties"), testConfig.getJvmSystemProperties());
+            addMapConfig(getOrCreateChild(config, SYSTEM_PROPERTY_VARIABLES), testConfig.getJvmSystemProperties());
         }
 
         if (nativeTest) {
             if (!testConfig.getNativeEnvironmentVariables().isEmpty()) {
-                addMapConfig(getOrCreateChild(config, "environmentVariables"), testConfig.getNativeEnvironmentVariables());
+                addMapConfig(getOrCreateChild(config, ENVIRONMENT_VARIABLES), testConfig.getNativeEnvironmentVariables());
             }
         } else if (!testConfig.getJvmEnvironmentVariables().isEmpty()) {
-            addMapConfig(getOrCreateChild(config, "environmentVariables"), testConfig.getJvmEnvironmentVariables());
+            addMapConfig(getOrCreateChild(config, ENVIRONMENT_VARIABLES), testConfig.getJvmEnvironmentVariables());
         }
 
         if (nativeTest) {
             if (testConfig.getNativeArgLine() != null) {
-                config.addChild(textDomElement("argLine", testConfig.getNativeArgLine()));
+                config.addChild(textDomElement(ARG_LINE, testConfig.getNativeArgLine()));
             } else if (testConfig.getArgLine() != null) {
-                config.addChild(textDomElement("argLine", testConfig.getArgLine()));
+                config.addChild(textDomElement(ARG_LINE, testConfig.getArgLine()));
             }
         } else if (testConfig.getJvmArgLine() != null) {
-            config.addChild(textDomElement("argLine", testConfig.getJvmArgLine()));
+            config.addChild(textDomElement(ARG_LINE, testConfig.getJvmArgLine()));
         } else if (testConfig.getArgLine() != null) {
-            config.addChild(textDomElement("argLine", testConfig.getArgLine()));
+            config.addChild(textDomElement(ARG_LINE, testConfig.getArgLine()));
         }
 
         if (nativeTest) {
             if (testConfig.getNativeTestPattern() != null) {
-                config.addChild(textDomElement("test", testConfig.getNativeTestPattern()));
+                config.addChild(textDomElement(TEST, testConfig.getNativeTestPattern()));
             } else if (testConfig.getTestPattern() != null) {
-                config.addChild(textDomElement("test", testConfig.getTestPattern()));
+                config.addChild(textDomElement(TEST, testConfig.getTestPattern()));
             }
         } else if (testConfig.getJvmTestPattern() != null) {
-            config.addChild(textDomElement("test", testConfig.getJvmTestPattern()));
+            config.addChild(textDomElement(TEST, testConfig.getJvmTestPattern()));
         } else if (testConfig.getTestPattern() != null) {
-            config.addChild(textDomElement("test", testConfig.getTestPattern()));
+            config.addChild(textDomElement(TEST, testConfig.getTestPattern()));
         }
 
         addGroupsConfig(testConfig, config, nativeTest);
@@ -2412,13 +2398,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         final File pomXml = getPomFile(parentPom, moduleName);
         pom.setPomFile(pomXml);
-
-        final Parent parent = new Parent();
-        parent.setGroupId(ModelUtils.getGroupId(parentPom));
-        parent.setArtifactId(parentPom.getArtifactId());
-        parent.setRelativePath(pomXml.toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
-        pom.setParent(parent);
-        setParentVersion(pom, parentPom);
+        setParent(pom, parentPom);
 
         generatePlatformDescriptorModule(
                 ArtifactCoords.of(bomArtifact.getGroupId(),
@@ -2467,12 +2447,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         pom.setPackaging(ArtifactCoords.TYPE_POM);
         pom.setName(getNameBase(parentPom) + " Quarkus Platform Descriptor");
 
-        final Parent parent = new Parent();
-        parent.setGroupId(ModelUtils.getGroupId(parentPom));
-        parent.setArtifactId(parentPom.getArtifactId());
-        parent.setRelativePath(moduleDir.relativize(parentPom.getProjectDirectory().toPath()).toString());
-        pom.setParent(parent);
-        setParentVersion(pom, parentPom);
+        final Path pomXml = moduleDir.resolve(POM_XML);
+        pom.setPomFile(pomXml.toFile());
+        setParent(pom, parentPom);
 
         addResourcesPlugin(pom, true);
         final Build build = pom.getBuild();
@@ -2485,7 +2462,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         exec.setPhase("process-resources");
         exec.addGoal("generate-platform-descriptor");
 
-        final Xpp3Dom config = new Xpp3Dom("configuration");
+        final Xpp3Dom config = new Xpp3Dom(CONFIGURATION);
         final String bomArtifact = PlatformArtifacts.ensureBomArtifactId(descriptorCoords.getArtifactId());
         config.addChild(textDomElement("bomArtifactId", bomArtifact));
 
@@ -2665,9 +2642,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         configureFlattenPluginForMetadataArtifacts(pom);
-
-        final Path pomXml = moduleDir.resolve(POM_XML);
-        pom.setPomFile(pomXml.toFile());
         persistPom(pom);
     }
 
@@ -2744,16 +2718,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         pom.setPackaging(ArtifactCoords.TYPE_POM);
         pom.setName(getNameBase(parentPom) + " Quarkus Platform Properties");
 
-        final Parent parent = new Parent();
-        parent.setGroupId(ModelUtils.getGroupId(parentPom));
-        parent.setArtifactId(parentPom.getArtifactId());
-        parent.setRelativePath(moduleDir.relativize(parentPom.getProjectDirectory().toPath()).toString());
-        pom.setParent(parent);
-        setParentVersion(pom, parentPom);
+        final Path pomXml = moduleDir.resolve(POM_XML);
+        pom.setPomFile(pomXml.toFile());
+        setParent(pom, parentPom);
 
         // for the bom validation to work
-        final DependencyManagement dm = new DependencyManagement();
-        pom.setDependencyManagement(dm);
+        final DependencyManagement dm = getOrCreateDependencyManagement(pom);
         final Dependency bom = new Dependency();
         dm.addDependency(bom);
         bom.setGroupId(propertiesCoords.getGroupId());
@@ -2814,7 +2784,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         if (addPlatformReleaseConfig) {
-            final Xpp3Dom config = new Xpp3Dom("configuration");
+            final Xpp3Dom config = new Xpp3Dom(CONFIGURATION);
             final Xpp3Dom stackConfig = new Xpp3Dom("platformRelease");
             config.addChild(stackConfig);
             stackConfig.addChild(textDomElement("platformKey", "${" + PLATFORM_KEY_PROP + "}"));
@@ -2854,8 +2824,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         configureFlattenPluginForMetadataArtifacts(pom);
 
-        final Path pomXml = moduleDir.resolve(POM_XML);
-        pom.setPomFile(pomXml.toFile());
         persistPom(pom);
 
         final Path dir = pom.getPomFile().toPath().getParent().resolve("src").resolve("main").resolve("resources");
@@ -2873,11 +2841,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private void addResourcesPlugin(Model pom, boolean filtering) {
-        Build build = pom.getBuild();
-        if (build == null) {
-            build = new Build();
-            pom.setBuild(build);
-        }
+        Build build = getOrCreateBuild(pom);
         final Plugin plugin = new Plugin();
         build.addPlugin(plugin);
         plugin.setGroupId("org.apache.maven.plugins");
@@ -3224,6 +3188,66 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
     }
 
+    private static Xpp3Dom getOrCreateConfiguration(Plugin plugin) {
+        Xpp3Dom config = (Xpp3Dom) plugin.getConfiguration();
+        if (config == null) {
+            config = new Xpp3Dom(CONFIGURATION);
+            plugin.setConfiguration(config);
+        }
+        return config;
+    }
+
+    private static Plugin getOrCreatePlugin(Build build, String groupId, String artifactId) {
+        for (var plugin : build.getPlugins()) {
+            if (plugin.getArtifactId().equals(artifactId)
+                    && (plugin.getGroupId() == null || groupId.equals(plugin.getGroupId()))) {
+                return plugin;
+            }
+        }
+        final Plugin plugin = new Plugin();
+        plugin.setGroupId(groupId);
+        plugin.setArtifactId(artifactId);
+        build.addPlugin(plugin);
+        return plugin;
+    }
+
+    private static DependencyManagement getOrCreateDependencyManagement(Model pom) {
+        DependencyManagement dm = pom.getDependencyManagement();
+        if (dm == null) {
+            dm = new DependencyManagement();
+            pom.setDependencyManagement(dm);
+        }
+        return dm;
+    }
+
+    private static void setParent(Model pom, Model parentPom) {
+        final Parent parent = new Parent();
+        parent.setGroupId(ModelUtils.getGroupId(parentPom));
+        parent.setArtifactId(parentPom.getArtifactId());
+        parent.setRelativePath(
+                pom.getPomFile().toPath().getParent().relativize(parentPom.getProjectDirectory().toPath()).toString());
+        pom.setParent(parent);
+        setParentVersion(pom, parentPom);
+    }
+
+    private static Build getOrCreateBuild(Model pom) {
+        Build build = pom.getBuild();
+        if (build == null) {
+            build = new Build();
+            pom.setBuild(build);
+        }
+        return build;
+    }
+
+    private static Build getOrCreateBuild(Profile profile) {
+        Build build = (Build) profile.getBuild();
+        if (build == null) {
+            build = new Build();
+            profile.setBuild(build);
+        }
+        return build;
+    }
+
     private static String getDependencyVersion(Model pom, ArtifactCoords coords) {
         return ModelUtils.getRawVersion(pom).equals(coords.getVersion()) ? "${project.version}" : coords.getVersion();
     }
@@ -3239,6 +3263,15 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     private static DefaultArtifact toPomArtifact(ArtifactCoords coords) {
         return new DefaultArtifact(coords.getGroupId(), coords.getArtifactId(), ArtifactCoords.DEFAULT_CLASSIFIER,
                 ArtifactCoords.TYPE_POM, coords.getVersion());
+    }
+
+    private List<org.eclipse.aether.graph.Dependency> toAetherDependencies(List<Dependency> deps) {
+        final List<org.eclipse.aether.graph.Dependency> result = new ArrayList<>(deps.size());
+        var atr = getNonWorkspaceResolver().getSession().getArtifactTypeRegistry();
+        for (var d : deps) {
+            result.add(RepositoryUtils.toDependency(d, atr));
+        }
+        return result;
     }
 
     private static Artifact toAetherArtifact(String coords) {

@@ -1,11 +1,14 @@
 package io.quarkus.bom.decomposer.maven.platformgen;
 
+import io.quarkus.bom.platform.PlatformMemberTestConfig;
+
 public class AttachedMavenPluginConfig {
 
     private String originalPluginCoords;
     private String targetPluginCoords;
     private Boolean importSources;
     private Boolean flattenPom;
+    private PlatformMemberTestConfig test;
 
     public String getOriginalPluginCoords() {
         return originalPluginCoords;
@@ -28,7 +31,7 @@ public class AttachedMavenPluginConfig {
     }
 
     public boolean isImportSources() {
-        return importSources == null ? true : importSources.booleanValue();
+        return importSources == null || importSources;
     }
 
     public void setFlattenPom(boolean flattenPom) {
@@ -36,6 +39,14 @@ public class AttachedMavenPluginConfig {
     }
 
     public boolean isFlattenPom() {
-        return flattenPom == null ? true : flattenPom.booleanValue();
+        return flattenPom == null || flattenPom;
+    }
+
+    public PlatformMemberTestConfig getTest() {
+        return test;
+    }
+
+    public void setTest(PlatformMemberTestConfig test) {
+        this.test = test;
     }
 }
