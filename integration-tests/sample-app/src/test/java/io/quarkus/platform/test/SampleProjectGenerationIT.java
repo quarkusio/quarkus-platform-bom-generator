@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
-import java.io.File;
+import io.quarkus.maven.dependency.ArtifactCoords;
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -17,14 +17,16 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import org.eclipse.aether.AbstractRepositoryListener;
 import org.eclipse.aether.DefaultRepositorySystemSession;
+import org.eclipse.aether.RepositoryEvent;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.collection.CollectRequest;
 import org.eclipse.aether.graph.Dependency;
-import org.eclipse.aether.repository.WorkspaceReader;
-import org.eclipse.aether.repository.WorkspaceRepository;
 import org.eclipse.aether.resolution.DependencyRequest;
+import org.eclipse.aether.util.artifact.JavaScopes;
+import org.eclipse.aether.util.listener.ChainedRepositoryListener;
 import org.jboss.logging.Logger;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -39,6 +41,7 @@ public class SampleProjectGenerationIT {
     private static final String SAMPLE_APP = "sample-app";
     private static final String GENERATE_APP_TIMEOUT = "sample-app.generate-timeout";
     private static final String BUILD_APP_TIMEOUT = "sample-app.build-timeout";
+    public static final String QUARKUS_PLATFORM_MAVEN_PLUGIN_POM = "quarkus.platform.maven-plugin.pom";
 
     private static String PLUGIN_GROUP_ID;
     private static String PLUGIN_VERSION;
@@ -66,45 +69,49 @@ public class SampleProjectGenerationIT {
      * @throws Exception in case anything goes wrong
      */
     private static void installLocalPlugin() throws Exception {
-        final BootstrapMavenContext mvnCtx = new BootstrapMavenContext();
+
+        BootstrapMavenContext mvnCtx = new BootstrapMavenContext(
+                BootstrapMavenContext.config()
+                        .setWorkspaceDiscovery(true)
+                        .setPreferPomsFromWorkspace(true)
+                        .setWorkspaceModuleParentHierarchy(true)
+                        .setCurrentProject(System.getProperty(QUARKUS_PLATFORM_MAVEN_PLUGIN_POM)));
         var project = mvnCtx.getCurrentProject();
         if (project == null) {
             return;
         }
 
         var session = new DefaultRepositorySystemSession(mvnCtx.getRepositorySystemSession());
+        session.setCache(null);
         final List<Artifact> artifactsToInstall = new ArrayList<>();
-        session.setWorkspaceReader(new WorkspaceReader() {
-            final WorkspaceRepository repo = new WorkspaceRepository("workspace");
 
-            @Override
-            public WorkspaceRepository getRepository() {
-                return repo;
-            }
-
-            @Override
-            public File findArtifact(Artifact artifact) {
-                final File result = project.getWorkspace().findArtifact(artifact);
-                if (result != null) {
-                    artifactsToInstall.add(new DefaultArtifact(artifact.getGroupId(), artifact.getArtifactId(),
-                            artifact.getClassifier(), artifact.getExtension(), artifact.getVersion(), Map.of(),
-                            result));
-                }
-                return result;
-            }
-
-            @Override
-            public List<String> findVersions(Artifact artifact) {
-                return project.getWorkspace().findVersions(artifact);
-            }
-        });
+        session.setRepositoryListener(
+                ChainedRepositoryListener.newInstance(session.getRepositoryListener(), new AbstractRepositoryListener() {
+                    @Override
+                    public void artifactResolved(RepositoryEvent event) {
+                        var artifact = event.getArtifact();
+                        var module = project.getWorkspace().getProject(artifact.getGroupId(), artifact.getArtifactId());
+                        if (module != null) {
+                            artifactsToInstall.add(artifact);
+                            // unfortunately with the workspace reader, the repository doesn't seem to be triggered for the parent hierarchy
+                            module = module.getLocalParent();
+                            while (module != null) {
+                                artifactsToInstall.add(new DefaultArtifact(module.getGroupId(), module.getArtifactId(),
+                                        ArtifactCoords.DEFAULT_CLASSIFIER, ArtifactCoords.TYPE_POM, module.getVersion(),
+                                        Map.of(), module.getRawModel().getPomFile()));
+                                module = module.getLocalParent();
+                            }
+                        }
+                    }
+                }));
 
         mvnCtx.getRepositorySystem().resolveDependencies(session,
                 new DependencyRequest().setCollectRequest(
                         new CollectRequest(
                                 new Dependency(
-                                        new DefaultArtifact(PLUGIN_GROUP_ID, "quarkus-maven-plugin", "jar", PLUGIN_VERSION),
-                                        "compile"),
+                                        new DefaultArtifact(PLUGIN_GROUP_ID, "quarkus-maven-plugin", ArtifactCoords.TYPE_JAR,
+                                                PLUGIN_VERSION),
+                                        JavaScopes.COMPILE),
                                 mvnCtx.getRemoteRepositories())));
 
         if (!artifactsToInstall.isEmpty()) {
