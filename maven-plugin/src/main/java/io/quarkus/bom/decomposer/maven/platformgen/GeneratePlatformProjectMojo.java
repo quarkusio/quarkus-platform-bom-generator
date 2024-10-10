@@ -39,7 +39,9 @@ import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.bootstrap.util.IoUtils;
-import io.quarkus.domino.*;
+import io.quarkus.domino.ArtifactCoordsPattern;
+import io.quarkus.domino.DominoInfo;
+import io.quarkus.domino.ProjectDependencyConfig;
 import io.quarkus.fs.util.ZipUtils;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
@@ -258,9 +260,8 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             pom.addProperty("revision", project.getVersion());
         }
 
-        final Build build = getOrCreateBuild(pom);
         final PluginManagement pm = new PluginManagement();
-        pom.getBuild().setPluginManagement(pm);
+        getOrCreateBuild(pom).setPluginManagement(pm);
         final Plugin plugin = new Plugin();
         pm.addPlugin(plugin);
         plugin.setGroupId(pluginDescriptor().getGroupId());
@@ -405,6 +406,11 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         if (!Boolean.parseBoolean(project.getProperties().getProperty("generate-domino-cli-config"))) {
             return;
         }
+        generateDominoManifestCliConfig();
+        generateDominoBuildCliConfig();
+    }
+
+    private void generateDominoManifestCliConfig() throws MojoExecutionException {
         final Path dominoDir = Path.of(DominoInfo.CONFIG_DIR_NAME).normalize().toAbsolutePath().resolve("manifest");
         IoUtils.recursiveDelete(dominoDir);
         try {
@@ -487,7 +493,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                     var a = d.artifact();
                     if ((selectedKeys.isEmpty() || selectedKeys.contains(d.key()))
                             && isExtensionCandidate(a, member.config().getExtensionGroupIds(), excludePatterns)) {
-                        manifestExtensionArtifacts(a, dominoConfig);
+                        addExtensionArtifacts(a, dominoConfig);
                     }
                 }
             }
@@ -501,7 +507,93 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
     }
 
-    private void manifestExtensionArtifacts(Artifact a, ProjectDependencyConfig.Mutable dominoConfig) {
+    private void generateDominoBuildCliConfig() throws MojoExecutionException {
+        final Path dominoDir = Path.of(DominoInfo.CONFIG_DIR_NAME).normalize().toAbsolutePath().resolve("build");
+        IoUtils.recursiveDelete(dominoDir);
+        try {
+            Files.createDirectories(dominoDir);
+        } catch (IOException e) {
+            throw new MojoExecutionException("Failed to create " + dominoDir, e);
+        }
+        for (PlatformMember member : members.values()) {
+            if (!member.config().isEnabled() || member.config().isHidden()) {
+                continue;
+            }
+            getLog().info("Generating Domino CLI build config for " + member.getGeneratedPlatformBom().getArtifactId());
+
+            final ProjectDependencyConfig.Mutable dominoConfig = ProjectDependencyConfig.builder()
+                    .setProjectBom(ArtifactCoords.pom(member.getInputBom().getGroupId(), member.getInputBom().getArtifactId(),
+                            member.getInputBom().getVersion()));
+
+            if (!this.quarkusCore.descriptorCoords().equals(member.descriptorCoords())) {
+                var quarkusBom = quarkusCore.getGeneratedPlatformBom();
+                dominoConfig.setNonProjectBoms(List.of(ArtifactCoords.pom(quarkusBom.getGroupId(),
+                        quarkusBom.getArtifactId(), quarkusBom.getVersion())));
+            }
+
+            var depsToBuild = effectiveMemberDepsToBuildConfig(member.config());
+            dominoConfig.setIncludeArtifacts(depsToBuild.getIncludeArtifacts())
+                    .setIncludeGroupIds(depsToBuild.getIncludeGroupIds())
+                    .setIncludeKeys(depsToBuild.getIncludeKeys())
+                    .setExcludePatterns(depsToBuild.getExcludeArtifacts())
+                    .setExcludeGroupIds(depsToBuild.getExcludeGroupIds())
+                    .setExcludeKeys(depsToBuild.getExcludeKeys());
+            final List<ArtifactCoordsPattern> excludePatterns = ArtifactCoordsPattern
+                    .toPatterns(dominoConfig.getExcludePatterns());
+
+            List<Path> metadataOverrides = new ArrayList<>();
+            for (String s : member.config().getMetadataOverrideFiles()) {
+                metadataOverrides.add(Path.of(s));
+            }
+            for (String s : member.config().getMetadataOverrideArtifacts()) {
+                try {
+                    metadataOverrides
+                            .add(getNonWorkspaceResolver().resolve(toAetherArtifact(s)).getArtifact().getFile().toPath());
+                } catch (BootstrapMavenException e) {
+                    throw new MojoExecutionException("Failed to resolve " + s, e);
+                }
+            }
+            if (metadataOverrides.isEmpty()) {
+                throw new IllegalStateException("The SBOM generator for member " + member.config().getName()
+                        + " is configured to include only supported extensions but no support metadata override sources were provided");
+            }
+            final Set<ArtifactKey> selectedKeys = new HashSet<>(metadataOverrides.size());
+            for (Path p : metadataOverrides) {
+                try {
+                    ExtensionCatalog c = ExtensionCatalog.fromFile(p);
+                    for (var e : c.getExtensions()) {
+                        if (e.getMetadata().containsKey("redhat-support")) {
+                            var key = e.getArtifact().getKey();
+                            selectedKeys.add(key);
+                            selectedKeys.add(ArtifactKey.of(key.getGroupId(), key.getArtifactId() + "-deployment",
+                                    key.getClassifier(), key.getType()));
+                        }
+                    }
+                } catch (IOException e) {
+                    throw new MojoExecutionException("Failed to deserialize " + p, e);
+                }
+            }
+
+            for (ProjectRelease r : member.getAlignedDecomposedBom().releases()) {
+                for (ProjectDependency d : r.dependencies()) {
+                    var a = d.artifact();
+                    if ((selectedKeys.isEmpty() || selectedKeys.contains(d.key()))
+                            && isExtensionCandidate(a, member.config().getExtensionGroupIds(), excludePatterns)) {
+                        addExtensionArtifacts(a, dominoConfig);
+                    }
+                }
+            }
+
+            try {
+                dominoConfig.build()
+                        .persist(dominoDir.resolve(member.getGeneratedPlatformBom().getArtifactId() + "-config.json"));
+            } catch (IOException e) {
+                throw new MojoExecutionException("Failed to persist Domino config", e);
+            }
+        }
+    }
+
+    private void addExtensionArtifacts(Artifact a, ProjectDependencyConfig.Mutable dominoConfig) {
         final Artifact resolved;
         final boolean relocated;
         if (a.getFile() == null) {
