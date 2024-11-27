@@ -176,8 +176,18 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     @Parameter(property = "includeAlreadyBuilt", required = false)
     boolean includeAlreadyBuilt;
 
+    /**
+     * Whether to generate an SBOM
+     */
     @Parameter(required = false, property = "manifest")
     boolean manifest;
+
+    /**
+     * In case {@link #manifest} is enabled, this option can be used to request a specific version of the CycloneDX schema.
+     * The default version will be the latest supported by the integrated CycloneDX library.
+     */
+    @Parameter(required = false, property = "cdxSchemaVersion")
+    String cdxSchemaVersion;
 
     /**
      * Indicates whether to record artifact dependencies in the manifest and if so, which strategy to use.
@@ -344,7 +354,8 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                             .setOutputFile(outputFile == null ? null : outputFile.toPath())
                             .setEnableTransformers(false)
                             .setRecordDependencies(!flatManifest)
-                            .setProductInfo(dependencyConfig.getProductInfo()),
+                            .setProductInfo(dependencyConfig.getProductInfo())
+                            .setSchemaVersion(cdxSchemaVersion),
                     dependencyConfig);
             depsResolver.addDependencyTreeVisitor(sbomGenerator).build().resolveDependencies();
         } else {

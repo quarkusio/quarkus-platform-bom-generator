@@ -20,6 +20,10 @@ public class Report extends BaseDepsToBuildCommand {
     public boolean manifest;
 
     @CommandLine.Option(names = {
+            "--cdx-schema-version" }, description = "CycloneDX spec version. Can be used only with the --manifest argument. Defaults to the latest supported by the integrated CycloneDX library.")
+    public String cdxSchemaVersion;
+
+    @CommandLine.Option(names = {
             "--flat-manifest" }, description = "Generate an SBOM without dependency tree information", defaultValue = "false")
     public boolean flatManifest;
 
@@ -69,7 +73,8 @@ public class Report extends BaseDepsToBuildCommand {
                                             .setProductInfo(resolverBuilder.getDependencyConfig().getProductInfo())
                                             .setEnableTransformers(enableSbomTransformers)
                                             .setRecordDependencies(
-                                                    !(flatManifest || MANIFEST_DEPS_NONE.equals(manifestDependencies))),
+                                                    !(flatManifest || MANIFEST_DEPS_NONE.equals(manifestDependencies)))
+                                            .setSchemaVersion(cdxSchemaVersion),
                                     resolverBuilder.getDependencyConfig()));
         }
     }
