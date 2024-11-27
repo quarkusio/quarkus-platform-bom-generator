@@ -4,16 +4,15 @@ import io.quarkus.bom.decomposer.PomUtils;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.maven.dependency.ArtifactCoords;
+import io.quarkus.maven.dependency.ArtifactCoordsPattern;
 import io.quarkus.maven.dependency.ArtifactKey;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.model.DependencyManagement;
 import org.apache.maven.model.Model;
@@ -76,9 +75,11 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
     /**
      * Artifacts that should be excluded from the BOM's managed dependencies
      * specified in the format groupId:artifactId[:classifier|:classifier:type]`.
+     * GLOB patters are allowed.
      */
     @Parameter
-    List<String> excludeArtifactKeys = Collections.emptyList();
+    List<String> excludeArtifactKeys = List.of();
+    List<ArtifactCoordsPattern> excludePatterns;
 
     @Parameter(required = true, defaultValue = "${project.build.directory}/flattened-${project.artifactId}-${project.version}.pom")
     File outputFile;
@@ -92,27 +93,10 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
 
-        final Artifact artifact = project.getArtifact();
-        final DefaultArtifact bomArtifact = new DefaultArtifact(artifact.getGroupId(), artifact.getArtifactId(),
-                ArtifactCoords.DEFAULT_CLASSIFIER, ArtifactCoords.TYPE_POM, artifact.getVersion());
-        final ArtifactDescriptorResult bomDescriptor;
-        try {
-            bomDescriptor = repoSystem.readArtifactDescriptor(repoSession,
-                    new ArtifactDescriptorRequest()
-                            .setArtifact(bomArtifact)
-                            .setRepositories(repos));
-        } catch (Exception e) {
-            throw new MojoExecutionException("Failed to read artifact descriptor for " + bomArtifact, e);
-        }
+        final ArtifactDescriptorResult bomDescriptor = resolveBomDescriptor();
+        initExcludePatterns();
 
         final DependencyManagement dm = new DependencyManagement();
-
-        final Set<ArtifactKey> excludedKeys = new HashSet<>(excludeArtifactKeys.size());
-        if (!excludeArtifactKeys.isEmpty()) {
-            for (String keyStr : excludeArtifactKeys) {
-                excludedKeys.add(ArtifactKey.fromString(keyStr));
-            }
-        }
 
         final List<Dependency> managedDeps = bomDescriptor.getManagedDependencies();
         final Map<String, org.apache.maven.model.Dependency> modelDeps = alphabetically ? new HashMap<>(managedDeps.size())
@@ -125,13 +109,11 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
                 continue;
             }
 
-            final org.eclipse.aether.artifact.Artifact a = d.getArtifact();
-            final String type = a.getProperties().getOrDefault("type", a.getExtension());
-            final ArtifactKey key = ArtifactKey.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(),
-                    type);
-            if (excludedKeys.contains(key)) {
+            if (isExcluded(d.getArtifact())) {
                 continue;
             }
+            final org.eclipse.aether.artifact.Artifact a = d.getArtifact();
+            final String type = a.getProperties().getOrDefault("type", a.getExtension());
             final org.apache.maven.model.Dependency modelDep = toModelDep(d);
             if (a.getArtifactId().endsWith(BootstrapConstants.PLATFORM_DESCRIPTOR_ARTIFACT_ID_SUFFIX) ||
                     a.getArtifactId().endsWith(BootstrapConstants.PLATFORM_PROPERTIES_ARTIFACT_ID_SUFFIX)) {
@@ -145,6 +127,8 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
             }
 
             if (modelDeps != null) {
+                final ArtifactKey key = ArtifactKey.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(),
+                        type);
                 modelDeps.put(key.toString(), modelDep);
             } else {
                 dm.addDependency(modelDep);
@@ -183,6 +167,45 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
             throw new MojoExecutionException("Failed to persist flattened platform bom to " + outputFile, e);
         }
         project.setPomFile(outputFile);
+    }
+
+    private boolean isExcluded(org.eclipse.aether.artifact.Artifact a) {
+        if (excludePatterns.isEmpty()) {
+            return false;
+        }
+        final String type = a.getProperties().getOrDefault("type", a.getExtension());
+        for (var pattern : excludePatterns) {
+            if (pattern.matches(a.getGroupId(), a.getArtifactId(), a.getClassifier(), type, a.getVersion())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void initExcludePatterns() {
+        final List<ArtifactCoordsPattern> patterns = new ArrayList<>(excludeArtifactKeys.size());
+        if (!excludeArtifactKeys.isEmpty()) {
+            for (String keyStr : excludeArtifactKeys) {
+                patterns.add(ArtifactCoordsPattern.of(keyStr));
+            }
+        }
+        this.excludePatterns = patterns;
+    }
+
+    private ArtifactDescriptorResult resolveBomDescriptor() throws MojoExecutionException {
+        final Artifact artifact = project.getArtifact();
+        final DefaultArtifact bomArtifact = new DefaultArtifact(artifact.getGroupId(), artifact.getArtifactId(),
+                ArtifactCoords.DEFAULT_CLASSIFIER, ArtifactCoords.TYPE_POM, artifact.getVersion());
+        final ArtifactDescriptorResult bomDescriptor;
+        try {
+            bomDescriptor = repoSystem.readArtifactDescriptor(repoSession,
+                    new ArtifactDescriptorRequest()
+                            .setArtifact(bomArtifact)
+                            .setRepositories(repos));
+        } catch (Exception e) {
+            throw new MojoExecutionException("Failed to read artifact descriptor for " + bomArtifact, e);
+        }
+        return bomDescriptor;
     }
 
     private boolean exists(final org.eclipse.aether.artifact.Artifact a) {
