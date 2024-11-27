@@ -23,8 +23,9 @@ import java.util.List;
 import java.util.ServiceLoader;
 import java.util.Set;
 import org.apache.maven.model.Model;
-import org.cyclonedx.BomGeneratorFactory;
-import org.cyclonedx.generators.json.BomJsonGenerator;
+import org.cyclonedx.Version;
+import org.cyclonedx.exception.GeneratorException;
+import org.cyclonedx.generators.BomGeneratorFactory;
 import org.cyclonedx.model.Bom;
 import org.cyclonedx.model.Component;
 import org.cyclonedx.model.Component.Type;
@@ -47,6 +48,7 @@ public class SbomGenerator {
     public class Builder {
 
         private boolean built;
+        private String schemaVersion;
 
         private Builder() {
         }
@@ -95,6 +97,11 @@ public class SbomGenerator {
             return this;
         }
 
+        public Builder setSchemaVersion(String schemaVersion) {
+            this.schemaVersion = schemaVersion;
+            return this;
+        }
+
         public SbomGenerator build() {
             ensureNotBuilt();
 
@@ -109,7 +116,28 @@ public class SbomGenerator {
                 }
             }
             effectiveModelResolver = new EffectiveModelResolver(resolver);
+            SbomGenerator.this.schemaVersion = getSchemaVersion();
             return SbomGenerator.this;
+        }
+
+        private Version getSchemaVersion() {
+            if (schemaVersion == null) {
+                return Collections.max(List.of(Version.values()));
+            }
+            for (var v : Version.values()) {
+                if (schemaVersion.equals(v.getVersionString())) {
+                    return v;
+                }
+            }
+            var versions = Version.values();
+            var sb = new StringBuilder();
+            sb.append("Requested CycloneDX schema version ").append(schemaVersion)
+                    .append(" does not appear in the list of supported versions: ")
+                    .append(versions[0].getVersionString());
+            for (int i = 1; i < versions.length; ++i) {
+                sb.append(", ").append(versions[i].getVersionString());
+            }
+            throw new IllegalArgumentException(sb.toString());
         }
 
         private void ensureNotBuilt() {
@@ -130,6 +158,7 @@ public class SbomGenerator {
     private boolean enableTransformers;
     private List<VisitedComponent> topComponents;
     private boolean recordDependencies = true;
+    private Version schemaVersion;
 
     private Bom bom;
     private Set<String> addedBomRefs;
@@ -154,8 +183,12 @@ public class SbomGenerator {
 
         addProductInfo(metadata);
 
-        final BomJsonGenerator bomGenerator = BomGeneratorFactory.createJson(ManifestGenerator.schemaVersion(), bom);
-        final String bomString = bomGenerator.toJsonString();
+        final String bomString;
+        try {
+            bomString = BomGeneratorFactory.createJson(schemaVersion, bom).toJsonString();
+        } catch (GeneratorException e) {
+            throw new RuntimeException("Failed to generate an SBOM in JSON format", e);
+        }
         if (outputFile == null) {
             System.out.println(bomString);
         } else {
@@ -185,7 +218,7 @@ public class SbomGenerator {
         final Model model = effectiveModelResolver.resolveEffectiveModel(visited.getArtifactCoords(),
                 visited.getRepositories());
         final Component c = new Component();
-        ManifestGenerator.extractMetadata(visited.getRevision(), model, c);
+        ManifestGenerator.extractMetadata(visited.getRevision(), model, c, schemaVersion);
         if (c.getPublisher() == null) {
             c.setPublisher("central");
         }

@@ -3,7 +3,6 @@ package io.quarkus.domino.manifest;
 import com.github.packageurl.MalformedPackageURLException;
 import com.github.packageurl.PackageURL;
 import io.quarkus.bom.resolver.EffectiveModelResolver;
-import io.quarkus.bootstrap.resolver.maven.BootstrapMavenContext;
 import io.quarkus.bootstrap.resolver.maven.BootstrapMavenException;
 import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.domino.ReleaseRepo;
@@ -17,6 +16,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -25,10 +25,9 @@ import java.util.TreeMap;
 import java.util.function.Consumer;
 import org.apache.maven.model.MailingList;
 import org.apache.maven.model.Model;
-import org.cyclonedx.BomGeneratorFactory;
-import org.cyclonedx.CycloneDxSchema;
-import org.cyclonedx.CycloneDxSchema.Version;
-import org.cyclonedx.generators.json.BomJsonGenerator;
+import org.cyclonedx.Version;
+import org.cyclonedx.exception.GeneratorException;
+import org.cyclonedx.generators.BomGeneratorFactory;
 import org.cyclonedx.model.Bom;
 import org.cyclonedx.model.Component;
 import org.cyclonedx.model.ExternalReference;
@@ -45,6 +44,7 @@ public class ManifestGenerator {
         private MavenArtifactResolver resolver;
         private Path outputFile;
         private List<SbomTransformer> transformers = List.of();
+        private String schemaVersion;
 
         private Builder() {
         }
@@ -67,6 +67,31 @@ public class ManifestGenerator {
             return this;
         }
 
+        public Builder setSchemaVersion(String schemaVersion) {
+            this.schemaVersion = schemaVersion;
+            return this;
+        }
+
+        private Version getSchemaVersion() {
+            if (schemaVersion == null) {
+                return Collections.max(List.of(Version.values()));
+            }
+            for (var v : Version.values()) {
+                if (schemaVersion.equals(v.getVersionString())) {
+                    return v;
+                }
+            }
+            var versions = Version.values();
+            var sb = new StringBuilder();
+            sb.append("Requested CycloneDX schema version ").append(schemaVersion)
+                    .append(" does not appear in the list of supported versions: ")
+                    .append(versions[0].getVersionString());
+            for (int i = 1; i < versions.length; ++i) {
+                sb.append(", ").append(versions[i].getVersionString());
+            }
+            throw new IllegalArgumentException(sb.toString());
+        }
+
         public ManifestGenerator build() {
             return new ManifestGenerator(this);
         }
@@ -83,23 +108,28 @@ public class ManifestGenerator {
         }
     }
 
+    public static void main(String[] args) throws Exception {
+
+        System.out.println(Version.valueOf("1.6"));
+    }
+
     public static Builder builder() {
         return new Builder();
     }
 
-    private final BootstrapMavenContext mavenCtx;
     private final MavenArtifactResolver artifactResolver;
     private final EffectiveModelResolver effectiveModelResolver;
 
     private final Path outputFile;
     private final List<SbomTransformer> transformers;
+    private final Version schemaVersion;
 
     private ManifestGenerator(Builder builder) {
         artifactResolver = builder.getInitializedResolver();
-        mavenCtx = artifactResolver.getMavenContext();
         effectiveModelResolver = new EffectiveModelResolver(artifactResolver);
         outputFile = builder.outputFile;
         transformers = builder.transformers;
+        schemaVersion = builder.getSchemaVersion();
     }
 
     public Consumer<Collection<ReleaseRepo>> toConsumer() {
@@ -114,8 +144,12 @@ public class ManifestGenerator {
 
             bom = runTransformers(bom);
 
-            final BomJsonGenerator bomGenerator = BomGeneratorFactory.createJson(schemaVersion(), bom);
-            final String bomString = bomGenerator.toJsonString();
+            final String bomString;
+            try {
+                bomString = BomGeneratorFactory.createJson(schemaVersion, bom).toJsonString();
+            } catch (GeneratorException e) {
+                throw new RuntimeException("Failed to generate an SBOM in JSON format", e);
+            }
             if (outputFile == null) {
                 System.out.println(bomString);
             } else {
@@ -138,7 +172,7 @@ public class ManifestGenerator {
     private void addComponent(Bom bom, ReleaseRepo release, ArtifactCoords coords, List<RemoteRepository> repos) {
         final Model model = effectiveModelResolver.resolveEffectiveModel(coords, repos);
         final Component c = new Component();
-        extractMetadata(release.getRevision(), model, c);
+        extractMetadata(release.getRevision(), model, c, schemaVersion);
         if (c.getPublisher() == null) {
             c.setPublisher("central");
         }
@@ -199,7 +233,7 @@ public class ManifestGenerator {
         return bom;
     }
 
-    static void extractMetadata(ScmRevision releaseId, Model project, Component component) {
+    static void extractMetadata(ScmRevision releaseId, Model project, Component component, Version schemaVersion) {
         if (component.getPublisher() == null) {
             // If we don't already have publisher information, retrieve it.
             if (project.getOrganization() != null) {
@@ -214,10 +248,10 @@ public class ManifestGenerator {
                 || component.getLicenseChoice().getLicenses().isEmpty()) {
             // If we don't already have license information, retrieve it.
             if (project.getLicenses() != null) {
-                component.setLicenseChoice(resolveMavenLicenses(project.getLicenses(), false));
+                component.setLicenseChoice(resolveMavenLicenses(project.getLicenses(), false, schemaVersion));
             }
         }
-        if (CycloneDxSchema.Version.VERSION_10 != schemaVersion()) {
+        if (Version.VERSION_10 != schemaVersion) {
             if (project.getUrl() != null) {
                 if (!doesComponentHaveExternalReference(component, ExternalReference.Type.WEBSITE)) {
                     addExternalReference(ExternalReference.Type.WEBSITE, project.getUrl(), component);
@@ -266,17 +300,17 @@ public class ManifestGenerator {
     }
 
     static LicenseChoice resolveMavenLicenses(List<org.apache.maven.model.License> projectLicenses,
-            boolean includeLicenseText) {
+            boolean includeLicenseText, Version schemaVersion) {
         final LicenseChoice licenseChoice = new LicenseChoice();
         for (org.apache.maven.model.License artifactLicense : projectLicenses) {
             boolean resolved = false;
             if (artifactLicense.getName() != null) {
                 final LicenseChoice resolvedByName = LicenseResolver.resolve(artifactLicense.getName(), includeLicenseText);
-                resolved = resolveLicenseInfo(licenseChoice, resolvedByName);
+                resolved = resolveLicenseInfo(licenseChoice, resolvedByName, schemaVersion);
             }
             if (artifactLicense.getUrl() != null && !resolved) {
                 final LicenseChoice resolvedByUrl = LicenseResolver.resolve(artifactLicense.getUrl(), includeLicenseText);
-                resolved = resolveLicenseInfo(licenseChoice, resolvedByUrl);
+                resolved = resolveLicenseInfo(licenseChoice, resolvedByUrl, schemaVersion);
             }
             if (artifactLicense.getName() != null && !resolved) {
                 final License license = new License();
@@ -295,22 +329,19 @@ public class ManifestGenerator {
         return licenseChoice;
     }
 
-    static boolean resolveLicenseInfo(LicenseChoice licenseChoice, LicenseChoice licenseChoiceToResolve) {
+    static boolean resolveLicenseInfo(LicenseChoice licenseChoice, LicenseChoice licenseChoiceToResolve,
+            Version schemaVersion) {
         if (licenseChoiceToResolve != null) {
             if (licenseChoiceToResolve.getLicenses() != null && !licenseChoiceToResolve.getLicenses().isEmpty()) {
                 licenseChoice.addLicense(licenseChoiceToResolve.getLicenses().get(0));
                 return true;
             } else if (licenseChoiceToResolve.getExpression() != null &&
-                    Version.VERSION_10 != schemaVersion()) {
+                    Version.VERSION_10 != schemaVersion) {
                 licenseChoice.setExpression(licenseChoiceToResolve.getExpression());
                 return true;
             }
         }
         return false;
-    }
-
-    static Version schemaVersion() {
-        return Version.VERSION_15;
     }
 
     private static boolean doesComponentHaveExternalReference(final Component component, final ExternalReference.Type type) {
