@@ -46,6 +46,24 @@ public class ProjectDependencyResolverTest {
     }
 
     @Test
+    public void singleJarInclusionBeatsExclusion() throws Exception {
+
+        var rc = getReleaseCollection(TestUtils.getResource("projects/multimodule-with-bom"),
+                List.of(ArtifactCoords.jar("org.acme", "acme-library", "1.0")),
+                config -> config.setExcludeKeys(List.of(ArtifactKey.ga("org.acme", "acme-api")))
+                        .setIncludeKeys(List.of(ArtifactKey.ga("org.acme", "acme-api"))));
+
+        assertThat(rc.isEmpty()).isFalse();
+        assertThat(rc.size()).isEqualTo(1);
+        var release = rc.iterator().next();
+        assertThat(release.artifacts).hasSize(4);
+        assertThat(release.getArtifacts()).containsKey(ArtifactCoords.pom("org.acme", "acme-parent", "1.0"));
+        assertThat(release.getArtifacts()).containsKey(ArtifactCoords.pom("org.acme", "acme-bom", "1.0"));
+        assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.acme", "acme-api", "1.0"));
+        assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.acme", "acme-library", "1.0"));
+    }
+
+    @Test
     public void singleJarArtifactIncludingParentPomsAndBoms() throws Exception {
 
         var rc = getReleaseCollection(TestUtils.getResource("projects/single-jar-and-bom"),
