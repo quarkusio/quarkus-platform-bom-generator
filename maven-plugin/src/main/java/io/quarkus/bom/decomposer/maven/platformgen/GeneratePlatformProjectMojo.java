@@ -1315,7 +1315,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                             new DefaultArtifact(ModelUtils.getGroupId(pom), pom.getArtifactId(), ArtifactCoords.TYPE_POM,
                                     ModelUtils.getVersion(pom)),
                             directAetherDeps, toAetherDependencies(pom.getDependencyManagement().getDependencies()),
-                            List.of(), List.of()))
+                            List.of(), getNonWorkspaceResolver().getRepositories()))
                     .getRoot();
         } catch (DependencyCollectionException e) {
             throw new RuntimeException(e);
