@@ -3,10 +3,11 @@
     <parent>
         <groupId>io.quarkus</groupId>
         <artifactId>quarkus-platform-bom-tools-parent</artifactId>
-        <version>0.0.119</version>
+        <version>0.0.120-SNAPSHOT</version>
         <relativePath>../</relativePath>
     </parent>
     <artifactId>quarkus-platform-bom-maven-plugin</artifactId>
+  <version>0.0.118</version>
     <name>Quarkus - Platform BOM Tools - Maven plugin</name>
     <packaging>maven-plugin</packaging>
     <properties>

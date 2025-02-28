@@ -3,10 +3,11 @@
   <parent>
     <groupId>io.quarkus</groupId>
     <artifactId>quarkus-platform-bom-tools-parent</artifactId>
-    <version>0.0.119</version>
+    <version>0.0.120-SNAPSHOT</version>
   </parent>
 
   <artifactId>quarkus-platform-bom-it-parent</artifactId>
+  <version>0.0.118</version>
   <packaging>pom</packaging>
   <name>Quarkus - Platform BOM Tools - IT - Parent</name>
 

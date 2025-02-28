@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.quarkus</groupId>
   <artifactId>quarkus-platform-bom-tools-parent</artifactId>
-  <version>0.0.119</version>
+  <version>0.0.120-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Quarkus - Platform BOM Tools - Parent</name>
 
@@ -32,7 +32,7 @@
     <url>https://github.com/quarkusio/quarkus-platform-bom-generator</url>
     <connection>scm:git:git@github.com:quarkusio/quarkus-platform-bom-generator.git</connection>
     <developerConnection>scm:git:git@github.com:quarkusio/quarkus-platform-bom-generator.git</developerConnection>
-    <tag>0.0.119</tag>
+    <tag>0.0.118</tag>
   </scm>
 
   <properties>
@@ -96,22 +96,22 @@
       <dependency>
         <groupId>io.quarkus</groupId>
         <artifactId>quarkus-platform-bom-decomposer</artifactId>
-        <version>${project.version}</version>
+        <version>0.0.118</version>
       </dependency>
       <dependency>
         <groupId>io.quarkus</groupId>
         <artifactId>quarkus-domino-api</artifactId>
-        <version>${project.version}</version>
+        <version>0.0.118</version>
       </dependency>
       <dependency>
         <groupId>io.quarkus</groupId>
         <artifactId>quarkus-domino-gradle-project-reader</artifactId>
-        <version>${project.version}</version>
+        <version>0.0.118</version>
       </dependency>
       <dependency>
         <groupId>io.quarkus</groupId>
         <artifactId>quarkus-platform-bom-generator</artifactId>
-        <version>${project.version}</version>
+        <version>0.0.118</version>
       </dependency>
       <dependency>
         <groupId>io.smallrye.beanbag</groupId>
