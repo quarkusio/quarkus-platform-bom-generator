@@ -3092,11 +3092,14 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
             if (tmp.getStream() == null) {
                 final String projectVersion = project.getVersion();
-                int microDot = projectVersion.lastIndexOf('.');
-                while (microDot > 0 && !Character.isDigit(projectVersion.charAt(microDot + 1))) {
-                    microDot = projectVersion.lastIndexOf('.', microDot - 1);
+                final String[] versionSegments = projectVersion.split("\\.");
+                if (versionSegments.length == 0) {
+                    tmp.setStream(projectVersion);
+                } else if (versionSegments.length < 3) {
+                    tmp.setStream(versionSegments[0]);
+                } else {
+                    tmp.setStream(versionSegments[0] + "." + versionSegments[1]);
                 }
-                tmp.setStream(microDot < 0 ? projectVersion : projectVersion.substring(0, microDot));
             }
             if (tmp.getVersion() == null) {
                 tmp.setVersion(quarkusCore.getGeneratedPlatformBom().getVersion());
