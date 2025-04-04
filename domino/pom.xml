@@ -7,7 +7,6 @@
   </parent>
 
   <artifactId>quarkus-domino-parent</artifactId>
-  <version>0.0.118</version>
   <packaging>pom</packaging>
   <name>Quarkus - Platform BOM Tools - Domino - Parent</name>
 

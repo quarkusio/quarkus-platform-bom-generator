@@ -7,7 +7,6 @@
   </parent>
 
   <artifactId>quarkus-platform-bom-generator</artifactId>
-  <version>0.0.118</version>
   <name>Quarkus - Platform BOM Tools - BOM Generator</name>
 
   <dependencies>

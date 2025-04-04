@@ -7,7 +7,6 @@
   </parent>
 
   <artifactId>quarkus-platform-bom-decomposer</artifactId>
-  <version>0.0.118</version>
   <name>Quarkus - Platform BOM Tools - BOM Decomposer</name>
 
   <dependencies>

@@ -7,7 +7,6 @@
         <relativePath>../</relativePath>
     </parent>
     <artifactId>quarkus-platform-bom-maven-plugin</artifactId>
-  <version>0.0.118</version>
     <name>Quarkus - Platform BOM Tools - Maven plugin</name>
     <packaging>maven-plugin</packaging>
     <properties>
