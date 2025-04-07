@@ -30,6 +30,39 @@ public abstract class ManifestingTestBase {
     static Path testRepoDir;
     static MavenArtifactResolver artifactResolver;
 
+    static void assertMainComponent(Bom bom, ArtifactCoords component, ArtifactCoords... expectedDeps) {
+        var purl = PurgingDependencyTreeVisitor.getPurl(component).toString();
+        assertThat(bom.getMetadata()).isNotNull();
+        Component comp = bom.getMetadata().getComponent();
+        assertThat(comp).isNotNull();
+        assertThat(purl).isEqualTo(comp.getPurl());
+        Dependency dep = null;
+        if (bom.getDependencies() != null) {
+            for (var d : bom.getDependencies()) {
+                if (d.getRef().equals(comp.getBomRef())) {
+                    dep = d;
+                    break;
+                }
+            }
+        }
+        if (dep == null && expectedDeps.length > 0) {
+            fail(comp.getBomRef() + " has no dependencies manifested while expected " + expectedDeps.length);
+            return;
+        }
+        final List<Dependency> recordedDeps = dep == null ? List.of() : dep.getDependencies();
+        var recordedDepPurls = new ArrayList<String>(recordedDeps.size());
+        for (var d : recordedDeps) {
+            recordedDepPurls.add(d.getRef());
+        }
+        var expectedDepPurls = new ArrayList<String>(expectedDeps.length);
+        for (var c : expectedDeps) {
+            expectedDepPurls.add(PurgingDependencyTreeVisitor.getPurl(c).toString());
+        }
+        Collections.sort(recordedDepPurls);
+        Collections.sort(expectedDepPurls);
+        assertThat(recordedDepPurls).isEqualTo(expectedDepPurls);
+    }
+
     static void assertDependencies(Bom bom, ArtifactCoords component, ArtifactCoords... expectedDeps) {
         var purl = PurgingDependencyTreeVisitor.getPurl(component).toString();
         Component comp = null;

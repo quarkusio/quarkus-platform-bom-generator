@@ -42,7 +42,7 @@ public class CyclicDependencyGraphTest extends ManifestingTestBase {
 
     @Override
     protected void assertBom(Bom bom) {
-        assertDependencies(bom, ArtifactCoords.jar("org.acme", "acme-app", "1.0"),
+        assertMainComponent(bom, ArtifactCoords.jar("org.acme", "acme-app", "1.0"),
                 ArtifactCoords.jar("io.netty", "netty-tcnative-boringssl-static", "linux-x86_64", "1.0"));
 
         assertDependencies(bom, ArtifactCoords.jar("io.netty", "netty-tcnative-boringssl-static", "linux-x86_64", "1.0"),
