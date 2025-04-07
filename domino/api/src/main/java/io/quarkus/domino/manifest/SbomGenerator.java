@@ -20,6 +20,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 import java.util.ServiceLoader;
 import java.util.Set;
 import org.apache.maven.model.Model;
@@ -161,6 +162,7 @@ public class SbomGenerator {
     private Version schemaVersion;
 
     private Bom bom;
+    private Component mainComponent;
     private Set<String> addedBomRefs;
 
     private SbomGenerator() {
@@ -181,7 +183,7 @@ public class SbomGenerator {
 
         bom = transform(bom);
 
-        addProductInfo(metadata);
+        addProductInfo(bom);
 
         final String bomString;
         try {
@@ -210,11 +212,18 @@ public class SbomGenerator {
 
     private void addComponent(VisitedComponent visited) {
         if (visited.getBomRef() == null) {
-            throw new IllegalStateException("bom-ref has not been initialized for " + visited.getPurl());
+            throw new IllegalArgumentException("bom-ref has not been initialized for " + visited.getPurl());
         }
         if (!addedBomRefs.add(visited.getBomRef())) {
             return;
         }
+        final Component comp = processComponent(visited);
+        if (!setMainMetadataComponent(comp)) {
+            bom.addComponent(comp);
+        }
+    }
+
+    private Component processComponent(VisitedComponent visited) {
         final Model model = effectiveModelResolver.resolveEffectiveModel(visited.getArtifactCoords(),
                 visited.getRepositories());
         final Component c = new Component();
@@ -235,13 +244,12 @@ public class SbomGenerator {
             ManifestGenerator.addProperty(props, "package:language", "java");
         }
         c.setProperties(props);
-        c.setType(Component.Type.LIBRARY);
+        c.setType(Type.LIBRARY);
 
         // fix distribution and publisher for components built by RH
         if (RhVersionPattern.isRhVersion(c.getVersion())) {
             PncSbomTransformer.addMrrc(c);
         }
-        bom.addComponent(c);
 
         List<VisitedComponent> dependencies = visited.getDependencies();
         if (!dependencies.isEmpty()) {
@@ -256,58 +264,49 @@ public class SbomGenerator {
                 bom.addDependency(d);
             }
         }
+        return c;
     }
 
-    private void addProductInfo(Metadata metadata) {
-        if (productInfo != null) {
-            var group = productInfo.getGroup();
-            var name = productInfo.getName();
-            var version = productInfo.getVersion();
+    private boolean setMainMetadataComponent(Component comp) {
+        if (productInfo == null || mainComponent != null) {
+            return false;
+        }
+        if (comp.getName().equals(productInfo.getName())
+                && comp.getGroup().equals(productInfo.getGroup())
+                && comp.getVersion().equals(productInfo.getVersion())) {
+            mainComponent = comp;
+            bom.getMetadata().setComponent(mainComponent);
+            return true;
+        }
+        return false;
+    }
 
-            var c = new Component();
-            if (group != null) {
-                c.setGroup(group);
-            }
-            if (name != null) {
-                c.setName(name);
-            }
-            if (version != null) {
-                c.setVersion(version);
+    private void addProductInfo(Bom bom) {
+        if (productInfo != null) {
+
+            if (mainComponent == null) {
+                mainComponent = new Component();
+                if (productInfo.getGroup() != null) {
+                    mainComponent.setGroup(productInfo.getGroup());
+                }
+                if (productInfo.getName() != null) {
+                    mainComponent.setName(productInfo.getName());
+                }
+                if (productInfo.getVersion() != null) {
+                    mainComponent.setVersion(productInfo.getVersion());
+                }
             }
             if (productInfo.getPurl() != null) {
-                c.setPurl(productInfo.getPurl());
+                mainComponent.setPurl(productInfo.getPurl());
             }
             if (productInfo.getType() != null) {
-                c.setType(Type.valueOf(productInfo.getType()));
+                mainComponent.setType(Type.valueOf(productInfo.getType()));
             }
             if (productInfo.getCpe() != null) {
-                c.setCpe(productInfo.getCpe());
+                mainComponent.setCpe(productInfo.getCpe());
             }
             if (productInfo.getDescription() != null) {
-                c.setDescription(productInfo.getDescription());
-            }
-
-            if (group != null && name != null && version != null) {
-                Component addedComponent = null;
-                for (VisitedComponent visited : topComponents) {
-                    var coords = visited.getArtifactCoords();
-                    if (name.equals(coords.getArtifactId()) && group.equals(coords.getGroupId())
-                            && version.equals(coords.getVersion())) {
-                        for (Component added : bom.getComponents()) {
-                            if (added.getBomRef().equals(visited.getBomRef())) {
-                                addedComponent = added;
-                                break;
-                            }
-                        }
-                        break;
-                    }
-                }
-                if (addedComponent != null) {
-                    c.setLicenseChoice(addedComponent.getLicenseChoice());
-                    if (c.getPurl() == null) {
-                        c.setPurl(addedComponent.getPurl());
-                    }
-                }
+                mainComponent.setDescription(productInfo.getDescription());
             }
 
             if (productInfo.getReleaseNotes() != null) {
@@ -334,23 +333,60 @@ public class SbomGenerator {
                     }
                     rn.setProperties(propList);
                 }
-                c.setReleaseNotes(rn);
+                mainComponent.setReleaseNotes(rn);
             }
 
             if (productInfo.getId() != null) {
                 var prop = new Property();
                 prop.setName("product-id");
                 prop.setValue(productInfo.getId());
-                c.addProperty(prop);
+                mainComponent.addProperty(prop);
             }
             if (productInfo.getStream() != null) {
                 var prop = new Property();
                 prop.setName("product-stream");
                 prop.setValue(productInfo.getStream());
-                c.addProperty(prop);
+                mainComponent.addProperty(prop);
             }
-            metadata.setComponent(c);
+
+            // add dependencies to the top level components
+            if (recordDependencies) {
+                Dependency dep = getDependencyForComponentOrNull(mainComponent, bom);
+                if (dep == null) {
+                    dep = new Dependency(
+                            mainComponent.getBomRef() == null ? mainComponent.getPurl() : mainComponent.getBomRef());
+                    for (var topComp : topComponents) {
+                        if (!topComp.getBomRef().equals(dep.getRef())) {
+                            dep.addDependency(new Dependency(topComp.getBomRef()));
+                        }
+                    }
+                    bom.addDependency(dep);
+                }
+            }
         }
+    }
+
+    /**
+     * Returns the dependency object for a given component or null, if a matching dependency object
+     * wasn't found.
+     *
+     * @param comp component to return the dependency object for
+     * @param bom bom
+     * @return dependency object for the component or null, if a matching dependency object wasn't found
+     */
+    private static Dependency getDependencyForComponentOrNull(Component comp, Bom bom) {
+        Objects.requireNonNull(comp, "Component is null");
+        final List<Dependency> deps = bom.getDependencies();
+        if (deps == null) {
+            return null;
+        }
+        final String compRef = comp.getBomRef() == null ? comp.getPurl() : comp.getBomRef();
+        for (var d : deps) {
+            if (compRef.equals(d.getRef())) {
+                return d;
+            }
+        }
+        return null;
     }
 
     private Bom transform(Bom bom) {

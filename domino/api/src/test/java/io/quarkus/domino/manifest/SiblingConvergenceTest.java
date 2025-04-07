@@ -226,7 +226,7 @@ public class SiblingConvergenceTest extends ManifestingTestBase {
 
     @Override
     protected void assertBom(Bom bom) {
-        assertDependencies(bom, ArtifactCoords.jar("org.acme", "acme-app", "1.0"),
+        assertMainComponent(bom, ArtifactCoords.jar("org.acme", "acme-app", "1.0"),
                 ArtifactCoords.jar("org.project-a", "lib-a", "0.1"),
                 ArtifactCoords.jar("org.project-b", "lib-b", "0.1"),
                 ArtifactCoords.jar("org.project-c", "lib-c", "0.1"),
