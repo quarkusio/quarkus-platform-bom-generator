@@ -2,6 +2,7 @@ package io.quarkus.domino;
 
 import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.ArtifactCoords;
+import java.nio.file.Path;
 import java.util.List;
 import org.eclipse.aether.repository.RemoteRepository;
 
@@ -16,6 +17,8 @@ public interface DependencyTreeVisitor {
         List<RemoteRepository> getRepositories();
 
         boolean isManaged();
+
+        Path getPath();
     }
 
     void beforeAllRoots();

@@ -1301,7 +1301,8 @@ public class ProjectDependencyResolver {
                 || coords.getType().equals(ArtifactCoords.TYPE_POM)
                         && (!config.isExcludeParentPoms()
                                 || projectGavs.contains(toGav(coords)))) {
-            ResolvedDependency resolved = new ResolvedDependency(getRevision(coords, repos), coords, repos, managed);
+            ResolvedDependency resolved = new ResolvedDependency(getRevision(coords, repos), coords, repos, managed,
+                    this::resolve);
             if (!config.isExcludeParentPoms()) {
                 addImportedBomsAndParentPomToBuild(resolved);
             }
@@ -1316,6 +1317,14 @@ public class ProjectDependencyResolver {
             addToRemaining(coords);
         }
         return null;
+    }
+
+    private Path resolve(ResolvedDependency dep) {
+        try {
+            return resolver.resolve(toAetherArtifact(dep.getCoords()), dep.getRepositories()).getArtifact().getFile().toPath();
+        } catch (BootstrapMavenException e) {
+            throw new RuntimeException("Failed to resolve " + dep.getCoords() + " from " + dep.getRepositories(), e);
+        }
     }
 
     private Map<String, String> addImportedBomsAndParentPomToBuild(ResolvedDependency dependency) {

@@ -51,9 +51,9 @@ public class ProjectManifestingTest {
         assertThat(mainComponent.getName()).isEqualTo(expectedCoords.getArtifactId());
         assertThat(mainComponent.getVersion()).isEqualTo(expectedCoords.getVersion());
         assertThat(mainComponent.getPurl()).isEqualTo(PurgingDependencyTreeVisitor.getPurl(expectedCoords).toString());
-        assertThat(mainComponent.getLicenseChoice()).isNotNull();
-        assertThat(mainComponent.getLicenseChoice().getLicenses().size()).isEqualTo(1);
-        var license = mainComponent.getLicenseChoice().getLicenses().get(0);
+        assertThat(mainComponent.getLicenses()).isNotNull();
+        assertThat(mainComponent.getLicenses().getLicenses().size()).isEqualTo(1);
+        var license = mainComponent.getLicenses().getLicenses().get(0);
         assertThat(license.getId()).isEqualTo("Apache-2.0");
         assertThat(mainComponent.getDescription()).isEqualTo("Description of " + mainComponent.getName());
         assertThat(mainComponent.getType()).isEqualTo(Component.Type.LIBRARY);
@@ -83,7 +83,8 @@ public class ProjectManifestingTest {
                             SbomGenerator.builder()
                                     .setArtifactResolver(artifactResolver)
                                     .setOutputFile(output)
-                                    .setEnableTransformers(false),
+                                    .setEnableTransformers(false)
+                                    .setCalculateHashes(false),
                             config))
                     .build()
                     .resolveDependencies();

@@ -209,6 +209,12 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     @Parameter(required = false, property = "redhatSupported")
     boolean redhatSupported;
 
+    /**
+     * Whether to calculate hashes for manifested components
+     */
+    @Parameter(property = "calculateHashes", defaultValue = "true")
+    boolean calculateHashes;
+
     @Parameter(required = false)
     SbomConfig.ProductConfig productInfo;
 
@@ -355,7 +361,8 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                             .setEnableTransformers(false)
                             .setRecordDependencies(!flatManifest)
                             .setProductInfo(dependencyConfig.getProductInfo())
-                            .setSchemaVersion(cdxSchemaVersion),
+                            .setSchemaVersion(cdxSchemaVersion)
+                            .setCalculateHashes(calculateHashes),
                     dependencyConfig);
             depsResolver.addDependencyTreeVisitor(sbomGenerator).build().resolveDependencies();
         } else {
