@@ -35,6 +35,10 @@ public class Report extends BaseDepsToBuildCommand {
             "--enable-sbom-transformers" }, description = "Apply SBOM transformers found on the classpath", defaultValue = "false")
     public boolean enableSbomTransformers;
 
+    @CommandLine.Option(names = {
+            "--hashes" }, description = "Whether to calculate hashes for manifested components", defaultValue = "true")
+    public boolean hashes;
+
     @Override
     protected Path getConfigDir() {
         if (manifest || flatManifest) {
@@ -74,6 +78,7 @@ public class Report extends BaseDepsToBuildCommand {
                                             .setEnableTransformers(enableSbomTransformers)
                                             .setRecordDependencies(
                                                     !(flatManifest || MANIFEST_DEPS_NONE.equals(manifestDependencies)))
+                                            .setCalculateHashes(hashes)
                                             .setSchemaVersion(cdxSchemaVersion),
                                     resolverBuilder.getDependencyConfig()));
         }

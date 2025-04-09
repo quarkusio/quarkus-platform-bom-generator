@@ -36,6 +36,7 @@ import org.cyclonedx.model.Metadata;
 import org.cyclonedx.model.Property;
 import org.cyclonedx.model.ReleaseNotes;
 import org.cyclonedx.model.Tool;
+import org.cyclonedx.util.BomUtils;
 import org.eclipse.jgit.util.Hex;
 import org.jboss.logging.Logger;
 
@@ -89,6 +90,12 @@ public class SbomGenerator {
         public Builder setRecordDependencies(boolean recordDependencies) {
             ensureNotBuilt();
             SbomGenerator.this.recordDependencies = recordDependencies;
+            return this;
+        }
+
+        public Builder setCalculateHashes(boolean calculateHashes) {
+            ensureNotBuilt();
+            SbomGenerator.this.calculateHashes = calculateHashes;
             return this;
         }
 
@@ -159,6 +166,7 @@ public class SbomGenerator {
     private boolean enableTransformers;
     private List<VisitedComponent> topComponents;
     private boolean recordDependencies = true;
+    private boolean calculateHashes = true;
     private Version schemaVersion;
 
     private Bom bom;
@@ -237,6 +245,24 @@ public class SbomGenerator {
         c.setVersion(coords.getVersion());
         c.setPurl(visited.getPurl());
         c.setBomRef(visited.getBomRef());
+
+        if (calculateHashes) {
+            final Path path = visited.getPath();
+            if (path == null) {
+                throw new RuntimeException("Failed to calculate hashes for "
+                        + visited.getArtifactCoords().toCompactCoords() + " since the artifact could not be resolved");
+            }
+            if (Files.isDirectory(path)) {
+                throw new RuntimeException("Failed to calculate hashes for "
+                        + visited.getArtifactCoords().toCompactCoords()
+                        + " since the artifact is resolved to a directory");
+            }
+            try {
+                c.setHashes(BomUtils.calculateHashes(path.toFile(), schemaVersion));
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to calculate hashes for the tool at " + path, e);
+            }
+        }
 
         final List<Property> props = new ArrayList<>(2);
         ManifestGenerator.addProperty(props, "package:type", "maven");

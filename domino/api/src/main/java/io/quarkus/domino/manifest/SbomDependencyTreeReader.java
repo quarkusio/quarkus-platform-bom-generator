@@ -5,6 +5,7 @@ import com.github.packageurl.PackageURL;
 import io.quarkus.domino.DependencyTreeVisitor;
 import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.ArtifactCoords;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -120,6 +121,11 @@ class SbomDependencyTreeReader {
         @Override
         public boolean isManaged() {
             throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Path getPath() {
+            return null;
         }
     }
 }

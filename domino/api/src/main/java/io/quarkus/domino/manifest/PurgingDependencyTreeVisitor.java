@@ -9,6 +9,7 @@ import io.quarkus.domino.processor.ParallelTreeProcessor;
 import io.quarkus.domino.processor.TaskResult;
 import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.maven.dependency.ArtifactCoords;
+import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -20,6 +21,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.jboss.logging.Logger;
 
@@ -165,13 +167,17 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
     private VisitedComponentImpl enterNode(DependencyVisit visit) {
         var parent = branch.peek();
         var current = new VisitedComponentImpl(nodesTotal.getAndIncrement(), parent, visit);
-        nodeVariations.computeIfAbsent(visit.getCoords(), k -> new ComponentVariations()).add(current);
+        nodeVariations.computeIfAbsent(visit.getCoords(), this::getComponentVariations).add(current);
         if (parent != null) {
             parent.addChild(current);
         }
         branch.push(current);
         treeComponents.put(visit.getCoords(), current);
         return current;
+    }
+
+    private ComponentVariations getComponentVariations(ArtifactCoords coors) {
+        return new ComponentVariations();
     }
 
     private void leaveNode() {
@@ -185,6 +191,8 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
         private final ArtifactCoords coords;
         private final List<RemoteRepository> repos;
         private final Map<ArtifactCoords, VisitedComponentImpl> children = new ConcurrentHashMap<>();
+        private Path resolvedPath;
+        private Supplier<Path> pathResolver;
         private List<ArtifactCoords> linkedDeps;
         private List<VisitedComponentImpl> linkedParents;
         private String bomRef;
@@ -197,6 +205,7 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
             this.revision = visit.getRevision();
             this.coords = visit.getCoords();
             this.repos = visit.getRepositories();
+            this.pathResolver = visit::getPath;
         }
 
         private long getIndex() {
@@ -360,6 +369,15 @@ public class PurgingDependencyTreeVisitor implements DependencyTreeVisitor {
             }
             sb.append(coords.getVersion()).append('#').append(processedVariations);
             bomRef = sb.toString();
+        }
+
+        @Override
+        public Path getPath() {
+            if (pathResolver != null) {
+                resolvedPath = pathResolver.get();
+                pathResolver = null;
+            }
+            return resolvedPath;
         }
 
         @Override
