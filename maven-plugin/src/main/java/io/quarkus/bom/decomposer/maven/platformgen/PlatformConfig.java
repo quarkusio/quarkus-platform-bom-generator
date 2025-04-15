@@ -31,6 +31,8 @@ public class PlatformConfig {
 
     private GenerateMavenRepoZip generateMavenRepoZip;
 
+    private SbomerGlobalConfig sbomerConfig;
+
     public PlatformReleaseConfig getRelease() {
         return release;
     }
@@ -128,5 +130,13 @@ public class PlatformConfig {
 
     public void setGenerateMavenRepoZip(GenerateMavenRepoZip generateMavenRepoZip) {
         this.generateMavenRepoZip = generateMavenRepoZip;
+    }
+
+    public SbomerGlobalConfig getSbomer() {
+        return sbomerConfig;
+    }
+
+    public void setSbomer(SbomerGlobalConfig sbomerConfig) {
+        this.sbomerConfig = sbomerConfig;
     }
 }

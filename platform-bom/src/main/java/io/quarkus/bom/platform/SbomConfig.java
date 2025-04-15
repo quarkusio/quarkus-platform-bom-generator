@@ -14,6 +14,7 @@ public class SbomConfig {
     private static final Set<String> DEPS_TO_BUILD_VALUES = Set.of(ALL, INCLUSIONS, NONE);
 
     private ProductConfig product;
+    private SbomerErrataConfig errata;
     private boolean supportedExtensionsOnly;
     private String applyDependenciesToBuildConfig;
 
@@ -23,6 +24,14 @@ public class SbomConfig {
 
     public void setProductInfo(ProductConfig product) {
         this.product = product;
+    }
+
+    public SbomerErrataConfig getErrata() {
+        return errata;
+    }
+
+    public void setErrata(SbomerErrataConfig errata) {
+        this.errata = errata;
     }
 
     public boolean isSupportedExtensionsOnly() {
