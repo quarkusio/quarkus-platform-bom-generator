@@ -29,6 +29,10 @@ import io.quarkus.bom.platform.ProjectDependencyFilterConfig;
 import io.quarkus.bom.platform.RedHatExtensionDependencyCheck;
 import io.quarkus.bom.platform.ReportIndexPageGenerator;
 import io.quarkus.bom.platform.SbomConfig;
+import io.quarkus.bom.platform.SbomerConfig;
+import io.quarkus.bom.platform.SbomerGeneratorConfig;
+import io.quarkus.bom.platform.SbomerProcessorConfig;
+import io.quarkus.bom.platform.SbomerProductConfig;
 import io.quarkus.bom.resolver.ArtifactResolver;
 import io.quarkus.bom.resolver.ArtifactResolverProvider;
 import io.quarkus.bom.resolver.EffectiveModelResolver;
@@ -411,19 +415,17 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private void generateDominoManifestCliConfig() throws MojoExecutionException {
-        final Path dominoDir = Path.of(DominoInfo.CONFIG_DIR_NAME).normalize().toAbsolutePath().resolve("manifest");
-        IoUtils.recursiveDelete(dominoDir);
-        try {
-            Files.createDirectories(dominoDir);
-        } catch (IOException e) {
-            throw new MojoExecutionException("Failed to create " + dominoDir, e);
-        }
+        final Path dominoDir = deleteAndCreateDir(Path.of(DominoInfo.CONFIG_DIR_NAME).resolve("manifest"));
+        final SbomerGlobalConfig globalSbomerConfig = platformConfig.getSbomer();
+        SbomerConfig sbomerConfig = null;
         for (PlatformMember member : members.values()) {
             if (!member.config().isEnabled() || member.config().isHidden()) {
                 continue;
             }
             getLog().info(
                     "Generating Domino CLI SBOM generator config for " + member.getGeneratedPlatformBom().getArtifactId());
+            final Path dominoManifestConfigFile = dominoDir
+                    .resolve(member.getGeneratedPlatformBom().getArtifactId() + "-config.json");
 
             final ProjectDependencyConfig.Mutable dominoConfig = ProjectDependencyConfig.builder()
                     .setProjectBom(PlatformArtifacts.ensureBomArtifact(member.descriptorCoords()))
@@ -436,6 +438,31 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
 
             var sbomConfig = member.config().getSbom();
+            if (sbomConfig != null && sbomConfig.getErrata() != null) {
+                if (sbomerConfig == null) {
+                    sbomerConfig = new SbomerConfig();
+                    if (globalSbomerConfig != null) {
+                        sbomerConfig.setApiVersion(globalSbomerConfig.getApiVersion());
+                        sbomerConfig.setType(globalSbomerConfig.getType());
+                    }
+                }
+                final SbomerProductConfig product = new SbomerProductConfig();
+                final SbomerProcessorConfig processor = new SbomerProcessorConfig();
+                processor.setErrata(sbomConfig.getErrata());
+                final SbomerGeneratorConfig generator = new SbomerGeneratorConfig();
+                generator.setArgs("--config-file " + dominoManifestConfigFile);
+                if (globalSbomerConfig != null) {
+                    processor.setType(globalSbomerConfig.getProcessorType());
+                    generator.setType(globalSbomerConfig.getGeneratorType());
+                    if (globalSbomerConfig.getArgs() != null) {
+                        generator.setArgs(generator.getArgs() + " " + globalSbomerConfig.getArgs());
+                    }
+                }
+                product.setProcessors(List.of(processor));
+                product.setGenerator(generator);
+                sbomerConfig.addProduct(product);
+            }
+
             List<ArtifactCoordsPattern> excludePatterns = List.of();
             if (sbomConfig == null || sbomConfig.isApplyDependenciesToBuildInclusions()) {
                 var depsToBuild = effectiveMemberDepsToBuildConfig(member.config());
@@ -499,22 +526,20 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
 
             try {
-                dominoConfig.build()
-                        .persist(dominoDir.resolve(member.getGeneratedPlatformBom().getArtifactId() + "-config.json"));
+                dominoConfig.build().persist(dominoManifestConfigFile.normalize().toAbsolutePath());
             } catch (IOException e) {
                 throw new MojoExecutionException("Failed to persist Domino config", e);
             }
         }
+
+        if (sbomerConfig != null) {
+            sbomerConfig.serialize(deleteAndCreateDir(Path.of(".sbomer")).resolve("config.yaml"));
+        }
     }
 
     private void generateDominoBuildCliConfig() throws MojoExecutionException {
-        final Path dominoDir = Path.of(DominoInfo.CONFIG_DIR_NAME).normalize().toAbsolutePath().resolve("build");
-        IoUtils.recursiveDelete(dominoDir);
-        try {
-            Files.createDirectories(dominoDir);
-        } catch (IOException e) {
-            throw new MojoExecutionException("Failed to create " + dominoDir, e);
-        }
+        final Path dominoDir = deleteAndCreateDir(
+                Path.of(DominoInfo.CONFIG_DIR_NAME).normalize().toAbsolutePath().resolve("build"));
         for (PlatformMember member : members.values()) {
             if (!member.config().isEnabled() || member.config().isHidden()) {
                 continue;
@@ -1427,10 +1452,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
     private static Xpp3Dom newDom(String name) {
         return new Xpp3Dom(name);
-    }
-
-    private ArtifactKey getKey(Dependency d) {
-        return ArtifactKey.of(d.getGroupId(), d.getArtifactId(), d.getClassifier(), d.getType());
     }
 
     private static File getPomFile(Model parentPom, final String moduleName) {
@@ -3116,7 +3137,6 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         private Artifact configuredPlatformBom;
         private ArtifactCoords descriptorCoords;
         private ArtifactCoords propertiesCoords;
-        private ArtifactCoords stackDescriptorCoords;
         private ArtifactKey key;
         private Model baseModel;
         private DecomposedBom originalBom;
@@ -3200,7 +3220,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         @Override
         public ArtifactKey key() {
             if (key == null) {
-                key = getInputBom() == null ? toKey(getConfiguredPlatformBom()) : toKey(getInputBom());
+                key = getInputBom() == null ? getGaKey(getConfiguredPlatformBom()) : getGaKey(getInputBom());
             }
             return key;
         }
@@ -3212,12 +3232,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 if (getInputBom() == null) {
                     inputConstraints = dm;
                 } else if (dm.isEmpty()) {
-                    inputConstraints = Collections
-                            .singletonList(new org.eclipse.aether.graph.Dependency(getInputBom(), "import"));
+                    inputConstraints = List.of(new org.eclipse.aether.graph.Dependency(getInputBom(), "import"));
                 } else {
-                    if (getInputBom() != null) {
-                        dm.add(new org.eclipse.aether.graph.Dependency(getInputBom(), "import"));
-                    }
+                    dm.add(new org.eclipse.aether.graph.Dependency(getInputBom(), "import"));
                     inputConstraints = dm;
                 }
             }
@@ -3347,8 +3364,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         return ModelUtils.getRawVersion(pom).equals(coords.getVersion()) ? "${project.version}" : coords.getVersion();
     }
 
-    private static ArtifactKey toKey(Artifact a) {
+    private static ArtifactKey getGaKey(Artifact a) {
         return ArtifactKey.ga(a.getGroupId(), a.getArtifactId());
+    }
+
+    private static ArtifactKey getKey(Dependency d) {
+        return ArtifactKey.of(d.getGroupId(), d.getArtifactId(), d.getClassifier(), d.getType());
     }
 
     private static DefaultArtifact toPomArtifact(String coords) {
@@ -3412,5 +3433,14 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
     private static boolean isBlank(String s) {
         return s == null || s.isBlank();
+    }
+
+    private static Path deleteAndCreateDir(Path dir) throws MojoExecutionException {
+        IoUtils.recursiveDelete(dir);
+        try {
+            return Files.createDirectories(dir);
+        } catch (IOException e) {
+            throw new MojoExecutionException("Failed to create directory " + dir, e);
+        }
     }
 }
