@@ -3,13 +3,14 @@ name: "Build"
 on:
   push:
     branches:
-      - master
+      - main
     paths-ignore:
       - '.gitignore'
       - 'LICENSE'
       - '*.md'
       - '*.adoc'
       - '*.txt'
+      - '.github/project.yml'
   pull_request:
     paths-ignore:
       - '.gitignore'

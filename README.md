@@ -199,3 +199,11 @@ Each directory currently contains:
 * diff.html - an HTML report highliting the differences between the original version of the BOM and the generated one (dependencies added, missing, downgraded, upgraded, matching).
 * original-releases.html - multi-module releases detected in the original version of the BOM.
 * generated-releases.html - multi-module releases detected in the generated version of the BOM.
+
+## Release
+
+To release a new version, follow these steps:
+
+https://github.com/smallrye/smallrye/wiki/Release-Process#releasing
+
+The staging repository is automatically closed. The sync with Maven Central should take ~30 minutes.
