@@ -454,6 +454,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 if (globalSbomerConfig != null) {
                     processor.setType(globalSbomerConfig.getProcessorType());
                     generator.setType(globalSbomerConfig.getGeneratorType());
+                    generator.setVersion(globalSbomerConfig.getGeneratorVersion());
                     if (globalSbomerConfig.getArgs() != null) {
                         generator.setArgs(generator.getArgs() + " " + globalSbomerConfig.getArgs());
                     }

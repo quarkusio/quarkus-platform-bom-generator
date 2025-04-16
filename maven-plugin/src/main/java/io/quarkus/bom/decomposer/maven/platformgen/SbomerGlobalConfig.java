@@ -6,6 +6,7 @@ public class SbomerGlobalConfig {
     private String type;
     private String processorType;
     private String generatorType;
+    private String generatorVersion;
     private String args;
 
     public String getApiVersion() {
@@ -38,6 +39,14 @@ public class SbomerGlobalConfig {
 
     public void setGeneratorType(String generatorType) {
         this.generatorType = generatorType;
+    }
+
+    public String getGeneratorVersion() {
+        return generatorVersion;
+    }
+
+    public void setGeneratorVersion(String generatorVersion) {
+        this.generatorVersion = generatorVersion;
     }
 
     public String getArgs() {
