@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 public class SbomerGeneratorConfig {
 
     private String type;
+    private String version;
     private String args;
 
     public String getType() {
@@ -14,6 +15,14 @@ public class SbomerGeneratorConfig {
 
     public void setType(String type) {
         this.type = type;
+    }
+
+    public String getVersion() {
+        return version;
+    }
+
+    public void setVersion(String version) {
+        this.version = version;
     }
 
     public String getArgs() {
