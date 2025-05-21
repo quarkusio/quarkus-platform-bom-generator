@@ -80,6 +80,8 @@ public class ProjectDependencyResolver {
     public static class Builder {
 
         private MavenArtifactResolver resolver;
+        private Path localMavenRepo;
+        private Path userMavenSettings;
         private Function<ArtifactCoords, List<Dependency>> artifactConstraintsProvider;
         private MessageWriter log;
         private ProjectDependencyConfig depConfig;
@@ -108,6 +110,30 @@ public class ProjectDependencyResolver {
                     visitors.add(visitor);
             }
             return this;
+        }
+
+        /**
+         * Path to a local Maven repository.
+         * The value passed to this method will be used to initialize a Maven artifact resolver.
+         * If a Maven artifact resolver was provided with {@link #setArtifactResolver(MavenArtifactResolver)},
+         * values passed to this method will be ignored.
+         *
+         * @param localMavenRepo path to a local Maven repository
+         */
+        public void setLocalMavenRepo(Path localMavenRepo) {
+            this.localMavenRepo = localMavenRepo;
+        }
+
+        /**
+         * Path to a local Maven user settings file.
+         * The value passed to this method will be used to initialize a Maven artifact resolver.
+         * If a Maven artifact resolver was provided with {@link #setArtifactResolver(MavenArtifactResolver)},
+         * values passed to this method will be ignored.
+         *
+         * @param userMavenSettings local Maven user settings file
+         */
+        public void setUserMavenSettings(Path userMavenSettings) {
+            this.userMavenSettings = userMavenSettings;
         }
 
         public Builder setArtifactResolver(MavenArtifactResolver artifactResolver) {
@@ -170,6 +196,12 @@ public class ProjectDependencyResolver {
                                 .setEffectiveModelBuilder(true)
                                 .setPreferPomsFromWorkspace(true);
                     }
+                    if (localMavenRepo != null) {
+                        mvnConfig.setLocalRepository(localMavenRepo.toAbsolutePath().toString());
+                    }
+                    if (userMavenSettings != null) {
+                        mvnConfig.setUserSettings(userMavenSettings.toFile());
+                    }
                     var mvnCtx = new BootstrapMavenContext(mvnConfig);
 
                     if (depConfig.isVerboseGraphs()) {
@@ -190,29 +222,41 @@ public class ProjectDependencyResolver {
                 } catch (BootstrapMavenException e) {
                     throw new IllegalStateException("Failed to initialize the Maven artifact resolver", e);
                 }
-            } else if (depConfig != null
-                    && depConfig.isVerboseGraphs()
-                    && (Boolean.FALSE.equals(
-                            resolver.getSession().getConfigProperties()
-                                    .getOrDefault(ConflictResolver.CONFIG_PROP_VERBOSE, false))
-                            || Boolean.FALSE.equals(resolver.getSession().getConfigProperties()
-                                    .getOrDefault(DependencyManagerUtils.CONFIG_PROP_VERBOSE, false)))) {
-                var mvnCtx = resolver.getMavenContext();
-                try {
-                    var session = new DefaultRepositorySystemSession(mvnCtx.getRepositorySystemSession());
-                    session.setConfigProperty(ConflictResolver.CONFIG_PROP_VERBOSE, true);
-                    session.setConfigProperty(DependencyManagerUtils.CONFIG_PROP_VERBOSE, true);
+            } else {
+                if (localMavenRepo != null) {
+                    getInitializedLog().debug(
+                            "Local Maven repository %s setting is ignored, since a Maven artifact resolver was provided",
+                            localMavenRepo);
+                }
+                if (userMavenSettings != null) {
+                    getInitializedLog().debug(
+                            "User Maven settings %s are ignored, since a Maven artifact resolver was provided",
+                            userMavenSettings);
+                }
+                if (depConfig != null
+                        && depConfig.isVerboseGraphs()
+                        && (Boolean.FALSE.equals(
+                                resolver.getSession().getConfigProperties()
+                                        .getOrDefault(ConflictResolver.CONFIG_PROP_VERBOSE, false))
+                                || Boolean.FALSE.equals(resolver.getSession().getConfigProperties()
+                                        .getOrDefault(DependencyManagerUtils.CONFIG_PROP_VERBOSE, false)))) {
+                    var mvnCtx = resolver.getMavenContext();
+                    try {
+                        var session = new DefaultRepositorySystemSession(mvnCtx.getRepositorySystemSession());
+                        session.setConfigProperty(ConflictResolver.CONFIG_PROP_VERBOSE, true);
+                        session.setConfigProperty(DependencyManagerUtils.CONFIG_PROP_VERBOSE, true);
 
-                    mvnCtx = new BootstrapMavenContext(
-                            BootstrapMavenContext.config().setRepositorySystemSession(session)
-                                    .setRepositorySystem(mvnCtx.getRepositorySystem())
-                                    .setRemoteRepositoryManager(mvnCtx.getRemoteRepositoryManager())
-                                    .setRemoteRepositories(mvnCtx.getRemoteRepositories())
-                                    .setCurrentProject(mvnCtx.getCurrentProject()));
+                        mvnCtx = new BootstrapMavenContext(
+                                BootstrapMavenContext.config().setRepositorySystemSession(session)
+                                        .setRepositorySystem(mvnCtx.getRepositorySystem())
+                                        .setRemoteRepositoryManager(mvnCtx.getRemoteRepositoryManager())
+                                        .setRemoteRepositories(mvnCtx.getRemoteRepositories())
+                                        .setCurrentProject(mvnCtx.getCurrentProject()));
 
-                    return new MavenArtifactResolver(mvnCtx);
-                } catch (BootstrapMavenException e) {
-                    throw new IllegalStateException("Failed to initialize the Maven artifact resolver", e);
+                        return new MavenArtifactResolver(mvnCtx);
+                    } catch (BootstrapMavenException e) {
+                        throw new IllegalStateException("Failed to initialize the Maven artifact resolver", e);
+                    }
                 }
             }
             return resolver;
