@@ -547,9 +547,11 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
             getLog().info("Generating Domino CLI build config for " + member.getGeneratedPlatformBom().getArtifactId());
 
-            final ProjectDependencyConfig.Mutable dominoConfig = ProjectDependencyConfig.builder()
-                    .setProjectBom(ArtifactCoords.pom(member.getInputBom().getGroupId(), member.getInputBom().getArtifactId(),
-                            member.getInputBom().getVersion()));
+            final ProjectDependencyConfig.Mutable dominoConfig = ProjectDependencyConfig.builder();
+            if (member.getInputBom() != null) {
+                dominoConfig.setProjectBom(ArtifactCoords.pom(member.getInputBom().getGroupId(),
+                        member.getInputBom().getArtifactId(), member.getInputBom().getVersion()));
+            }
 
             if (!this.quarkusCore.descriptorCoords().equals(member.descriptorCoords())) {
                 var quarkusBom = quarkusCore.getGeneratedPlatformBom();

@@ -276,6 +276,7 @@ public class ProjectDependencyResolver {
     private MessageWriter log;
     private final List<ArtifactCoordsPattern> excludeSet;
     private final List<ArtifactCoordsPattern> includeSet;
+    private final ArtifactSet artifactSelector;
     private final List<DependencyTreeVisitor> treeVisitors;
 
     private PrintStream fileOutput;
@@ -313,6 +314,7 @@ public class ProjectDependencyResolver {
         includeSet = new ArrayList<>(config.getIncludeArtifacts().size() + config.getIncludePatterns().size());
         config.getIncludePatterns().forEach(p -> includeSet.add(ArtifactCoordsPattern.of(p)));
         config.getIncludeArtifacts().forEach(c -> includeSet.add(ArtifactCoordsPattern.of(c)));
+        artifactSelector = ArtifactSet.builder().excludes(config.getHidePatterns()).build();
         if (config.isLogTrees() || config.getLogTreesFor() != null) {
             treeVisitors = new ArrayList<>(builder.visitors.size() + 1);
             treeVisitors.addAll(builder.visitors);
@@ -374,35 +376,38 @@ public class ProjectDependencyResolver {
 
     public void log() {
 
-        final boolean logCodeRepos = config.isLogCodeRepos() || config.isLogCodeRepoTree();
-
         try {
             resolveDependencies();
             int codeReposTotal = 0;
+            int reportedArtifactsTotal = 0;
             if (config.isLogArtifactsToBuild() && !allDepsToBuild.isEmpty()) {
                 logComment("Artifacts to be built from source from "
                         + (config.getProjectBom() == null ? "" : config.getProjectBom().toCompactCoords()) + ":");
-                if (logCodeRepos) {
+                if (config.isLogCodeRepos() || config.isLogCodeRepoTree()) {
                     configureReleaseRepoDeps();
-                    codeReposTotal = releaseRepos.size();
+                    final List<ReleaseRepo> sorted = ReleaseCollection.filter(ReleaseCollection.sort(releaseRepos.values()),
+                            artifactSelector);
+                    codeReposTotal = sorted.size();
 
-                    final List<ReleaseRepo> sorted = ReleaseCollection.sort(releaseRepos.values());
                     if (Boolean.getBoolean("logMissingPncBuilds")) {
                         for (ReleaseRepo e : sorted) {
-                            logMissingPncBuilds(e, getLatestPncVersions(sorted));
+                            reportedArtifactsTotal += logMissingPncBuilds(e, getLatestPncVersions(sorted));
                         }
                     } else if (Boolean.getBoolean("logLatestPncBuilds")) {
                         for (ReleaseRepo e : sorted) {
                             logComment("repo-url " + e.getRevision().getRepository());
                             logComment("tag " + e.getRevision().getValue());
                             logLatestPncBuilds(e, getLatestPncVersions(sorted));
+                            reportedArtifactsTotal += e.artifacts.size();
                         }
                     } else {
                         for (ReleaseRepo e : sorted) {
                             logComment("repo-url " + e.getRevision().getRepository());
                             logComment("tag " + e.getRevision().getValue());
-                            for (String s : toSortedStrings(e.artifacts.keySet(), config.isLogModulesToBuild())) {
+                            for (String s : toSortedStrings(e.artifacts.keySet(), artifactSelector,
+                                    config.isLogModulesToBuild())) {
                                 log(s);
+                                ++reportedArtifactsTotal;
                             }
                         }
                     }
@@ -431,15 +436,16 @@ public class ProjectDependencyResolver {
                     }
 
                 } else {
-                    for (String s : toSortedStrings(allDepsToBuild.keySet(), config.isLogModulesToBuild())) {
+                    for (String s : toSortedStrings(allDepsToBuild.keySet(), artifactSelector, config.isLogModulesToBuild())) {
                         log(s);
+                        ++reportedArtifactsTotal;
                     }
                 }
             }
 
             if (config.isLogNonManagedVisitied() && !nonManagedVisited.isEmpty()) {
                 logComment("Non-managed dependencies visited walking dependency trees:");
-                final List<String> sorted = toSortedStrings(nonManagedVisited, config.isLogModulesToBuild());
+                final List<String> sorted = toSortedStrings(nonManagedVisited, artifactSelector, config.isLogModulesToBuild());
                 for (int i = 0; i < sorted.size(); ++i) {
                     logComment((i + 1) + ") " + sorted.get(i));
                 }
@@ -447,7 +453,7 @@ public class ProjectDependencyResolver {
 
             if (config.isLogRemaining()) {
                 logComment("Remaining artifacts include:");
-                final List<String> sorted = toSortedStrings(remainingDeps, config.isLogModulesToBuild());
+                final List<String> sorted = toSortedStrings(remainingDeps, artifactSelector, config.isLogModulesToBuild());
                 for (int i = 0; i < sorted.size(); ++i) {
                     logComment((i + 1) + ") " + sorted.get(i));
                 }
@@ -473,7 +479,7 @@ public class ProjectDependencyResolver {
                 logComment(sb.toString());
 
                 sb.setLength(0);
-                sb.append(allDepsToBuild.size()).append(" artifacts");
+                sb.append(reportedArtifactsTotal).append(" artifacts");
                 if (codeReposTotal > 0) {
                     sb.append(" from ").append(codeReposTotal).append(" code repositories");
                 }
@@ -495,7 +501,7 @@ public class ProjectDependencyResolver {
         }
     }
 
-    private void logMissingPncBuilds(ReleaseRepo release, Map<io.quarkus.maven.dependency.GAV, String> pncVersions) {
+    private int logMissingPncBuilds(ReleaseRepo release, Map<io.quarkus.maven.dependency.GAV, String> pncVersions) {
         List<String> lines = null;
         var gavs = config.isLogModulesToBuild() ? new HashSet<io.quarkus.maven.dependency.GAV>() : null;
         for (var c : release.artifacts.keySet()) {
@@ -524,6 +530,7 @@ public class ProjectDependencyResolver {
                 log(line);
             }
         }
+        return lines == null ? 0 : lines.size();
     }
 
     private void logLatestPncBuilds(ReleaseRepo e, Map<io.quarkus.maven.dependency.GAV, String> pncVersions) {
@@ -1228,18 +1235,23 @@ public class ProjectDependencyResolver {
         }
     }
 
-    private static List<String> toSortedStrings(Collection<ArtifactCoords> coords, boolean asModules) {
+    private static List<String> toSortedStrings(Collection<ArtifactCoords> coords, ArtifactSet artifactSelector,
+            boolean asModules) {
         final List<String> list;
         if (asModules) {
             final Set<String> set = new HashSet<>();
             for (ArtifactCoords c : coords) {
-                set.add(c.getGroupId() + ":" + c.getArtifactId() + ":" + c.getVersion());
+                if (artifactSelector.contains(c)) {
+                    set.add(c.getGroupId() + ":" + c.getArtifactId() + ":" + c.getVersion());
+                }
             }
             list = new ArrayList<>(set);
         } else {
             list = new ArrayList<>(coords.size());
             for (ArtifactCoords c : coords) {
-                list.add(c.toGACTVString());
+                if (artifactSelector.contains(c)) {
+                    list.add(c.toGACTVString());
+                }
             }
         }
         Collections.sort(list);
