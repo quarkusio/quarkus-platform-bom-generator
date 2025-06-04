@@ -6,6 +6,8 @@ import io.quarkus.domino.ProjectDependencyResolver;
 import io.quarkus.domino.manifest.SbomGeneratingDependencyVisitor;
 import io.quarkus.domino.manifest.SbomGenerator;
 import java.nio.file.Path;
+import java.util.Collection;
+import java.util.List;
 import picocli.CommandLine;
 
 @CommandLine.Command(name = "report")
@@ -39,6 +41,10 @@ public class Report extends BaseDepsToBuildCommand {
             "--hashes" }, description = "Whether to calculate hashes for manifested components", defaultValue = "true")
     public boolean hashes;
 
+    @CommandLine.Option(names = {
+            "--hide-artifacts" }, description = "Patterns of artifact coordinates whose dependencies should be processed but the artifacts themselves should be excluded from the report", split = ",")
+    public Collection<String> hideArtifacts = List.of();
+
     @Override
     protected Path getConfigDir() {
         if (manifest || flatManifest) {
@@ -59,6 +65,10 @@ public class Report extends BaseDepsToBuildCommand {
             }
             if (!flatManifest) {
                 config.setVerboseGraphs(MANIFEST_DEPS_GRAPH.equals(manifestDependencies));
+            }
+        } else {
+            if (!hideArtifacts.isEmpty()) {
+                config.setHidePatterns(hideArtifacts);
             }
         }
     }

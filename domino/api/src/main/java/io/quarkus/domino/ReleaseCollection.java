@@ -13,6 +13,17 @@ import java.util.Set;
 
 public class ReleaseCollection implements Iterable<ReleaseRepo> {
 
+    static List<ReleaseRepo> filter(Collection<ReleaseRepo> repos, ArtifactSet artifactSelector) {
+        final List<ReleaseRepo> result = new ArrayList<>(repos.size());
+        for (var repo : repos) {
+            repo.getArtifacts().keySet().removeIf(artifactCoords -> !artifactSelector.contains(artifactCoords));
+            if (!repo.getArtifacts().isEmpty()) {
+                result.add(repo);
+            }
+        }
+        return result;
+    }
+
     static List<ReleaseRepo> sort(Collection<ReleaseRepo> releaseRepos) {
         final int codeReposTotal = releaseRepos.size();
         final List<ReleaseRepo> sorted = new ArrayList<>(codeReposTotal);

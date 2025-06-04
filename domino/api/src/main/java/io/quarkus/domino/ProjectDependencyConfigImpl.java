@@ -46,6 +46,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     private final boolean warnOnMissingScm;
     private final boolean includeAlreadyBuilt;
     private final boolean includeOptionalDeps;
+    private final Collection<String> hidePatterns;
     private final boolean gradleJava8;
     private final String gradleJavaHome;
 
@@ -79,6 +80,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         logCodeRepos = other.isLogCodeRepos();
         logCodeRepoTree = other.isLogCodeRepoTree();
         includeAlreadyBuilt = other.isIncludeAlreadyBuilt();
+        hidePatterns = toUnmodifiableList(other.getHidePatterns());
         recipeRepos = toUnmodifiableList(other.getRecipeRepos());
         validateCodeRepoTags = other.isValidateCodeRepoTags();
         legacyScmLocator = other.isLegacyScmLocator();
@@ -253,6 +255,11 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     }
 
     @Override
+    public Collection<String> getHidePatterns() {
+        return hidePatterns;
+    }
+
+    @Override
     public boolean isGradleJava8() {
         return gradleJava8;
     }
@@ -294,6 +301,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         private boolean warnOnMissingScm;
         private boolean includeAlreadyBuilt;
         private boolean includeOptionalDeps;
+        private Collection<String> hidePatterns = new ArrayList<>(0);
         private boolean gradleJava8;
         private String gradleJavaHome;
 
@@ -492,6 +500,11 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         @Override
         public boolean isIncludeOptionalDeps() {
             return includeOptionalDeps;
+        }
+
+        @Override
+        public Collection<String> getHidePatterns() {
+            return hidePatterns;
         }
 
         @Override
@@ -700,6 +713,12 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         @Override
         public Mutable setIncludeOptionalDeps(boolean includeOptionalDeps) {
             this.includeOptionalDeps = includeOptionalDeps;
+            return this;
+        }
+
+        @Override
+        public Mutable setHidePatterns(Collection<String> hidePatterns) {
+            this.hidePatterns = hidePatterns;
             return this;
         }
 

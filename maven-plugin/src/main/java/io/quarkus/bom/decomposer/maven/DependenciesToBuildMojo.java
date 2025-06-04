@@ -316,6 +316,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 .setExcludeKeys(dependenciesToBuild.getExcludeKeys())
                 .setExcludeBomImports(excludeBomImports)
                 .setExcludeParentPoms(excludeParentPoms)
+                .setHidePatterns(dependenciesToBuild.getHideArtifacts())
                 .setLevel(level)
                 .setLogArtifactsToBuild(logArtifactsToBuild)
                 .setLogCodeRepoTree(logCodeRepoGraph)

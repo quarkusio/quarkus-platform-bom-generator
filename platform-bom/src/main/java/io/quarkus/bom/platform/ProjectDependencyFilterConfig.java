@@ -13,6 +13,7 @@ public class ProjectDependencyFilterConfig {
     private Set<String> includeGroupIds = Set.of();
     private Set<ArtifactKey> includeKeys = Set.of();
     private Set<ArtifactCoords> includeArtifacts = Set.of();
+    private Set<String> hideArtifacts = Set.of();
 
     private static <T> Set<T> mergeIn(Set<T> s1, Set<T> s2) {
         if (s1.isEmpty()) {
@@ -34,6 +35,7 @@ public class ProjectDependencyFilterConfig {
         includeGroupIds = mergeIn(includeGroupIds, other.includeGroupIds);
         includeKeys = mergeIn(includeKeys, other.includeKeys);
         includeArtifacts = mergeIn(includeArtifacts, other.includeArtifacts);
+        hideArtifacts = mergeIn(hideArtifacts, other.hideArtifacts);
     }
 
     public Set<String> getExcludeGroupIds() {
@@ -86,5 +88,13 @@ public class ProjectDependencyFilterConfig {
     public void setIncludeArtifacts(Set<String> includeArtifacts) {
         this.includeArtifacts = new HashSet<>(includeArtifacts.size());
         includeArtifacts.forEach(s -> this.includeArtifacts.add(ArtifactCoords.fromString(s)));
+    }
+
+    public Set<String> getHideArtifacts() {
+        return hideArtifacts;
+    }
+
+    public void setHideArtifacts(Set<String> hideArtifacts) {
+        this.hideArtifacts = hideArtifacts;
     }
 }

@@ -229,6 +229,15 @@ public interface ProjectDependencyConfig {
     boolean isIncludeOptionalDeps();
 
     /**
+     * Patterns of artifact coordinates that should be included in the dependency analysis but excluded from the report.
+     * This option is useful when dependencies of a specific artifact should be included in the report but not the artifact
+     * itself.
+     *
+     * @return patterns of artifact coordinates that should be included in the dependency analysis but excluded from the report
+     */
+    Collection<String> getHidePatterns();
+
+    /**
      * Whether to use Java 8 to fetch dependency information from a Gradle project.
      * In case this method returns true, the value of JAVA8_HOME environment variable will be used as the Java 8 home directory.
      * 
@@ -351,6 +360,8 @@ public interface ProjectDependencyConfig {
         Mutable setIncludeAlreadyBuilt(boolean includeAlreadyBuilt);
 
         Mutable setIncludeOptionalDeps(boolean includeOptionalDeps);
+
+        Mutable setHidePatterns(Collection<String> hidePatterns);
 
         Mutable setGradleJava8(boolean java8);
 
