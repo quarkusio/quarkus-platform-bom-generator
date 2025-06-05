@@ -68,7 +68,7 @@ public class Report extends BaseDepsToBuildCommand {
             }
         } else {
             if (!hideArtifacts.isEmpty()) {
-                config.setHidePatterns(hideArtifacts);
+                config.setHideArtifacts(hideArtifacts);
             }
         }
     }

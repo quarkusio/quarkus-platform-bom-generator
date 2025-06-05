@@ -925,6 +925,15 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                             keyDom.setValue(key);
                         }
                     }
+                    if (!depsToBuildConfig.getHideArtifacts().isEmpty()) {
+                        final Xpp3Dom hideArtifactsDom = newDomChildrenAppend("hideArtifacts");
+                        depsToBuildDom.addChild(hideArtifactsDom);
+                        for (String key : sortAsString(depsToBuildConfig.getHideArtifacts())) {
+                            final Xpp3Dom keyDom = newDom("artifact");
+                            hideArtifactsDom.addChild(keyDom);
+                            keyDom.setValue(key);
+                        }
+                    }
 
                     configureInclusions(depsToBuildConfig, depsToBuildDom);
                 }

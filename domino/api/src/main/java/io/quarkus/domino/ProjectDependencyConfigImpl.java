@@ -46,7 +46,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     private final boolean warnOnMissingScm;
     private final boolean includeAlreadyBuilt;
     private final boolean includeOptionalDeps;
-    private final Collection<String> hidePatterns;
+    private final Collection<String> hideArtifacts;
     private final boolean gradleJava8;
     private final String gradleJavaHome;
 
@@ -80,7 +80,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         logCodeRepos = other.isLogCodeRepos();
         logCodeRepoTree = other.isLogCodeRepoTree();
         includeAlreadyBuilt = other.isIncludeAlreadyBuilt();
-        hidePatterns = toUnmodifiableList(other.getHidePatterns());
+        hideArtifacts = toUnmodifiableList(other.getHideArtifacts());
         recipeRepos = toUnmodifiableList(other.getRecipeRepos());
         validateCodeRepoTags = other.isValidateCodeRepoTags();
         legacyScmLocator = other.isLegacyScmLocator();
@@ -255,8 +255,8 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     }
 
     @Override
-    public Collection<String> getHidePatterns() {
-        return hidePatterns;
+    public Collection<String> getHideArtifacts() {
+        return hideArtifacts;
     }
 
     @Override
@@ -301,7 +301,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         private boolean warnOnMissingScm;
         private boolean includeAlreadyBuilt;
         private boolean includeOptionalDeps;
-        private Collection<String> hidePatterns = new ArrayList<>(0);
+        private Collection<String> hideArtifacts = new ArrayList<>(0);
         private boolean gradleJava8;
         private String gradleJavaHome;
 
@@ -503,8 +503,8 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         }
 
         @Override
-        public Collection<String> getHidePatterns() {
-            return hidePatterns;
+        public Collection<String> getHideArtifacts() {
+            return hideArtifacts;
         }
 
         @Override
@@ -717,8 +717,8 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         }
 
         @Override
-        public Mutable setHidePatterns(Collection<String> hidePatterns) {
-            this.hidePatterns = hidePatterns;
+        public Mutable setHideArtifacts(Collection<String> hidePatterns) {
+            this.hideArtifacts = hidePatterns;
             return this;
         }
 
