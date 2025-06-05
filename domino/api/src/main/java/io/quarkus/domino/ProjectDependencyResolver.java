@@ -314,7 +314,7 @@ public class ProjectDependencyResolver {
         includeSet = new ArrayList<>(config.getIncludeArtifacts().size() + config.getIncludePatterns().size());
         config.getIncludePatterns().forEach(p -> includeSet.add(ArtifactCoordsPattern.of(p)));
         config.getIncludeArtifacts().forEach(c -> includeSet.add(ArtifactCoordsPattern.of(c)));
-        artifactSelector = ArtifactSet.builder().excludes(config.getHidePatterns()).build();
+        artifactSelector = ArtifactSet.builder().excludes(config.getHideArtifacts()).build();
         if (config.isLogTrees() || config.getLogTreesFor() != null) {
             treeVisitors = new ArrayList<>(builder.visitors.size() + 1);
             treeVisitors.addAll(builder.visitors);

@@ -100,6 +100,14 @@ public class PlatformMemberConfig {
         if (!overrides.ownGroupIds.isEmpty()) {
             ownGroupIds.addAll(overrides.ownGroupIds);
         }
+
+        if (overrides.depsToBuild != null) {
+            if (depsToBuild == null) {
+                depsToBuild = overrides.depsToBuild;
+            } else {
+                depsToBuild.merge(overrides.depsToBuild);
+            }
+        }
     }
 
     public void setName(String name) {

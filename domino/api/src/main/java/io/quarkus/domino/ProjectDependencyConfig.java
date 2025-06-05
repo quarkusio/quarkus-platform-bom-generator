@@ -235,7 +235,7 @@ public interface ProjectDependencyConfig {
      *
      * @return patterns of artifact coordinates that should be included in the dependency analysis but excluded from the report
      */
-    Collection<String> getHidePatterns();
+    Collection<String> getHideArtifacts();
 
     /**
      * Whether to use Java 8 to fetch dependency information from a Gradle project.
@@ -361,7 +361,7 @@ public interface ProjectDependencyConfig {
 
         Mutable setIncludeOptionalDeps(boolean includeOptionalDeps);
 
-        Mutable setHidePatterns(Collection<String> hidePatterns);
+        Mutable setHideArtifacts(Collection<String> hidePatterns);
 
         Mutable setGradleJava8(boolean java8);
 
