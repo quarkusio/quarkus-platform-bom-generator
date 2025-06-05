@@ -341,7 +341,7 @@ public class ProjectDependencyResolver {
     public ReleaseCollection getReleaseCollection() {
         resolveDependencies();
         configureReleaseRepoDeps();
-        return ReleaseCollection.of(new ArrayList<>(releaseRepos.values()));
+        return ReleaseCollection.of(ReleaseCollection.filter(releaseRepos.values(), artifactSelector));
     }
 
     /**
