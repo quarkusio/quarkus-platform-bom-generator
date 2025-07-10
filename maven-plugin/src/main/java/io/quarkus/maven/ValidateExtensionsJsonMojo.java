@@ -228,8 +228,7 @@ public class ValidateExtensionsJsonMojo extends AbstractMojo {
             final Path metaInf = visit.getPath();
             final Path descrProps = metaInf.resolve(BootstrapConstants.DESCRIPTOR_FILE_NAME);
             final Path descrYaml = metaInf.resolve(BootstrapConstants.QUARKUS_EXTENSION_FILE_NAME);
-            final Path descrJson = metaInf.resolve(BootstrapConstants.EXTENSION_PROPS_JSON_FILE_NAME);
-            if (ensureExtensionMetadata(artifact, descrProps, descrYaml, descrJson)) {
+            if (ensureExtensionMetadata(artifact, descrProps, descrYaml)) {
                 final ArtifactCoords deployment = readDeploymentCoords(descrProps, artifact);
                 final ArtifactKey key = ArtifactKey.of(artifact.getGroupId(), artifact.getArtifactId(),
                         artifact.getClassifier(),
@@ -257,9 +256,9 @@ public class ValidateExtensionsJsonMojo extends AbstractMojo {
         return deployment;
     }
 
-    private static boolean ensureExtensionMetadata(Artifact a, Path properties, Path yaml, Path json) {
+    private static boolean ensureExtensionMetadata(Artifact a, Path properties, Path yaml) {
         final boolean propsExist = Files.exists(properties);
-        final boolean metadataExists = Files.exists(yaml) || Files.exists(json);
+        final boolean metadataExists = Files.exists(yaml);
         if (propsExist == metadataExists) {
             return propsExist;
         }
