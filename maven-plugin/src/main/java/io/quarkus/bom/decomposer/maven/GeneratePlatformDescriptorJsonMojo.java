@@ -747,17 +747,12 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
         }
 
         Extension.Mutable e = null;
-        Path json = metaInfDir.resolve(BootstrapConstants.EXTENSION_PROPS_JSON_FILE_NAME);
-        if (!Files.exists(json)) {
-            final Path props = metaInfDir.resolve(BootstrapConstants.DESCRIPTOR_FILE_NAME);
-            if (Files.exists(props)) {
-                e = Extension.builder();
-                e.setArtifact(ArtifactCoords.of(artifact.getGroupId(), artifact.getArtifactId(),
-                        artifact.getClassifier(), artifact.getExtension(), artifact.getVersion()));
-                e.setName(artifact.getArtifactId());
-            }
-        } else {
-            e = processPlatformArtifact(artifact, json);
+        final Path props = metaInfDir.resolve(BootstrapConstants.DESCRIPTOR_FILE_NAME);
+        if (Files.exists(props)) {
+            e = Extension.builder();
+            e.setArtifact(ArtifactCoords.of(artifact.getGroupId(), artifact.getArtifactId(),
+                    artifact.getClassifier(), artifact.getExtension(), artifact.getVersion()));
+            e.setName(artifact.getArtifactId());
         }
         return e;
     }
