@@ -3,7 +3,7 @@
   <parent>
     <groupId>io.quarkus</groupId>
     <artifactId>quarkus-platform-bom-it-parent</artifactId>
-    <version>0.0.123</version>
+    <version>999-SNAPSHOT</version>
   </parent>
 
   <artifactId>quarkus-platform-bom-it-platform-generator</artifactId>
