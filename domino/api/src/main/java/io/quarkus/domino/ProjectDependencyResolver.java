@@ -606,13 +606,13 @@ public class ProjectDependencyResolver {
         }
 
         for (ArtifactCoords coords : getProjectArtifacts()) {
-            if (isIncluded(coords) || !isExcluded(coords)) {
+            if (isIncluded(coords)) {
                 processRootArtifact(coords);
             }
         }
 
         for (ArtifactCoords coords : toSortedCoords(config.getIncludeArtifacts())) {
-            if (isIncluded(coords) || !isExcluded(coords)) {
+            if (isIncluded(coords)) {
                 processRootArtifact(coords);
             }
         }
@@ -624,6 +624,17 @@ public class ProjectDependencyResolver {
         for (DependencyTreeVisitor v : treeVisitors) {
             v.afterAllRoots();
         }
+    }
+
+    /**
+     * An artefact is included if it is in the inclusion list or it is not in the
+     * exclusion list. Inclusion beats exclusion.
+     * 
+     * @param coords coords
+     * @return included
+     */
+    private boolean isIncluded(ArtifactCoords coords) {
+        return isExplicitlyIncluded(coords) || !isExplicitlyExcluded(coords);
     }
 
     private static List<ArtifactCoords> toSortedCoords(Collection<ArtifactCoords> col) {
@@ -695,9 +706,9 @@ public class ProjectDependencyResolver {
             for (ArtifactCoords d : projectBomConstraints) {
                 final boolean collect;
                 if (includeSet.isEmpty()) {
-                    collect = d.getGroupId().startsWith(config.getProjectBom().getGroupId()) && !isExcluded(d);
+                    collect = d.getGroupId().startsWith(config.getProjectBom().getGroupId()) && !isExplicitlyExcluded(d);
                 } else {
-                    collect = !isExcluded(d) && isIncluded(d);
+                    collect = !isExplicitlyExcluded(d) && isExplicitlyIncluded(d);
                 }
                 if (collect) {
                     result.add(d);
@@ -803,7 +814,7 @@ public class ProjectDependencyResolver {
             }
             for (DependencyNode d : root.getChildren()) {
                 if (d.getDependency().isOptional()
-                        && !(config.isIncludeOptionalDeps() || isIncluded(toCoords(d.getArtifact())))) {
+                        && !(config.isIncludeOptionalDeps() || isExplicitlyIncluded(toCoords(d.getArtifact())))) {
                     continue;
                 }
                 processNodes(d, 1, false);
@@ -1294,7 +1305,7 @@ public class ProjectDependencyResolver {
         if (winner != null) {
             final ArtifactCoords coords = toCoords(winner.getArtifact());
             // linked dependencies should also be checked for exclusions
-            if (!isExcluded(coords)) {
+            if (!isExplicitlyExcluded(coords)) {
                 for (DependencyTreeVisitor v : treeVisitors) {
                     v.linkDependency(coords);
                 }
@@ -1303,7 +1314,7 @@ public class ProjectDependencyResolver {
         }
 
         final ArtifactCoords coords = toCoords(node.getArtifact());
-        if (isExcluded(coords)) {
+        if (!isIncluded(coords)) {
             return;
         }
         ResolvedDependency visit = null;
@@ -1353,7 +1364,7 @@ public class ProjectDependencyResolver {
 
         if (managed
                 || config.isIncludeNonManaged()
-                || isIncluded(coords)
+                || isExplicitlyIncluded(coords)
                 || coords.getType().equals(ArtifactCoords.TYPE_POM)
                         && (!config.isExcludeParentPoms()
                                 || projectGavs.contains(toGav(coords)))) {
@@ -1428,7 +1439,7 @@ public class ProjectDependencyResolver {
             if (parentVersion != null) {
                 final ArtifactCoords parentPomCoords = ArtifactCoords.pom(parent.getGroupId(), parent.getArtifactId(),
                         parentVersion);
-                if (!isExcluded(parentPomCoords)) {
+                if (!isExplicitlyExcluded(parentPomCoords)) {
                     final ResolvedDependency resolvedParent = addArtifactToBuild(parentPomCoords, dependency.getRepositories());
                     artDep.setParentPom(getOrCreateArtifactDep(resolvedParent));
                     parentPomProps = addImportedBomsAndParentPomToBuild(resolvedParent);
@@ -1481,7 +1492,7 @@ public class ProjectDependencyResolver {
                     continue;
                 }
                 final ArtifactCoords bomCoords = ArtifactCoords.pom(groupId, artifactId, version);
-                if (!isExcluded(bomCoords)) {
+                if (!isExplicitlyExcluded(bomCoords)) {
                     final ResolvedDependency resolvedImport = addArtifactToBuild(bomCoords,
                             pomArtDep.resolved.getRepositories());
                     if (resolvedImport != null) {
@@ -1513,7 +1524,7 @@ public class ProjectDependencyResolver {
         }
     }
 
-    private boolean isExcluded(ArtifactCoords coords) {
+    private boolean isExplicitlyExcluded(ArtifactCoords coords) {
         for (ArtifactCoordsPattern pattern : excludeSet) {
             if (pattern.matches(coords)) {
                 return true;
@@ -1522,7 +1533,7 @@ public class ProjectDependencyResolver {
         return false;
     }
 
-    private boolean isIncluded(ArtifactCoords coords) {
+    private boolean isExplicitlyIncluded(ArtifactCoords coords) {
         for (ArtifactCoordsPattern pattern : includeSet) {
             if (pattern.matches(coords)) {
                 return true;
