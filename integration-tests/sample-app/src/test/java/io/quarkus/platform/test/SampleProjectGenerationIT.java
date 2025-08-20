@@ -156,7 +156,11 @@ public class SampleProjectGenerationIT {
                 } catch (Exception e) {
                     log.error("Failed to destroy the process", e);
                 }
-                fail("The process has exceeded the time out limit of " + getBuildAppTimeout() + " seconds");
+                final String timeoutMessage = "The process has exceeded the timeout limit of " + getBuildAppTimeout()
+                        + " seconds";
+                log.error(timeoutMessage);
+                logCliProcessOutput(cliLog, cliErrors);
+                fail(timeoutMessage);
             }
         } catch (InterruptedException e) {
             log.error("Interrupted waiting for the process to complete", e);
@@ -170,6 +174,25 @@ public class SampleProjectGenerationIT {
                 fail(Files.readString(cliLog));
             }
             fail(Files.readString(cliErrors));
+        }
+    }
+
+    private static void logCliProcessOutput(Path cliLog, Path cliErrors) throws IOException {
+        if (Files.exists(cliLog)) {
+            String output = Files.readString(cliLog);
+            if (!output.isBlank()) {
+                log.info("BEGIN the CLI process output:");
+                log.info(output);
+                log.info("END the CLI process output");
+            }
+        }
+        if (Files.exists(cliLog)) {
+            String output = Files.readString(cliErrors);
+            if (!output.isBlank()) {
+                log.info("BEGIN the CLI process error output:");
+                log.info(output);
+                log.info("END the CLI process error output");
+            }
         }
     }
 
@@ -213,7 +236,11 @@ public class SampleProjectGenerationIT {
                 } catch (Exception e) {
                     log.error("Failed to destroy the process", e);
                 }
-                fail("The process has exceeded the time out limit of " + getGenerateAppTimeout() + " seconds");
+                final String timeoutMessage = "The process has exceeded the time out limit of " + getGenerateAppTimeout()
+                        + " seconds";
+                log.error(timeoutMessage);
+                logCliProcessOutput(cliLog, cliErrors);
+                fail(timeoutMessage);
             }
         } catch (InterruptedException e) {
             log.error("Interrupted waiting for the process to complete", e);
