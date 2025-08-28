@@ -10,6 +10,7 @@ import io.quarkus.maven.dependency.ArtifactKey;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -36,6 +37,10 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
     @CommandLine.Option(names = {
             "--root-artifacts" }, description = "Root artifacts whose dependencies should be built from source", split = ",")
     public Collection<String> rootArtifacts = List.of();
+
+    @CommandLine.Option(names = {
+            "--include-patterns" }, description = "Artifact inclusion patterns", split = ",")
+    public Collection<String> includePatterns = List.of();
 
     @CommandLine.Option(names = {
             "--level" }, description = "Dependency tree depth level to which the dependencies should be analyzed. If a level is not specified, there is no limit on the level.", defaultValue = "-1")
@@ -309,6 +314,7 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
                 .setExcludeParentPoms(excludeParentPoms != null && excludeParentPoms)
                 .setIncludeGroupIds(includeGroupIds == null ? Set.of() : includeGroupIds)
                 .setIncludeKeys(Set.of()) // TODO
+                .setIncludePatterns(toArtifactCoordsList(includePatterns))
                 .setLogArtifactsToBuild(logArtifactsToBuild)
                 .setLogTreesFor(logTreesFor)
                 .setLogCodeRepoTree(logCodeRepoGraph)
@@ -355,4 +361,15 @@ public abstract class BaseDepsToBuildCommand implements Callable<Integer> {
     }
 
     protected abstract Integer process(ProjectDependencyResolver depResolver);
+
+    private static List<ArtifactCoords> toArtifactCoordsList(Collection<String> strList) {
+        if (strList == null || strList.isEmpty()) {
+            return List.of();
+        }
+        final List<ArtifactCoords> result = new ArrayList<>(strList.size());
+        for (var s : strList) {
+            result.add(ArtifactCoords.fromString(s));
+        }
+        return result;
+    }
 }
