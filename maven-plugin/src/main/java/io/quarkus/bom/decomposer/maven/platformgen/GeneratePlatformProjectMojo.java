@@ -52,8 +52,10 @@ import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.paths.PathTree;
 import io.quarkus.registry.Constants;
 import io.quarkus.registry.catalog.CatalogMapperHelper;
+import io.quarkus.registry.catalog.Extension;
 import io.quarkus.registry.catalog.ExtensionCatalog;
 import io.quarkus.registry.util.PlatformArtifacts;
+import io.quarkus.util.GlobUtil;
 import java.io.*;
 import java.net.MalformedURLException;
 import java.nio.file.FileVisitResult;
@@ -77,6 +79,7 @@ import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
 import java.util.StringJoiner;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import javax.xml.transform.Result;
 import javax.xml.transform.Source;
@@ -149,6 +152,23 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     public static final String EXCLUDE = "exclude";
     public static final String INCLUDE = "include";
 
+    /**
+     * Compiles glob patters to {@link Pattern}.
+     *
+     * @param patterns glob patterns
+     * @return compiled patterns
+     */
+    private static List<Pattern> compilePatterns(List<String> patterns) {
+        if (patterns == null || patterns.isEmpty()) {
+            return List.of();
+        }
+        final List<Pattern> compiled = new ArrayList<>(patterns.size());
+        for (var pattern : patterns) {
+            compiled.add(Pattern.compile(GlobUtil.toRegexPattern(pattern)));
+        }
+        return compiled;
+    }
+
     @Component
     RepositorySystem repoSystem;
 
@@ -188,6 +208,13 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
     @Parameter(property = "recordUpdatedBoms")
     boolean recordUpdatedBoms;
+
+    /**
+     * Extension metadata key glob patterns used when determining whether an extension should be selected for a rebuild
+     * from source. The default value is {@code *-support}.
+     */
+    @Parameter(property = "dominoBuildExtensionSupportPatterns", defaultValue = "*-support")
+    List<String> dominoBuildExtensionSupportPatterns;
 
     Artifact universalBom;
     MavenArtifactResolver nonWsResolver;
@@ -417,6 +444,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     private void generateDominoManifestCliConfig() throws MojoExecutionException {
         final Path dominoDir = deleteAndCreateDir(Path.of(DominoInfo.CONFIG_DIR_NAME).resolve("manifest"));
         final SbomerGlobalConfig globalSbomerConfig = platformConfig.getSbomer();
+        List<Pattern> extensionSupportPatterns = null;
         SbomerConfig sbomerConfig = null;
         for (PlatformMember member : members.values()) {
             if (!member.config().isEnabled() || member.config().isHidden()) {
@@ -499,12 +527,15 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                     throw new IllegalStateException("The SBOM generator for member " + member.config().getName()
                             + " is configured to include only supported extensions but no support metadata override sources were provided");
                 }
+                if (extensionSupportPatterns == null) {
+                    extensionSupportPatterns = compilePatterns(dominoBuildExtensionSupportPatterns);
+                }
                 selectedKeys = new HashSet<>(metadataOverrides.size());
                 for (Path p : metadataOverrides) {
                     try {
                         ExtensionCatalog c = ExtensionCatalog.fromFile(p);
                         for (var e : c.getExtensions()) {
-                            if (e.getMetadata().containsKey("redhat-support")) {
+                            if (isMatchesDominoBuildPattern(e, extensionSupportPatterns)) {
                                 var key = e.getArtifact().getKey();
                                 selectedKeys.add(key);
                                 selectedKeys.add(ArtifactKey.of(key.getGroupId(), key.getArtifactId() + "-deployment",
@@ -541,6 +572,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     private void generateDominoBuildCliConfig() throws MojoExecutionException {
         final Path dominoDir = deleteAndCreateDir(
                 Path.of(DominoInfo.CONFIG_DIR_NAME).normalize().toAbsolutePath().resolve("build"));
+        List<Pattern> supportPatterns = compilePatterns(dominoBuildExtensionSupportPatterns);
+        if (supportPatterns.isEmpty()) {
+            return;
+        }
         for (PlatformMember member : members.values()) {
             if (!member.config().isEnabled() || member.config().isHidden()) {
                 continue;
@@ -590,7 +625,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 try {
                     ExtensionCatalog c = ExtensionCatalog.fromFile(p);
                     for (var e : c.getExtensions()) {
-                        if (e.getMetadata().containsKey("redhat-support")) {
+                        if (isMatchesDominoBuildPattern(e, supportPatterns)) {
                             var key = e.getArtifact().getKey();
                             selectedKeys.add(key);
                             selectedKeys.add(ArtifactKey.of(key.getGroupId(), key.getArtifactId() + "-deployment",
@@ -619,6 +654,17 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                 throw new MojoExecutionException("Failed to persist Domino config", e);
             }
         }
+    }
+
+    private static boolean isMatchesDominoBuildPattern(Extension extension, List<Pattern> patterns) {
+        for (var key : extension.getMetadata().keySet()) {
+            for (var pattern : patterns) {
+                if (pattern.matcher(key).matches()) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private void addExtensionArtifacts(Artifact a, ProjectDependencyConfig.Mutable dominoConfig) {
@@ -3450,9 +3496,10 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     private static Path deleteAndCreateDir(Path dir) throws MojoExecutionException {
         IoUtils.recursiveDelete(dir);
         try {
-            return Files.createDirectories(dir);
+            Files.createDirectories(dir);
         } catch (IOException e) {
             throw new MojoExecutionException("Failed to create directory " + dir, e);
         }
+        return dir;
     }
 }
