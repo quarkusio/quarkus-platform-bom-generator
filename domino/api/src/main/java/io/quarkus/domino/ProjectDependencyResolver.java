@@ -144,7 +144,7 @@ public class ProjectDependencyResolver {
         /**
          * Allows to set a version constraint provider per root artifact, in which case
          * the project BOM and non-project BOMs would be ignored.
-         * 
+         *
          * @param constraintsProvider version constraint provider
          * @return this instance of {@link ProjectDependencyResolver.Builder}
          */
@@ -335,7 +335,7 @@ public class ProjectDependencyResolver {
 
     /**
      * Returns a collection of project releases representing the project and its dependencies.
-     * 
+     *
      * @return collection of project releases representing the project and its dependencies
      */
     public ReleaseCollection getReleaseCollection() {
@@ -346,7 +346,7 @@ public class ProjectDependencyResolver {
 
     /**
      * @deprecated in favor of {@link #getReleaseCollection()}
-     * 
+     *
      * @return collection of dependency releases
      */
     @Deprecated(since = "0.0.79")
@@ -356,7 +356,7 @@ public class ProjectDependencyResolver {
 
     /**
      * @deprecated in favor of {@link #getReleaseCollection()}
-     * 
+     *
      * @return collection of dependency releases sorted according to their dependencies
      */
     @Deprecated(since = "0.0.79")
@@ -616,6 +616,7 @@ public class ProjectDependencyResolver {
                 processRootArtifact(coords);
             }
         }
+        log.debug("Processed all root artifacts");
 
         if (!config.isIncludeAlreadyBuilt()) {
             removeProductizedDeps();
@@ -701,7 +702,6 @@ public class ProjectDependencyResolver {
                 }
                 if (collect) {
                     result.add(d);
-                    log.debug(d.toCompactCoords() + " selected as a top level artifact to build");
                 }
             }
 
@@ -769,16 +769,18 @@ public class ProjectDependencyResolver {
         }
         result.sort(ArtifactCoordsComparator.getInstance());
         if (log.isDebugEnabled()) {
-            log.debug("The following project artifacts will be processed:");
+            log.debug("---------------------------------");
+            log.debug(" Root artifacts to be processed:");
             for (var c : result) {
-                log.debug(c.toCompactCoords());
+                log.debug(" - " + c.toCompactCoords());
             }
+            log.debug("---------------------------------");
         }
         return result;
     }
 
     private void processRootArtifact(ArtifactCoords rootArtifact) {
-
+        log.debug("Processing root artifact " + rootArtifact);
         final List<Dependency> managedDeps = artifactConstraintsProvider.apply(rootArtifact);
         final DependencyNode root = collectDependencies(rootArtifact, managedDeps);
         if (root == null) {
