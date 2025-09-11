@@ -113,7 +113,7 @@ public class ExtensionDependencyVersionChecker {
                         + " is not an instance of java.util.List but " + o.getClass().getName());
                 return;
             }
-            if (!((List<?>) o).stream().filter(i -> CHECK_SUPPORT_LEVELS.contains(i)).findFirst().isPresent()) {
+            if (!((List<?>) o).stream().anyMatch(CHECK_SUPPORT_LEVELS::contains)) {
                 return;
             }
             var a = new DefaultArtifact(extensionCoords.getGroupId(), extensionCoords.getArtifactId(),
@@ -121,7 +121,8 @@ public class ExtensionDependencyVersionChecker {
             final DependencyNode root;
             try {
                 root = repoSystem.collectDependencies(repoSession, new CollectRequest()
-                        .setRootArtifact(new DefaultArtifact("org.acme", "acme-app", null, "jar", "1.0-SNAPSHOT"))
+                        .setRootArtifact(new DefaultArtifact("org.acme", "acme-app",
+                                ArtifactCoords.DEFAULT_CLASSIFIER, ArtifactCoords.TYPE_JAR, "1.0-SNAPSHOT"))
                         .setManagedDependencies(bomConstraints)
                         .addDependency(new Dependency(a, "compile"))
                         .setRepositories(repos)).getRoot();

@@ -14,9 +14,11 @@ import io.quarkus.domino.manifest.SbomGeneratingDependencyVisitor;
 import io.quarkus.domino.manifest.SbomGenerator;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.paths.PathTree;
+import io.quarkus.paths.PathVisit;
 import io.quarkus.registry.catalog.Extension;
 import io.quarkus.registry.catalog.ExtensionCatalog;
 import io.quarkus.registry.util.PlatformArtifacts;
+import io.quarkus.util.GlobUtil;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -30,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.regex.Pattern;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
@@ -51,6 +54,23 @@ import org.eclipse.aether.graph.DependencyNode;
  */
 @Mojo(name = "dependencies-to-build", threadSafe = true, requiresProject = false)
 public class DependenciesToBuildMojo extends AbstractMojo {
+
+    /**
+     * Compiles glob patters to {@link Pattern}.
+     *
+     * @param patterns glob patterns
+     * @return compiled patterns
+     */
+    private static List<Pattern> compilePatterns(List<String> patterns) {
+        if (patterns == null || patterns.isEmpty()) {
+            return List.of();
+        }
+        final List<Pattern> compiled = new ArrayList<>(patterns.size());
+        for (var pattern : patterns) {
+            compiled.add(Pattern.compile(GlobUtil.toRegexPattern(pattern)));
+        }
+        return compiled;
+    }
 
     @Parameter(required = false, defaultValue = "${project.file}")
     File projectFile;
@@ -206,8 +226,13 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     @Parameter(required = false, property = "flatManifest")
     boolean flatManifest;
 
-    @Parameter(required = false, property = "redhatSupported")
-    boolean redhatSupported;
+    /**
+     * Extension metadata key glob patterns used when determining whether an extension should be selected for a rebuild
+     * from source. The default value is {@code *-support}.
+     */
+    @Parameter(property = "supportPatterns", defaultValue = "*-support")
+    List<String> supportPatterns;
+    private List<Pattern> compiledSupportPatterns;
 
     /**
      * Whether to calculate hashes for manifested components
@@ -403,12 +428,38 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         }
     }
 
+    private List<Pattern> getCompiledSupportPatters() {
+        if (compiledSupportPatterns == null) {
+            var result = new ArrayList<Pattern>(supportPatterns.size());
+            for (var pattern : supportPatterns) {
+                result.add(Pattern.compile(pattern));
+            }
+            compiledSupportPatterns = result;
+        }
+        return compiledSupportPatterns;
+    }
+
+    private static boolean isMatchesSupportPattern(Extension extension, List<Pattern> patterns) {
+        for (var key : extension.getMetadata().keySet()) {
+            for (var pattern : patterns) {
+                if (pattern.matcher(key).matches()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean isSelected(Extension ext) {
+        var patterns = getCompiledSupportPatters();
+        return patterns.isEmpty() || isMatchesSupportPattern(ext, patterns);
+    }
+
     private Collection<ArtifactCoords> getExtensionArtifacts(ExtensionCatalog catalog) throws MojoExecutionException {
         final List<ArtifactCoords> supported = new ArrayList<>();
         for (Extension ext : catalog.getExtensions()) {
             ArtifactCoords rtArtifact = ext.getArtifact();
-            if (isExcluded(rtArtifact)
-                    || redhatSupported && !ext.getMetadata().containsKey(("redhat-support"))) {
+            if (isExcluded(rtArtifact) || isSelected(ext)) {
                 continue;
             }
             supported.add(ext.getArtifact());
@@ -422,19 +473,8 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                 } catch (BootstrapMavenException e1) {
                     throw new MojoExecutionException("Failed to resolve " + rtArtifact, e1);
                 }
-                deploymentCoords = PathTree.ofDirectoryOrArchive(rtJar).apply(BootstrapConstants.DESCRIPTOR_PATH, visit -> {
-                    if (visit == null) {
-                        return null;
-                    }
-                    final Properties props = new Properties();
-                    try (BufferedReader reader = Files.newBufferedReader(visit.getPath())) {
-                        props.load(reader);
-                    } catch (IOException e) {
-                        throw new UncheckedIOException(e);
-                    }
-                    final String str = props.getProperty(BootstrapConstants.PROP_DEPLOYMENT_ARTIFACT);
-                    return str == null ? null : ArtifactCoords.fromString(str);
-                });
+                deploymentCoords = PathTree.ofDirectoryOrArchive(rtJar).apply(BootstrapConstants.DESCRIPTOR_PATH,
+                        DependenciesToBuildMojo::getDeploymentArtifactCoords);
                 if (deploymentCoords == null) {
                     throw new MojoExecutionException(
                             "Failed to determine the corresponding deployment artifact for " + rtArtifact.toCompactCoords());
@@ -443,6 +483,20 @@ public class DependenciesToBuildMojo extends AbstractMojo {
             supported.add(deploymentCoords);
         }
         return supported;
+    }
+
+    private static ArtifactCoords getDeploymentArtifactCoords(PathVisit visit) {
+        if (visit == null) {
+            return null;
+        }
+        final Properties props = new Properties();
+        try (BufferedReader reader = Files.newBufferedReader(visit.getPath())) {
+            props.load(reader);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        final String str = props.getProperty(BootstrapConstants.PROP_DEPLOYMENT_ARTIFACT);
+        return str == null ? null : ArtifactCoords.fromString(str);
     }
 
     private boolean isManifestMode() {
