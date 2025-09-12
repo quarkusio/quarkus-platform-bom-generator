@@ -64,7 +64,7 @@ public class ProjectDependencyConfigJsonTest {
     }
 
     @Test
-    public void nonProjectBoms() throws Exception {
+    public void additionalBoms() throws Exception {
         final Path configFile = getTestConfig();
         final List<ArtifactCoords> list = List.of(
                 ArtifactCoords.jar("io.other", "other-lib", "2.0"),
@@ -82,7 +82,8 @@ public class ProjectDependencyConfigJsonTest {
         ProjectDependencyConfig.builder()
                 .setNonProjectBoms(list)
                 .build().persist(configFile);
-        assertThatJson(Files.readString(configFile)).isEqualTo(json("{non-project-boms: " + jsonList + "}"));
+        assertThatJson(Files.readString(configFile))
+                .isEqualTo(json("{additional-boms: " + jsonList + ", non-project-boms: " + jsonList + "}"));
     }
 
     @Test

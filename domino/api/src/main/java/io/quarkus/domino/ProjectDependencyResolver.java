@@ -590,15 +590,23 @@ public class ProjectDependencyResolver {
 
     public void resolveDependencies() {
         var enforcedConstraints = getBomConstraints(config.getProjectBom());
-        for (var bomCoords : config.getNonProjectBoms()) {
-            enforcedConstraints.addAll(getBomConstraints(bomCoords));
+        final Set<ArtifactCoords> bomConstraints = enforcedConstraints.stream()
+                .map(Dependency::getArtifact)
+                .map(ProjectDependencyResolver::toCoords)
+                .collect(Collectors.toCollection(HashSet::new));
+        for (var bomCoords : config.getAdditionalBoms()) {
+            final List<Dependency> constraints = getBomConstraints(bomCoords);
+            enforcedConstraints.addAll(constraints);
+            if (config.isAdditionalBomsInUniverse()) {
+                constraints.stream()
+                        .map(Dependency::getArtifact)
+                        .map(ProjectDependencyResolver::toCoords)
+                        .forEach(bomConstraints::add);
+            }
         }
+        this.projectBomConstraints = Collections.unmodifiableSet(bomConstraints);
         if (artifactConstraintsProvider == null) {
             artifactConstraintsProvider = t -> enforcedConstraints;
-        }
-        projectBomConstraints = new HashSet<>(enforcedConstraints.size());
-        for (Dependency d : enforcedConstraints) {
-            projectBomConstraints.add(toCoords(d.getArtifact()));
         }
 
         for (DependencyTreeVisitor v : treeVisitors) {

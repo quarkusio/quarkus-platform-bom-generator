@@ -20,14 +20,14 @@ public interface ProjectDependencyConfig {
 
     /**
      * Project directory
-     * 
+     *
      * @return project directory
      */
     Path getProjectDir();
 
     /**
      * Project BOM
-     * 
+     *
      * @return project BOM
      */
     ArtifactCoords getProjectBom();
@@ -35,11 +35,39 @@ public interface ProjectDependencyConfig {
     /**
      * BOMs that should be enforced when resolving dependencies
      * but should not be added as project artifacts.
-     * 
+     *
      * @return BOMs that should be enforced when resolving dependencies
      *         but should not be added as project artifacts
+     * @deprecated renamed to {@link #getAdditionalBoms()}
      */
-    List<ArtifactCoords> getNonProjectBoms();
+    @Deprecated(forRemoval = true)
+    default List<ArtifactCoords> getNonProjectBoms() {
+        return getAdditionalBoms();
+    }
+
+    /**
+     * Returns a {@link List} of BOM whose constraints will be enforced when resolving dependencies.
+     * <p>
+     * If {@link #isAdditionalBomsInUniverse()} returns {@code true} then the artifacts managed in these BOMs
+     * will also be used as a part of the universe for the selection of root artifacts through
+     * {@link #getIncludePatterns()} and {@link #getExcludePatterns()}.
+     *
+     * @return {@link List} of BOM whose constraints will be enforced when resolving dependencies.
+     *
+     */
+    List<ArtifactCoords> getAdditionalBoms();
+
+    /**
+     * Default is {@code true} for backwards compatibility reasons
+     *
+     * @return {@code true} if the constraints of BOMs specified via both {@link #getAdditionalBoms()} and
+     *         {@link #getProjectBom()} should be considered a part of the initial universe of artifacts from which
+     *         the set of root artifacts is selected through {@link #getIncludePatterns()},
+     *         {@link #getExcludePatterns()}, etc.;
+     *         otherwise only the artifacts managed by the BOM specified in {@link #getProjectBom()} will be
+     *         considered a part of the initial universe of artifacts
+     */
+    boolean isAdditionalBomsInUniverse();
 
     /**
      * Artifacts that should be used as roots of dependency trees during analysis.
@@ -68,28 +96,28 @@ public interface ProjectDependencyConfig {
     /**
      * Dependency scopes that should be excluded resolving dependencies of root artifact.
      * If not configured, provided and test scoped dependencies will be excluded by default.
-     * 
+     *
      * @return dependency scopes that should be excluded resolving dependencies of root artifact
      */
     Collection<String> getExcludeScopes();
 
     /**
      * Whether to exclude dependencies (and their transitive dependencies) that aren't managed in the BOM. The default is true.
-     * 
+     *
      * @return whether non-managed dependencies should be included
      */
     boolean isIncludeNonManaged();
 
     /**
      * Whether to exclude parent POMs from the list of artifacts to be built from source
-     * 
+     *
      * @return whether to exclude parent POMs
      */
     boolean isExcludeParentPoms();
 
     /**
      * Whether to exclude BOMs imported in the POMs of artifacts to be built from the list of artifacts to be built from source
-     * 
+     *
      * @return whether to exclude BOM imports
      */
     boolean isExcludeBomImports();
@@ -99,7 +127,7 @@ public interface ProjectDependencyConfig {
      * Setting the level to 0 will target the supported extension artifacts themselves.
      * Setting the level to 1, will target the supported extension artifacts plus their direct dependencies.
      * If the level is not specified, the default will be -1, which means all the levels.
-     * 
+     *
      * @return dependency level
      */
     int getLevel();
@@ -114,7 +142,7 @@ public interface ProjectDependencyConfig {
 
     /**
      * Whether to log the coordinates of the artifacts captured down to the depth specified. The default is true.
-     * 
+     *
      * @return whether to log complete artifacts coordinates
      */
     boolean isLogArtifactsToBuild();
@@ -123,63 +151,63 @@ public interface ProjectDependencyConfig {
      * Whether to log the module GAVs the artifacts to be built belongs to instead of all
      * the complete artifact coordinates to be built.
      * If this option is enabled, it overrides {@link #isLogArtifactsToBuild()}
-     * 
+     *
      * @return whether to log module coords as GAVs instead of complete artifact coordinates
      */
     boolean isLogModulesToBuild();
 
     /**
      * Whether to log the dependency trees walked down to the depth specified. The default is false.
-     * 
+     *
      * @return whether to log dependency trees
      */
     boolean isLogTrees();
 
     /**
      * Comma-separated list of artifacts to log dependency trees for.
-     * 
+     *
      * @return comma-separated list of artifacts to log dependency trees for
      */
     String getLogTreesFor();
 
     /**
      * Whether to log the coordinates of the artifacts below the depth specified. The default is false.
-     * 
+     *
      * @return whether to log remaining artifacts
      */
     boolean isLogRemaining();
 
     /**
      * Whether to log the summary at the end. The default is true.
-     * 
+     *
      * @return whether to log summary
      */
     boolean isLogSummary();
 
     /**
      * Whether to log visited non-managed dependencies.
-     * 
+     *
      * @return whether to log visited non-managed dependencies
      */
     boolean isLogNonManagedVisitied();
 
     /**
      * Whether to log code repository info for the artifacts to be built from source
-     * 
+     *
      * @return whether to log code repositories
      */
     boolean isLogCodeRepos();
 
     /**
      * Whether to log code repository dependency tree.
-     * 
+     *
      * @return whetehr to log code repository dependency tree
      */
     boolean isLogCodeRepoTree();
 
     /**
      * A list of build recipe repository URLs
-     * 
+     *
      * @return list of build recipe repository URLs
      */
     List<String> getRecipeRepos();
@@ -188,7 +216,7 @@ public interface ProjectDependencyConfig {
      * @deprecated this option isn't used anymore
      *
      *             Whether to validate the discovered code repo and tags that are included in the report
-     * 
+     *
      * @return whether to validate core repos and tags
      */
     @Deprecated(forRemoval = true)
@@ -196,9 +224,9 @@ public interface ProjectDependencyConfig {
 
     /**
      * @deprecated Deprecated in favor of the HACBS SCM locator that performs validation
-     * 
+     *
      *             Whether to use the legacy SCM detector.
-     * 
+     *
      * @return whether to use the legacy SCM detector
      */
     @Deprecated(since = "0.0.78")
@@ -206,7 +234,7 @@ public interface ProjectDependencyConfig {
 
     /**
      * Whether to warn about errors not being able to resolve top level artifacts or fail the process
-     * 
+     *
      * @return whether to warn on artifact resolution errors
      */
     boolean isWarnOnResolutionErrors();
@@ -214,7 +242,7 @@ public interface ProjectDependencyConfig {
     /**
      * Whether to issue a warning in case the SCM location could not be determined or fail with
      * an error (the default behavior).
-     * 
+     *
      * @return whether to fail in case the SCM location could not be determined
      */
     boolean isWarnOnMissingScm();
@@ -223,7 +251,7 @@ public interface ProjectDependencyConfig {
 
     /**
      * Whether to include optional dependencies of the root project artifacts
-     * 
+     *
      * @return whether to include optional dependencies of the root project artifacts
      */
     boolean isIncludeOptionalDeps();
@@ -240,14 +268,14 @@ public interface ProjectDependencyConfig {
     /**
      * Whether to use Java 8 to fetch dependency information from a Gradle project.
      * In case this method returns true, the value of JAVA8_HOME environment variable will be used as the Java 8 home directory.
-     * 
+     *
      * @return whether to use Java 8 to fetch dependency information from a Gradle project
      */
     boolean isGradleJava8();
 
     /**
      * Java home directory that should be used when fetching dependency information from a Gradle project.
-     * 
+     *
      * @return Java home directory that should be used when fetching dependency information from a Gradle project.
      */
     String getGradleJavaHome();
@@ -274,7 +302,20 @@ public interface ProjectDependencyConfig {
 
         Mutable setProjectBom(ArtifactCoords bom);
 
-        Mutable setNonProjectBoms(List<ArtifactCoords> nonProjectBoms);
+        /**
+         * @param nonProjectBoms
+         * @return this {@link Mutable}
+         *
+         * @deprecated use {@link #setAdditionalBoms(List)}
+         */
+        @Deprecated(forRemoval = true)
+        default Mutable setNonProjectBoms(List<ArtifactCoords> nonProjectBoms) {
+            return setAdditionalBoms(nonProjectBoms);
+        }
+
+        Mutable setAdditionalBoms(List<ArtifactCoords> nonProjectBoms);
+
+        Mutable setAdditionalBomsInUniverse(boolean additionalBomsInUniverse);
 
         Mutable setProjectArtifacts(Collection<ArtifactCoords> projectArtifacts);
 

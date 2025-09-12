@@ -19,7 +19,8 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     private final ProductInfo productInfo;
     private final Path projectDir;
     private final ArtifactCoords projectBom;
-    private final List<ArtifactCoords> nonProjectBoms;
+    private final List<ArtifactCoords> additionalBoms;
+    private final boolean additionalBomsInUniverse;
     private final Collection<ArtifactCoords> projectArtifacts;
     private final Collection<ArtifactCoords> includeArtifacts;
     private final Collection<ArtifactCoords> includePatterns;
@@ -59,7 +60,8 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         }
         projectDir = other.getProjectDir();
         projectBom = other.getProjectBom();
-        nonProjectBoms = toUnmodifiableList(other.getNonProjectBoms());
+        additionalBoms = toUnmodifiableList(other.getAdditionalBoms());
+        additionalBomsInUniverse = other.isAdditionalBomsInUniverse();
         projectArtifacts = toUnmodifiableList(other.getProjectArtifacts());
         includeArtifacts = toUnmodifiableList(other.getIncludeArtifacts());
         includePatterns = toUnmodifiableList(other.getIncludePatterns());
@@ -110,7 +112,19 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
     @Override
     @JsonSerialize(converter = ArtifactCoordsCollectionSorter.class)
     public List<ArtifactCoords> getNonProjectBoms() {
-        return nonProjectBoms;
+        return additionalBoms;
+    }
+
+    @Override
+    @JsonSerialize(converter = ArtifactCoordsCollectionSorter.class)
+    public List<ArtifactCoords> getAdditionalBoms() {
+        return additionalBoms;
+    }
+
+    @Override
+    @JsonInclude(value = JsonInclude.Include.CUSTOM, valueFilter = ProjectDependencyConfigAdditionalBomsInUniverseFilter.class)
+    public boolean isAdditionalBomsInUniverse() {
+        return additionalBomsInUniverse;
     }
 
     @Override
@@ -274,7 +288,8 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         private ProductInfo productInfo;
         private Path projectDir;
         private ArtifactCoords projectBom;
-        private List<ArtifactCoords> nonProjectBoms = List.of();
+        private List<ArtifactCoords> additionalBoms = List.of();
+        private boolean additionalBomsInUniverse = true;
         private Collection<ArtifactCoords> projectArtifacts = new ArrayList<>();
         private Collection<ArtifactCoords> includeArtifacts = new ArrayList<>();
         private Collection<ArtifactCoords> includePatterns = new ArrayList<>();
@@ -312,7 +327,7 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
             productInfo = other.getProductInfo();
             projectDir = other.getProjectDir();
             projectBom = other.getProjectBom();
-            nonProjectBoms = new ArrayList<>(other.getNonProjectBoms());
+            additionalBoms = new ArrayList<>(other.getNonProjectBoms());
             projectArtifacts.addAll(other.getProjectArtifacts());
             includeArtifacts.addAll(other.getIncludeArtifacts());
             includePatterns.addAll(other.getIncludePatterns());
@@ -364,8 +379,12 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         }
 
         @Override
-        public List<ArtifactCoords> getNonProjectBoms() {
-            return nonProjectBoms;
+        public List<ArtifactCoords> getAdditionalBoms() {
+            return additionalBoms;
+        }
+
+        public boolean isAdditionalBomsInUniverse() {
+            return additionalBomsInUniverse;
         }
 
         @Override
@@ -530,8 +549,13 @@ public class ProjectDependencyConfigImpl implements ProjectDependencyConfig {
         }
 
         @Override
-        public Mutable setNonProjectBoms(List<ArtifactCoords> nonProjectBoms) {
-            this.nonProjectBoms = nonProjectBoms;
+        public Mutable setAdditionalBoms(List<ArtifactCoords> additionalBoms) {
+            this.additionalBoms = additionalBoms;
+            return this;
+        }
+
+        public Mutable setAdditionalBomsInUniverse(boolean additionalBomsInUniverse) {
+            this.additionalBomsInUniverse = additionalBomsInUniverse;
             return this;
         }
 
