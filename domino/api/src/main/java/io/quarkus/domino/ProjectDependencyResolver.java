@@ -285,6 +285,7 @@ public class ProjectDependencyResolver {
     private final boolean appendOutput;
 
     private Function<ArtifactCoords, List<Dependency>> artifactConstraintsProvider;
+    private Set<ArtifactCoords> allConstraints;
     private Set<ArtifactCoords> projectBomConstraints;
     private final Map<ArtifactCoords, ResolvedDependency> allDepsToBuild = new HashMap<>();
     private final Set<ArtifactCoords> nonManagedVisited = new HashSet<>();
@@ -590,15 +591,19 @@ public class ProjectDependencyResolver {
 
     public void resolveDependencies() {
         var enforcedConstraints = getBomConstraints(config.getProjectBom());
+        projectBomConstraints = Collections.unmodifiableSet(enforcedConstraints.stream()
+                .map(Dependency::getArtifact)
+                .map(ProjectDependencyResolver::toCoords)
+                .collect(Collectors.toSet()));
         for (var bomCoords : config.getNonProjectBoms()) {
             enforcedConstraints.addAll(getBomConstraints(bomCoords));
         }
+        allConstraints = Collections.unmodifiableSet(enforcedConstraints.stream()
+                .map(Dependency::getArtifact)
+                .map(ProjectDependencyResolver::toCoords)
+                .collect(Collectors.toSet()));
         if (artifactConstraintsProvider == null) {
             artifactConstraintsProvider = t -> enforcedConstraints;
-        }
-        projectBomConstraints = new HashSet<>(enforcedConstraints.size());
-        for (Dependency d : enforcedConstraints) {
-            projectBomConstraints.add(toCoords(d.getArtifact()));
         }
 
         for (DependencyTreeVisitor v : treeVisitors) {
@@ -1348,7 +1353,7 @@ public class ProjectDependencyResolver {
 
     private ResolvedDependency addArtifactToBuild(ArtifactCoords coords, List<RemoteRepository> repos) {
 
-        final boolean managed = projectBomConstraints.contains(coords);
+        final boolean managed = allConstraints.contains(coords);
         if (!managed && isCollectNonManagedVisited()) {
             nonManagedVisited.add(coords);
         }

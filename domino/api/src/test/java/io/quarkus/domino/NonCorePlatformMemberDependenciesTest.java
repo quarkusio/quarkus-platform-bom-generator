@@ -14,6 +14,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -176,6 +178,26 @@ public class NonCorePlatformMemberDependenciesTest {
                 k -> NonCorePlatformMemberDependenciesTest.releaseAssertions.get(k));
 
         assertReleaseDependencies(rc, releaseAssertions);
+    }
+
+    @Test
+    public void rootUniverse() {
+
+        var depConfig = newDependencyConfig()
+                .setIncludePatterns(List.of(ArtifactCoords.fromString("*:*:*")));
+
+        ProjectDependencyResolver projectDependencyResolver = ProjectDependencyResolver.builder()
+                .setArtifactResolver(artifactResolver)
+                .setDependencyConfig(depConfig.build())
+                .build();
+        projectDependencyResolver.resolveDependencies();
+
+        Iterable<ArtifactCoords> rootArtifacts = projectDependencyResolver.getProjectArtifacts();
+        List<ArtifactCoords> quarkusIoArtifacts = StreamSupport.stream(rootArtifacts.spliterator(), false)
+                .filter(a -> a.getGroupId().equals("io.quarkus"))
+                .collect(Collectors.toList());
+        /* In spite that we include everything, there should be no io.quarkus artifact in the result */
+        assertThat(quarkusIoArtifacts).isEmpty();
     }
 
     @Test
