@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.eclipse.aether.repository.RemoteRepository;
 
 public class ReleaseRepo {
@@ -52,5 +53,21 @@ public class ReleaseRepo {
 
     public boolean isRoot() {
         return dependants.isEmpty();
+    }
+
+    /** For debug purposes only. Do not use as a key in a {@link Map} or similar as this class is mutable. */
+    @Override
+    public String toString() {
+        if (artifacts == null) {
+            return "(" + revision.getRepository().getUrl() + ")";
+        } else if (artifacts.size() == 1) {
+            return artifacts.keySet().iterator().next().toCompactCoords() + " (" + revision.getRepository().getUrl() + ")";
+        } else {
+            return artifacts.keySet().stream()
+                    .map(c -> c.getGroupId() + ":" + c.getVersion())
+                    .distinct()
+                    .sorted()
+                    .collect(Collectors.joining(",")) + " (" + revision.getRepository().getUrl() + ")";
+        }
     }
 }
