@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -482,6 +483,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
         }
 
         addReleaseInfo(platformJson);
+        addBuildTimestamp(platformJson);
         validateCategories(platformJson, referencedCategories);
 
         // Write the JSON to the output file
@@ -530,6 +532,10 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
                         "Extension dependency version pattern check has failed. Please consult the error messages logged above.");
             }
         }
+    }
+
+    private void addBuildTimestamp(ExtensionCatalog.Mutable platformJson) {
+        platformJson.getMetadata().put("build-timestamp", Instant.now().toString());
     }
 
     private void addReleaseInfo(ExtensionCatalog.Mutable platformJson) throws MojoExecutionException {
