@@ -3,6 +3,7 @@ package io.quarkus.bom.platform;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,7 +28,7 @@ public class PlatformMemberConfig {
     private List<String> metadataOverrideArtifacts = new ArrayList<>(0);
 
     private List<String> extensionGroupIds = new ArrayList<>(0);
-    private List<String> ownGroupIds = new ArrayList<>(0);
+    private Collection<String> ownGroupIds = new HashSet<>(0);
 
     private RedHatExtensionDependencyCheck dependencyCheck;
 
@@ -259,11 +260,11 @@ public class PlatformMemberConfig {
      * 
      * @return list of artifact groupIds other members are not allowed to override
      */
-    public List<String> getOwnGroupIds() {
+    public Collection<String> getOwnGroupIds() {
         return ownGroupIds;
     }
 
-    public void setOwnGroupIds(List<String> ownGroupIds) {
+    public void setOwnGroupIds(Collection<String> ownGroupIds) {
         this.ownGroupIds = ownGroupIds;
     }
 
