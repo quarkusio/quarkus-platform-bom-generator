@@ -432,7 +432,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         if (compiledSupportPatterns == null) {
             var result = new ArrayList<Pattern>(supportPatterns.size());
             for (var pattern : supportPatterns) {
-                result.add(Pattern.compile(pattern));
+                result.add(Pattern.compile(GlobUtil.toRegexPattern(pattern)));
             }
             compiledSupportPatterns = result;
         }
