@@ -807,11 +807,12 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
                 sb.append(" from ").append(member.config().getName());
             }
 
-            if (ForeignPreferredConstraint.isAcceptIfCompatible(config.foreignPreferredConstraint())
-                    && (memberDep.artifact().getVersion().startsWith(currentPreference.artifact().getVersion())
-                            || versionsAppearToMatch(memberDep.artifact().getVersion(),
-                                    currentPreference.artifact().getVersion()))) {
-                sb.append(" was accepted in favor of ").append(currentPreference.artifact()).append(" owned by ");
+            if (member.getOwnGroupIds().contains(currentPreference.artifact().getGroupId())
+                    || ForeignPreferredConstraint.isAcceptIfCompatible(config.foreignPreferredConstraint())
+                            && (memberDep.artifact().getVersion().startsWith(currentPreference.artifact().getVersion())
+                                    || versionsAppearToMatch(memberDep.artifact().getVersion(),
+                                            currentPreference.artifact().getVersion()))) {
+                sb.append(" was accepted in place of ").append(currentPreference.artifact()).append(" used by ");
                 preferredDeps.put(memberDep.key(), memberDep);
                 ProjectRelease.Builder rb = quarkusBomReleaseBuilders.get(currentPreference.releaseId());
                 if (rb != null) {

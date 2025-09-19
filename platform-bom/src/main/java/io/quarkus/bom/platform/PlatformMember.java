@@ -12,7 +12,7 @@ public interface PlatformMember {
 
     List<String> getExtensionGroupIds();
 
-    List<String> getOwnGroupIds();
+    Collection<String> getOwnGroupIds();
 
     Artifact previousLastUpdatedBom();
 

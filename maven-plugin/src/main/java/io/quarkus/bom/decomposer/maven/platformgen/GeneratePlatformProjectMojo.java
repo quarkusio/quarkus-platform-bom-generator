@@ -3228,7 +3228,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         @Override
-        public List<String> getOwnGroupIds() {
+        public Collection<String> getOwnGroupIds() {
             if (!config.getOwnGroupIds().isEmpty()) {
                 return config.getOwnGroupIds();
             }

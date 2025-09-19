@@ -589,19 +589,21 @@ public class ProjectDependencyResolver {
         return result;
     }
 
+    private static Set<ArtifactCoords> toArtifactCoords(Collection<Dependency> deps) {
+        var result = new HashSet<ArtifactCoords>(deps.size());
+        for (var d : deps) {
+            result.add(toCoords(d.getArtifact()));
+        }
+        return result;
+    }
+
     public void resolveDependencies() {
         var enforcedConstraints = getBomConstraints(config.getProjectBom());
-        projectBomConstraints = Collections.unmodifiableSet(enforcedConstraints.stream()
-                .map(Dependency::getArtifact)
-                .map(ProjectDependencyResolver::toCoords)
-                .collect(Collectors.toSet()));
+        projectBomConstraints = toArtifactCoords(enforcedConstraints);
         for (var bomCoords : config.getNonProjectBoms()) {
             enforcedConstraints.addAll(getBomConstraints(bomCoords));
         }
-        allConstraints = Collections.unmodifiableSet(enforcedConstraints.stream()
-                .map(Dependency::getArtifact)
-                .map(ProjectDependencyResolver::toCoords)
-                .collect(Collectors.toSet()));
+        allConstraints = toArtifactCoords(enforcedConstraints);
         if (artifactConstraintsProvider == null) {
             artifactConstraintsProvider = t -> enforcedConstraints;
         }
@@ -675,7 +677,7 @@ public class ProjectDependencyResolver {
 
     protected Iterable<ArtifactCoords> getProjectArtifacts() {
 
-        List<ArtifactCoords> result = null;
+        List<ArtifactCoords> result;
         if (!config.getProjectArtifacts().isEmpty()) {
             result = new ArrayList<>(config.getProjectArtifacts());
             var bom = config.getProjectBom();
@@ -785,7 +787,7 @@ public class ProjectDependencyResolver {
     }
 
     private void processRootArtifact(ArtifactCoords rootArtifact) {
-        log.debug("Processing root artifact " + rootArtifact);
+        log.debug("Processing root artifact %s", rootArtifact);
         final List<Dependency> managedDeps = artifactConstraintsProvider.apply(rootArtifact);
         final DependencyNode root = collectDependencies(rootArtifact, managedDeps);
         if (root == null) {
