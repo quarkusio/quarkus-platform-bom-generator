@@ -340,9 +340,13 @@ public class ProjectDependencyResolver {
      * @return collection of project releases representing the project and its dependencies
      */
     public ReleaseCollection getReleaseCollection() {
-        resolveDependencies();
-        configureReleaseRepoDeps();
-        return ReleaseCollection.of(ReleaseCollection.filter(releaseRepos.values(), artifactSelector));
+        try {
+            resolveDependenciesInternal();
+            configureReleaseRepoDeps();
+            return ReleaseCollection.of(ReleaseCollection.filter(releaseRepos.values(), artifactSelector)).sort();
+        } finally {
+            close();
+        }
     }
 
     /**
@@ -376,129 +380,138 @@ public class ProjectDependencyResolver {
     }
 
     public void log() {
-
         try {
-            resolveDependencies();
-            int codeReposTotal = 0;
-            int reportedArtifactsTotal = 0;
-            if (config.isLogArtifactsToBuild() && !allDepsToBuild.isEmpty()) {
-                logComment("Artifacts to be built from source from "
-                        + (config.getProjectBom() == null ? "" : config.getProjectBom().toCompactCoords()) + ":");
-                if (config.isLogCodeRepos() || config.isLogCodeRepoTree()) {
-                    configureReleaseRepoDeps();
-                    final List<ReleaseRepo> sorted = ReleaseCollection.filter(ReleaseCollection.sort(releaseRepos.values()),
-                            artifactSelector);
-                    codeReposTotal = sorted.size();
-
-                    if (Boolean.getBoolean("logMissingPncBuilds")) {
-                        for (ReleaseRepo e : sorted) {
-                            reportedArtifactsTotal += logMissingPncBuilds(e, getLatestPncVersions(sorted));
-                        }
-                    } else if (Boolean.getBoolean("logLatestPncBuilds")) {
-                        for (ReleaseRepo e : sorted) {
-                            logComment("repo-url " + e.getRevision().getRepository());
-                            logComment("tag " + e.getRevision().getValue());
-                            logLatestPncBuilds(e, getLatestPncVersions(sorted));
-                            reportedArtifactsTotal += e.artifacts.size();
-                        }
-                    } else {
-                        for (ReleaseRepo e : sorted) {
-                            logComment("repo-url " + e.getRevision().getRepository());
-                            logComment("tag " + e.getRevision().getValue());
-                            for (String s : toSortedStrings(e.artifacts.keySet(), artifactSelector,
-                                    config.isLogModulesToBuild())) {
-                                log(s);
-                                ++reportedArtifactsTotal;
-                            }
-                        }
-                    }
-
-                    var circularDeps = ReleaseCollection.detectCircularDependencies(releaseRepos.values());
-                    if (!circularDeps.isEmpty()) {
-                        logComment("ERROR: The following circular dependency chains were detected among releases:");
-                        final Iterator<CircularReleaseDependency> chains = circularDeps.iterator();
-                        int i = 0;
-                        while (chains.hasNext()) {
-                            logComment("  Chain #" + ++i + ":");
-                            chains.next().getDependencyChain().forEach(id -> logComment("    " + id.getRepository() + " "
-                                    + id.getKind().toString().toLowerCase() + " " + id.getValue()));
-                            logComment("");
-                        }
-                    }
-                    if (config.isLogCodeRepoTree()) {
-                        logComment("");
-                        logComment("Code repository dependency graph");
-                        for (ReleaseRepo r : releaseRepos.values()) {
-                            if (r.isRoot()) {
-                                logReleaseRepoDep(r, 0);
-                            }
-                        }
-                        logComment("");
-                    }
-
-                } else {
-                    for (String s : toSortedStrings(allDepsToBuild.keySet(), artifactSelector, config.isLogModulesToBuild())) {
-                        log(s);
-                        ++reportedArtifactsTotal;
-                    }
-                }
-            }
-
-            if (config.isLogNonManagedVisitied() && !nonManagedVisited.isEmpty()) {
-                logComment("Non-managed dependencies visited walking dependency trees:");
-                final List<String> sorted = toSortedStrings(nonManagedVisited, artifactSelector, config.isLogModulesToBuild());
-                for (int i = 0; i < sorted.size(); ++i) {
-                    logComment((i + 1) + ") " + sorted.get(i));
-                }
-            }
-
-            if (config.isLogRemaining()) {
-                logComment("Remaining artifacts include:");
-                final List<String> sorted = toSortedStrings(remainingDeps, artifactSelector, config.isLogModulesToBuild());
-                for (int i = 0; i < sorted.size(); ++i) {
-                    logComment((i + 1) + ") " + sorted.get(i));
-                }
-            }
-
-            if (config.isLogSummary()) {
-                final StringBuilder sb = new StringBuilder().append("Selecting ");
-                if (config.getLevel() < 0) {
-                    sb.append("all the");
-                } else {
-                    sb.append(config.getLevel()).append(" level(s) of");
-                }
-                if (config.isIncludeNonManaged()) {
-                    sb.append(" managed and non-managed");
-                } else {
-                    sb.append(" managed (stopping at the first non-managed one)");
-                }
-                sb.append(" dependencies of supported extensions");
-                if (config.getProjectBom() != null) {
-                    sb.append(" from ").append(config.getProjectBom().toCompactCoords());
-                }
-                sb.append(" will result in:");
-                logComment(sb.toString());
-
-                sb.setLength(0);
-                sb.append(reportedArtifactsTotal).append(" artifacts");
-                if (codeReposTotal > 0) {
-                    sb.append(" from ").append(codeReposTotal).append(" code repositories");
-                }
-                sb.append(" to build from source");
-                logComment(sb.toString());
-                if (config.isIncludeNonManaged() && !nonManagedVisited.isEmpty()) {
-                    logComment("  * " + nonManagedVisited.size() + " of which is/are not managed by the BOM");
-                }
-                if (!skippedDeps.isEmpty()) {
-                    logComment(skippedDeps.size() + " dependency nodes skipped");
-                }
-                logComment((allDepsToBuild.size() + skippedDeps.size()) + " dependencies visited in total");
-            }
+            logInternal();
         } finally {
-            if (fileOutput != null) {
-                log.info("Saving the report in " + logOutputFile.toAbsolutePath());
-                fileOutput.close();
+            close();
+        }
+    }
+
+    void logInternal() {
+
+        resolveDependenciesInternal();
+        int codeReposTotal = 0;
+        int reportedArtifactsTotal = 0;
+        if (config.isLogArtifactsToBuild() && !allDepsToBuild.isEmpty()) {
+            logComment("Artifacts to be built from source from "
+                    + (config.getProjectBom() == null ? "" : config.getProjectBom().toCompactCoords()) + ":");
+            if (config.isLogCodeRepos() || config.isLogCodeRepoTree()) {
+                configureReleaseRepoDeps();
+                final List<ReleaseRepo> sorted = ReleaseCollection.filter(ReleaseCollection.sort(releaseRepos.values()),
+                        artifactSelector);
+                codeReposTotal = sorted.size();
+
+                if (Boolean.getBoolean("logMissingPncBuilds")) {
+                    for (ReleaseRepo e : sorted) {
+                        reportedArtifactsTotal += logMissingPncBuilds(e, getLatestPncVersions(sorted));
+                    }
+                } else if (Boolean.getBoolean("logLatestPncBuilds")) {
+                    for (ReleaseRepo e : sorted) {
+                        logComment("repo-url " + e.getRevision().getRepository());
+                        logComment("tag " + e.getRevision().getValue());
+                        logLatestPncBuilds(e, getLatestPncVersions(sorted));
+                        reportedArtifactsTotal += e.artifacts.size();
+                    }
+                } else {
+                    for (ReleaseRepo e : sorted) {
+                        logComment("repo-url " + e.getRevision().getRepository());
+                        logComment("tag " + e.getRevision().getValue());
+                        for (String s : toSortedStrings(e.artifacts.keySet(), artifactSelector,
+                                config.isLogModulesToBuild())) {
+                            log(s);
+                            ++reportedArtifactsTotal;
+                        }
+                    }
+                }
+
+                var circularDeps = ReleaseCollection.detectCircularDependencies(releaseRepos.values());
+                if (!circularDeps.isEmpty()) {
+                    logComment("ERROR: The following circular dependency chains were detected among releases:");
+                    final Iterator<CircularReleaseDependency> chains = circularDeps.iterator();
+                    int i = 0;
+                    while (chains.hasNext()) {
+                        logComment("  Chain #" + ++i + ":");
+                        chains.next().getDependencyChain().forEach(id -> logComment("    " + id.getRepository() + " "
+                                + id.getKind().toString().toLowerCase() + " " + id.getValue()));
+                        logComment("");
+                    }
+                }
+                if (config.isLogCodeRepoTree()) {
+                    logComment("");
+                    logComment("Code repository dependency graph");
+                    for (ReleaseRepo r : releaseRepos.values()) {
+                        if (r.isRoot()) {
+                            logReleaseRepoDep(r, 0);
+                        }
+                    }
+                    logComment("");
+                }
+
+            } else {
+                for (String s : toSortedStrings(allDepsToBuild.keySet(), artifactSelector, config.isLogModulesToBuild())) {
+                    log(s);
+                    ++reportedArtifactsTotal;
+                }
             }
+        }
+
+        if (config.isLogNonManagedVisitied() && !nonManagedVisited.isEmpty()) {
+            logComment("Non-managed dependencies visited walking dependency trees:");
+            final List<String> sorted = toSortedStrings(nonManagedVisited, artifactSelector, config.isLogModulesToBuild());
+            for (int i = 0; i < sorted.size(); ++i) {
+                logComment((i + 1) + ") " + sorted.get(i));
+            }
+        }
+
+        if (config.isLogRemaining()) {
+            logComment("Remaining artifacts include:");
+            final List<String> sorted = toSortedStrings(remainingDeps, artifactSelector, config.isLogModulesToBuild());
+            for (int i = 0; i < sorted.size(); ++i) {
+                logComment((i + 1) + ") " + sorted.get(i));
+            }
+        }
+
+        if (config.isLogSummary()) {
+            final StringBuilder sb = new StringBuilder().append("Selecting ");
+            if (config.getLevel() < 0) {
+                sb.append("all the");
+            } else {
+                sb.append(config.getLevel()).append(" level(s) of");
+            }
+            if (config.isIncludeNonManaged()) {
+                sb.append(" managed and non-managed");
+            } else {
+                sb.append(" managed (stopping at the first non-managed one)");
+            }
+            sb.append(" dependencies of supported extensions");
+            if (config.getProjectBom() != null) {
+                sb.append(" from ").append(config.getProjectBom().toCompactCoords());
+            }
+            sb.append(" will result in:");
+            logComment(sb.toString());
+
+            sb.setLength(0);
+            sb.append(reportedArtifactsTotal).append(" artifacts");
+            if (codeReposTotal > 0) {
+                sb.append(" from ").append(codeReposTotal).append(" code repositories");
+            }
+            sb.append(" to build from source");
+            logComment(sb.toString());
+            if (config.isIncludeNonManaged() && !nonManagedVisited.isEmpty()) {
+                logComment("  * " + nonManagedVisited.size() + " of which is/are not managed by the BOM");
+            }
+            if (!skippedDeps.isEmpty()) {
+                logComment(skippedDeps.size() + " dependency nodes skipped");
+            }
+            logComment((allDepsToBuild.size() + skippedDeps.size()) + " dependencies visited in total");
+        }
+    }
+
+    void close() {
+        if (fileOutput != null) {
+            log.info("Saving the report in " + logOutputFile.toAbsolutePath());
+            fileOutput.close();
+            fileOutput = null;
         }
     }
 
@@ -598,6 +611,14 @@ public class ProjectDependencyResolver {
     }
 
     public void resolveDependencies() {
+        try {
+            resolveDependenciesInternal();
+        } finally {
+            close();
+        }
+    }
+
+    void resolveDependenciesInternal() {
         var enforcedConstraints = getBomConstraints(config.getProjectBom());
         projectBomConstraints = toArtifactCoords(enforcedConstraints);
         for (var bomCoords : config.getNonProjectBoms()) {
