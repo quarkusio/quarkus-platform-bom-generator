@@ -1259,11 +1259,18 @@ public class ProjectDependencyResolver {
         for (int i = 0; i < depth; ++i) {
             sb.append("  ");
         }
-        sb.append(repo.getRevision().origin()).append(' ').append(repo.getRevision().version());
+        sb.append(isPncVersion(repo.getArtifacts().keySet()) ? "✅ " : "❌ ")
+                .append(repo);
         logComment(sb.toString());
         for (ReleaseRepo child : repo.dependencies.values()) {
             logReleaseRepoDep(child, depth + 1);
         }
+    }
+
+    private static boolean isPncVersion(Collection<ArtifactCoords> artifacts) {
+        return artifacts.stream()
+                .map(ArtifactCoords::getVersion)
+                .allMatch(RhVersionPattern::isRhVersion);
     }
 
     private static List<String> toSortedStrings(Collection<ArtifactCoords> coords, ArtifactSet artifactSelector,
