@@ -343,6 +343,7 @@ public class ProjectDependencyResolver {
         try {
             resolveDependenciesInternal();
             configureReleaseRepoDeps();
+            logInternal();
             return ReleaseCollection.of(ReleaseCollection.filter(releaseRepos.values(), artifactSelector)).sort();
         } finally {
             close();
