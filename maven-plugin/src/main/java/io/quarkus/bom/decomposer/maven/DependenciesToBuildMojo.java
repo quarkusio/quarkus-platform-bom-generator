@@ -459,7 +459,7 @@ public class DependenciesToBuildMojo extends AbstractMojo {
         final List<ArtifactCoords> supported = new ArrayList<>();
         for (Extension ext : catalog.getExtensions()) {
             ArtifactCoords rtArtifact = ext.getArtifact();
-            if (isExcluded(rtArtifact) || isSelected(ext)) {
+            if (isExcluded(rtArtifact) || !isSelected(ext)) {
                 continue;
             }
             supported.add(ext.getArtifact());
