@@ -393,40 +393,50 @@ public class ProjectDependencyResolver {
         resolveDependenciesInternal();
         int codeReposTotal = 0;
         int reportedArtifactsTotal = 0;
-        if (config.isLogArtifactsToBuild() && !allDepsToBuild.isEmpty()) {
-            logComment("Artifacts to be built from source from "
-                    + (config.getProjectBom() == null ? "" : config.getProjectBom().toCompactCoords()) + ":");
+        if ((config.isLogArtifactsToBuild()
+                || config.isLogCodeRepos()
+                || config.isLogCodeRepoTree())
+                && !allDepsToBuild.isEmpty()) {
             if (config.isLogCodeRepos() || config.isLogCodeRepoTree()) {
                 configureReleaseRepoDeps();
                 final List<ReleaseRepo> sorted = ReleaseCollection.filter(ReleaseCollection.sort(releaseRepos.values()),
                         artifactSelector);
                 codeReposTotal = sorted.size();
 
-                if (Boolean.getBoolean("logMissingPncBuilds")) {
-                    for (ReleaseRepo e : sorted) {
-                        reportedArtifactsTotal += logMissingPncBuilds(e, getLatestPncVersions(sorted));
-                    }
-                } else if (Boolean.getBoolean("logLatestPncBuilds")) {
-                    for (ReleaseRepo e : sorted) {
-                        logComment("repo-url " + e.getRevision().getRepository());
-                        logComment("tag " + e.getRevision().getValue());
-                        logLatestPncBuilds(e, getLatestPncVersions(sorted));
-                        reportedArtifactsTotal += e.artifacts.size();
-                    }
-                } else {
-                    for (ReleaseRepo e : sorted) {
-                        logComment("repo-url " + e.getRevision().getRepository());
-                        logComment("tag " + e.getRevision().getValue());
-                        for (String s : toSortedStrings(e.artifacts.keySet(), artifactSelector,
-                                config.isLogModulesToBuild())) {
-                            log(s);
-                            ++reportedArtifactsTotal;
+                if (config.isLogCodeRepos()) {
+                    logComment("");
+                    logComment("Code repositories to be built from "
+                            + (config.getProjectBom() == null ? "" : config.getProjectBom().toCompactCoords()) + ":");
+                    if (Boolean.getBoolean("logMissingPncBuilds")) {
+                        for (ReleaseRepo e : sorted) {
+                            reportedArtifactsTotal += logMissingPncBuilds(e, getLatestPncVersions(sorted));
+                        }
+                    } else if (Boolean.getBoolean("logLatestPncBuilds")) {
+                        for (ReleaseRepo e : sorted) {
+                            logComment("repo-url " + e.getRevision().getRepository());
+                            logComment("tag " + e.getRevision().getValue());
+                            logLatestPncBuilds(e, getLatestPncVersions(sorted));
+                            reportedArtifactsTotal += e.artifacts.size();
+                        }
+                    } else {
+                        for (ReleaseRepo e : sorted) {
+                            logComment("repo-url " + e.getRevision().getRepository());
+                            logComment("tag " + e.getRevision().getValue());
+                            for (String s : toSortedStrings(e.artifacts.keySet(), artifactSelector,
+                                    config.isLogModulesToBuild())) {
+                                log(s);
+                                ++reportedArtifactsTotal;
+                            }
                         }
                     }
+                    logComment("End of code repositories to be built from "
+                            + (config.getProjectBom() == null ? "" : config.getProjectBom().toCompactCoords()) + ":");
+                    logComment("");
                 }
 
                 var circularDeps = ReleaseCollection.detectCircularDependencies(releaseRepos.values());
                 if (!circularDeps.isEmpty()) {
+                    logComment("");
                     logComment("ERROR: The following circular dependency chains were detected among releases:");
                     final Iterator<CircularReleaseDependency> chains = circularDeps.iterator();
                     int i = 0;
@@ -436,6 +446,8 @@ public class ProjectDependencyResolver {
                                 + id.getKind().toString().toLowerCase() + " " + id.getValue()));
                         logComment("");
                     }
+                    logComment("End of circular dependency chains");
+                    logComment("");
                 }
                 if (config.isLogCodeRepoTree()) {
                     logComment("");
@@ -445,10 +457,15 @@ public class ProjectDependencyResolver {
                             logReleaseRepoDep(r, 0);
                         }
                     }
+                    logComment("End of code repository dependency graph");
                     logComment("");
                 }
 
-            } else {
+            }
+
+            if (config.isLogArtifactsToBuild()) {
+                logComment("Artifacts to be built from source from "
+                        + (config.getProjectBom() == null ? "" : config.getProjectBom().toCompactCoords()) + ":");
                 for (String s : toSortedStrings(allDepsToBuild.keySet(), artifactSelector, config.isLogModulesToBuild())) {
                     log(s);
                     ++reportedArtifactsTotal;
