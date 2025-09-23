@@ -58,16 +58,16 @@ public class ReleaseRepo {
     /** For debug purposes only. Do not use as a key in a {@link Map} or similar as this class is mutable. */
     @Override
     public String toString() {
-        if (artifacts == null) {
-            return "(" + revision.getRepository().getUrl() + ")";
+        if (artifacts == null || artifacts.isEmpty()) {
+            return "(" + revision + ")";
         } else if (artifacts.size() == 1) {
-            return artifacts.keySet().iterator().next().toCompactCoords() + " (" + revision.getRepository().getUrl() + ")";
+            return artifacts.keySet().iterator().next().toCompactCoords() + " (" + revision + ")";
         } else {
             return artifacts.keySet().stream()
                     .map(c -> c.getGroupId() + ":" + c.getVersion())
                     .distinct()
                     .sorted()
-                    .collect(Collectors.joining(",")) + " (" + revision.getRepository().getUrl() + ")";
+                    .collect(Collectors.joining(",")) + " (" + revision + ")";
         }
     }
 }
