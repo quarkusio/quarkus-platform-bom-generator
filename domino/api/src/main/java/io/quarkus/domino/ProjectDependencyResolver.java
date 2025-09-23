@@ -452,7 +452,7 @@ public class ProjectDependencyResolver {
                 if (config.isLogCodeRepoTree()) {
                     logComment("");
                     logComment("Code repository dependency graph");
-                    for (ReleaseRepo r : releaseRepos.values()) {
+                    for (ReleaseRepo r : sorted) {
                         if (r.isRoot()) {
                             logReleaseRepoDep(r, 0);
                         }
