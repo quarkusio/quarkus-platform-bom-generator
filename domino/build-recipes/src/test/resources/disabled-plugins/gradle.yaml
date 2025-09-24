@@ -1,0 +1,3 @@
+disabledPlugins:
+  - "kotlin.gradle.targets.js"
+  - "org.jetbrains.dokka"
