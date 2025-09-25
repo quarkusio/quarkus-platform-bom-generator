@@ -44,13 +44,10 @@
       <artifactId>org.eclipse.jgit.ssh.jsch</artifactId>
     </dependency>
     <dependency>
-      <groupId>io.github.redhat-appstudio.jvmbuild</groupId>
-      <artifactId>hacbs-build-recipies-database</artifactId>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-domino-build-recipes</artifactId>
+      <version>${project.version}</version>
       <exclusions>
-        <exclusion>
-          <groupId>io.quarkiverse.jgit</groupId>
-          <artifactId>quarkus-jgit</artifactId>
-        </exclusion>
         <exclusion>
           <groupId>org.apache.maven</groupId>
           <artifactId>*</artifactId>

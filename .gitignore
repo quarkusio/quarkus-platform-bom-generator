@@ -27,7 +27,6 @@ graph-output.dot
 *.swo
 ObjectStore
 .gradle
-build
 quarkus.log
 replay_*.logß
 nbactions.xml

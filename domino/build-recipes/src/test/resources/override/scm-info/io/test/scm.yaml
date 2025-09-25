@@ -1,0 +1,3 @@
+uri: https://github.com/test-override/test.git
+type: git
+private: true

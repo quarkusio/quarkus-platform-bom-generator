@@ -1,10 +1,10 @@
 package io.quarkus.domino;
 
-import com.redhat.hacbs.recipies.GAV;
-import com.redhat.hacbs.recipies.scm.GitScmLocator;
-import com.redhat.hacbs.recipies.scm.RepositoryInfo;
-import com.redhat.hacbs.recipies.scm.ScmLocator;
-import com.redhat.hacbs.recipies.scm.TagInfo;
+import com.redhat.hacbs.recipes.GAV;
+import com.redhat.hacbs.recipes.scm.GitScmLocator;
+import com.redhat.hacbs.recipes.scm.RepositoryInfo;
+import com.redhat.hacbs.recipes.scm.ScmLocator;
+import com.redhat.hacbs.recipes.scm.TagInfo;
 import io.quarkus.bom.decomposer.BomDecomposerException;
 import io.quarkus.bom.decomposer.ReleaseIdDetector;
 import io.quarkus.bom.decomposer.ReleaseIdFactory;
