@@ -1,10 +1,5 @@
 package io.quarkus.domino;
 
-import com.redhat.hacbs.recipies.GAV;
-import com.redhat.hacbs.recipies.scm.GitScmLocator;
-import com.redhat.hacbs.recipies.scm.RepositoryInfo;
-import com.redhat.hacbs.recipies.scm.ScmLocator;
-import com.redhat.hacbs.recipies.scm.TagInfo;
 import io.quarkus.bom.decomposer.BomDecomposerException;
 import io.quarkus.bom.decomposer.ReleaseIdDetector;
 import io.quarkus.bom.decomposer.ReleaseIdFactory;
@@ -15,6 +10,11 @@ import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
 import io.quarkus.bootstrap.util.IoUtils;
 import io.quarkus.devtools.messagewriter.MessageWriter;
 import io.quarkus.domino.pnc.PncVersionProvider;
+import io.quarkus.domino.recipes.GAV;
+import io.quarkus.domino.recipes.scm.GitScmLocator;
+import io.quarkus.domino.recipes.scm.RepositoryInfo;
+import io.quarkus.domino.recipes.scm.ScmLocator;
+import io.quarkus.domino.recipes.scm.TagInfo;
 import io.quarkus.domino.scm.ScmRepository;
 import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.domino.scm.ScmRevisionResolver;

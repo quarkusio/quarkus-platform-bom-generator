@@ -1,0 +1,5 @@
+---
+additionalArgs:
+  - "-Dquarkus1=true"
+allowedDifferences:
+  - ".:.*-sources\\.jar:.*"

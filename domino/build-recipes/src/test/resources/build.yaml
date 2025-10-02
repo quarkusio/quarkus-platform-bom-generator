@@ -1,0 +1,27 @@
+---
+repositories:
+  - caucho
+additionalArgs:
+  - "-DskipDocs"
+additionalDownloads:
+  - uri: https://github.com/mikefarah/yq/releases/download/v4.30.4/yq_linux_amd64
+    sha256: 30459aa144a26125a1b22c62760f9b3872123233a5658934f7bd9fe714d7864d
+    type: executable
+    fileName: yq
+    binaryPath: only_for_tar/bin
+  - type: rpm
+    packageName: glibc-devel
+additionalMemory: 4096
+additionalBuilds:
+  pureJava:
+    preBuildScript: |
+      ./autogen.sh
+      /bin/sh -c "$(rpm --eval %configure); $(rpm --eval %__make) $(rpm --eval %_smp_mflags)"
+    additionalArgs:
+      - "-Dlz4-pure-java=true"
+allowedDifferences:
+  - \Q-:jbossws-common-4.0.0.Final.jar:class:org/jboss/ws/common/CalendarTest\E
+alternativeArgs:
+  - "'set Global / baseVersionSuffix:=\"\"'"
+  - "enableOptimizer"
+enforceVersion: true

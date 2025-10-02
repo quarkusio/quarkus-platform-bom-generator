@@ -11,6 +11,7 @@
   <name>Quarkus - Platform BOM Tools - Domino - Parent</name>
 
   <modules>
+    <module>build-recipes</module>
     <module>api</module>
     <module>gradle-dependency-model</module>
     <module>gradle-dependency-plugin</module>

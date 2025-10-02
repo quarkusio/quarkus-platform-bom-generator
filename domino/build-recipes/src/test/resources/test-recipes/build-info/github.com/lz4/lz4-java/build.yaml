@@ -1,0 +1,18 @@
+---
+additionalBuilds:
+  pureJava:
+    enforceVersion: true
+    additionalArgs:
+      - "-Dlz4-pure-java=true"
+    preBuildScript: |
+      sed -i -e 's|2\.7\.8|2.5.3|g;' -e 's|-SNAPSHOT|.0|g;' ivy.xml ivy-pure-java.xml
+enforceVersion: true
+additionalArgs:
+  - "-Dfoo=foo"
+preBuildScript: |
+    sed -i -e 's|2\.7\.8|2.5.3|g;' -e 's|-SNAPSHOT|.0|g;' ivy.xml ivy-pure-java.xml
+postBuildScript: |
+    mvn -B -e -s "$(workspaces.build-settings.path)/settings.xml" org.apache.maven.plugins:maven-deploy-plugin:3.1.0:deploy-file "-Durl=file:$(workspaces.source.path)/artifacts" -DpomFile=dist/lz4-java-$(params.ENFORCE_VERSION).pom -Dfile=dist/lz4-java-$(params.ENFORCE_VERSION).jar -Dfiles=dist/lz4-java-$(params.ENFORCE_VERSION)-sources.jar,dist/lz4-java-$(params.ENFORCE_VERSION)-javadoc.jar -Dclassifiers=sources,javadoc -Dtypes=jar,jar
+additionalDownloads:
+  - type: rpm
+    packageName: glibc-devel
