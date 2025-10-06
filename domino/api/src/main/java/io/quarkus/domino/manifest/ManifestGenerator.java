@@ -45,6 +45,7 @@ public class ManifestGenerator {
         private Path outputFile;
         private List<SbomTransformer> transformers = List.of();
         private String schemaVersion;
+        private boolean resolveLicenses = true;
 
         private Builder() {
         }
@@ -69,6 +70,11 @@ public class ManifestGenerator {
 
         public Builder setSchemaVersion(String schemaVersion) {
             this.schemaVersion = schemaVersion;
+            return this;
+        }
+
+        public Builder setResolveLicenses(boolean resolveLicenses) {
+            this.resolveLicenses = resolveLicenses;
             return this;
         }
 
@@ -108,11 +114,6 @@ public class ManifestGenerator {
         }
     }
 
-    public static void main(String[] args) throws Exception {
-
-        System.out.println(Version.valueOf("1.6"));
-    }
-
     public static Builder builder() {
         return new Builder();
     }
@@ -123,6 +124,7 @@ public class ManifestGenerator {
     private final Path outputFile;
     private final List<SbomTransformer> transformers;
     private final Version schemaVersion;
+    private final boolean resolveLicenses;
 
     private ManifestGenerator(Builder builder) {
         artifactResolver = builder.getInitializedResolver();
@@ -130,6 +132,7 @@ public class ManifestGenerator {
         outputFile = builder.outputFile;
         transformers = builder.transformers;
         schemaVersion = builder.getSchemaVersion();
+        resolveLicenses = builder.resolveLicenses;
     }
 
     public Consumer<Collection<ReleaseRepo>> toConsumer() {
@@ -172,7 +175,7 @@ public class ManifestGenerator {
     private void addComponent(Bom bom, ReleaseRepo release, ArtifactCoords coords, List<RemoteRepository> repos) {
         final Model model = effectiveModelResolver.resolveEffectiveModel(coords, repos);
         final Component c = new Component();
-        extractMetadata(release.getRevision(), model, c, schemaVersion);
+        extractMetadata(release.getRevision(), model, c, schemaVersion, resolveLicenses);
         if (c.getPublisher() == null) {
             c.setPublisher("central");
         }
@@ -233,7 +236,8 @@ public class ManifestGenerator {
         return bom;
     }
 
-    static void extractMetadata(ScmRevision releaseId, Model project, Component component, Version schemaVersion) {
+    static void extractMetadata(ScmRevision releaseId, Model project, Component component, Version schemaVersion,
+            boolean resolveLicenses) {
         if (component.getPublisher() == null) {
             // If we don't already have publisher information, retrieve it.
             if (project.getOrganization() != null) {
@@ -244,11 +248,12 @@ public class ManifestGenerator {
             // If we don't already have description information, retrieve it.
             component.setDescription(project.getDescription());
         }
-        if (component.getLicenseChoice() == null || component.getLicenseChoice().getLicenses() == null
-                || component.getLicenseChoice().getLicenses().isEmpty()) {
+        if (resolveLicenses && (component.getLicenses() == null
+                || component.getLicenses().getLicenses() == null
+                || component.getLicenses().getLicenses().isEmpty())) {
             // If we don't already have license information, retrieve it.
             if (project.getLicenses() != null) {
-                component.setLicenseChoice(resolveMavenLicenses(project.getLicenses(), false, schemaVersion));
+                component.setLicenses(resolveMavenLicenses(project.getLicenses(), false, schemaVersion));
             }
         }
         if (Version.VERSION_10 != schemaVersion) {

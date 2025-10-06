@@ -99,6 +99,12 @@ public class SbomGenerator {
             return this;
         }
 
+        public Builder setResolveLicenses(boolean resolveLicenses) {
+            ensureNotBuilt();
+            SbomGenerator.this.resolveLicenses = resolveLicenses;
+            return this;
+        }
+
         public Builder setTopComponents(List<VisitedComponent> topComponents) {
             ensureNotBuilt();
             SbomGenerator.this.topComponents = topComponents;
@@ -167,6 +173,7 @@ public class SbomGenerator {
     private List<VisitedComponent> topComponents;
     private boolean recordDependencies = true;
     private boolean calculateHashes = true;
+    private boolean resolveLicenses = true;
     private Version schemaVersion;
 
     private Bom bom;
@@ -235,7 +242,7 @@ public class SbomGenerator {
         final Model model = effectiveModelResolver.resolveEffectiveModel(visited.getArtifactCoords(),
                 visited.getRepositories());
         final Component c = new Component();
-        ManifestGenerator.extractMetadata(visited.getRevision(), model, c, schemaVersion);
+        ManifestGenerator.extractMetadata(visited.getRevision(), model, c, schemaVersion, resolveLicenses);
         if (c.getPublisher() == null) {
             c.setPublisher("central");
         }

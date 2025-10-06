@@ -240,6 +240,12 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     @Parameter(property = "calculateHashes", defaultValue = "true")
     boolean calculateHashes;
 
+    /**
+     * Whether to resolve and record licenses for manifested components
+     */
+    @Parameter(property = "resolveLicenses", defaultValue = "true")
+    boolean resolveLicenses;
+
     @Parameter(required = false)
     SbomConfig.ProductConfig productInfo;
 
@@ -388,7 +394,8 @@ public class DependenciesToBuildMojo extends AbstractMojo {
                             .setRecordDependencies(!flatManifest)
                             .setProductInfo(dependencyConfig.getProductInfo())
                             .setSchemaVersion(cdxSchemaVersion)
-                            .setCalculateHashes(calculateHashes),
+                            .setCalculateHashes(calculateHashes)
+                            .setResolveLicenses(resolveLicenses),
                     dependencyConfig);
             depsResolver.addDependencyTreeVisitor(sbomGenerator).build().resolveDependencies();
         } else {

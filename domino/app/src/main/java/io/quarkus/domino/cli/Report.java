@@ -42,6 +42,10 @@ public class Report extends BaseDepsToBuildCommand {
     public boolean hashes;
 
     @CommandLine.Option(names = {
+            "--licenses" }, description = "Whether to resolve and record licenses for manifested components", defaultValue = "true")
+    public boolean licenses;
+
+    @CommandLine.Option(names = {
             "--hide-artifacts" }, description = "Patterns of artifact coordinates whose dependencies should be processed but the artifacts themselves should be excluded from the report", split = ",")
     public Collection<String> hideArtifacts = List.of();
 
@@ -89,6 +93,7 @@ public class Report extends BaseDepsToBuildCommand {
                                             .setRecordDependencies(
                                                     !(flatManifest || MANIFEST_DEPS_NONE.equals(manifestDependencies)))
                                             .setCalculateHashes(hashes)
+                                            .setResolveLicenses(licenses)
                                             .setSchemaVersion(cdxSchemaVersion),
                                     resolverBuilder.getDependencyConfig()));
         }
