@@ -384,6 +384,7 @@ public class ProjectDependencyResolver {
 
     public void log() {
         try {
+            resolveDependenciesInternal();
             logInternal();
         } finally {
             close();
@@ -391,8 +392,6 @@ public class ProjectDependencyResolver {
     }
 
     void logInternal() {
-
-        resolveDependenciesInternal();
         int codeReposTotal = 0;
         int reportedArtifactsTotal = 0;
         if ((config.isLogArtifactsToBuild()
