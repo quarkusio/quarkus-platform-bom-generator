@@ -216,6 +216,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     @Parameter(property = "dominoBuildExtensionSupportPatterns", defaultValue = "*-support")
     List<String> dominoBuildExtensionSupportPatterns;
 
+    /**
+     * Whether to skip this goal's execution.
+     */
+    @Parameter(property = "generate-platform-project.skip", defaultValue = "false")
+    boolean skip;
+
     Artifact universalBom;
     MavenArtifactResolver nonWsResolver;
     MavenArtifactResolver wsAwareResolver;
@@ -257,6 +263,11 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
+
+        if (skip) {
+            getLog().info("Skipping");
+            return;
+        }
 
         if (isClean()) {
             getLog().info("Deleting " + outputDir);
