@@ -271,7 +271,7 @@ public class SampleProjectGenerationIT {
     private static long getBuildAppTimeout() {
         var propValue = System.getProperty(BUILD_APP_TIMEOUT);
         if (propValue == null) {
-            return 30;
+            return 60;
         }
         return Long.parseLong(propValue);
     }
