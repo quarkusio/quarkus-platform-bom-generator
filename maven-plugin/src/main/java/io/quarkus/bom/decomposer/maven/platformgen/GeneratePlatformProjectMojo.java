@@ -468,7 +468,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
             final ProjectDependencyConfig.Mutable dominoConfig = ProjectDependencyConfig.builder()
                     .setProjectBom(PlatformArtifacts.ensureBomArtifact(member.descriptorCoords()))
-                    .setProductInfo(SbomConfig.ProductConfig.toProductInfo(getProductInfo(member)));
+                    .setProductInfo(SbomConfig.ProductConfig.toProductInfo(getProductConfig(member)));
 
             if (!this.quarkusCore.descriptorCoords().equals(member.descriptorCoords())) {
                 var quarkusBom = quarkusCore.getGeneratedPlatformBom();
@@ -826,7 +826,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private void generateSbomModule(Model parentPom) throws MojoExecutionException {
-        generateDepsToBuildModule(parentPom, "quarkus-sbom", "sbom", "sbom", "-sbom.json", true);
+        generateDepsToBuildModule(parentPom, "quarkus-sbom", "sbom", "sbom", ".json", true);
     }
 
     private void generateDepsToBuildModule(Model parentPom, String artifactId, String profileId, String outputDirName,
@@ -890,13 +890,22 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             config.addChild(textDomElement("bom",
                     m.getConfiguredPlatformBom().getGroupId() + COLON + m.getConfiguredPlatformBom().getArtifactId() + COLON
                             + getDependencyVersion(pom, m.descriptorCoords())));
-            config.addChild(
-                    textDomElement("outputFile",
-                            prefix + "/" + m.getConfiguredPlatformBom().getArtifactId() + outputFileSuffix));
 
-            final SbomConfig sbomConfig = forSbom ? m.config().getSbom() : null;
+            final SbomConfig sbomConfig;
+            if (forSbom) {
+                sbomConfig = m.config().getSbom();
+                config.addChild(
+                        textDomElement("outputFile",
+                                prefix + "/" + m.getConfiguredPlatformBom().getArtifactId()
+                                        + "-${platform.stream}" + outputFileSuffix));
+            } else {
+                sbomConfig = null;
+                config.addChild(
+                        textDomElement("outputFile",
+                                prefix + "/" + m.getConfiguredPlatformBom().getArtifactId() + outputFileSuffix));
+            }
             if (sbomConfig != null) {
-                var productConfig = getProductInfo(m);
+                final SbomConfig.ProductConfig productConfig = getProductConfig(m);
                 if (productConfig != null) {
                     final Xpp3Dom productInfoDom = newDomSelfAppend("productInfo");
                     config.addChild(productInfoDom);
@@ -1007,7 +1016,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         persistPom(pom);
     }
 
-    private static SbomConfig.ProductConfig getProductInfo(PlatformMember member) {
+    private static SbomConfig.ProductConfig getProductConfig(PlatformMember member) {
         final SbomConfig.ProductConfig productConfig = member.config().getSbom() == null ? null
                 : member.config().getSbom().getProductInfo();
         if (productConfig == null) {
