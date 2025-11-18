@@ -70,6 +70,10 @@ public class Quarkus implements Callable<Integer> {
     @CommandLine.Option(names = { "--version" }, description = "Local repository directory")
     public String version;
 
+    @CommandLine.Option(names = {
+            "--auto-enable-rh-repo" }, description = "Whether to automatically enable the Red Hat Maven repository for Red Hat builds of Quarkus", defaultValue = "true")
+    public boolean autoEnableRhRepo;
+
     @CommandLine.Option(names = { "--platform-group-id" }, description = "Quarkus platform groupId")
     public String platformGroupId;
 
@@ -502,7 +506,7 @@ public class Quarkus implements Callable<Integer> {
         }
         var mvnCtx = new BootstrapMavenContext(config);
         // if the version is a redhat one, enable the redhat repository in case it's not configured
-        if (version != null && RhVersionPattern.isRhVersion(version)) {
+        if (autoEnableRhRepo && version != null && RhVersionPattern.isRhVersion(version)) {
             boolean redhatConfigured = false;
             for (var r : mvnCtx.getRemoteRepositories()) {
                 if (redhatConfigured = isRedhat(r)) {
