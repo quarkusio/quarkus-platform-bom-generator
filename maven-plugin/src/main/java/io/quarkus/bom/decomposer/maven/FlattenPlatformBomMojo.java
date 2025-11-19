@@ -30,7 +30,6 @@ import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.Exclusion;
-import org.eclipse.aether.impl.RemoteRepositoryManager;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.resolution.ArtifactDescriptorRequest;
 import org.eclipse.aether.resolution.ArtifactDescriptorResult;
@@ -39,7 +38,7 @@ import org.eclipse.aether.resolution.ArtifactRequest;
 /**
  * This goal flattens the BOM, i.e. generates its effective content, and replaces the original POM
  * associated with the project with newly generated one.
- * 
+ *
  * By default, it sorts the dependency constraints alphabetically but it could be turned off.
  * The exception is Quarkus platform descriptor and property artifacts. They are moved to the top
  * of the dependency constraint list and their ordering is preserved (i.e. they are excluded from the
@@ -50,9 +49,6 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
 
     @Component
     RepositorySystem repoSystem;
-
-    @Component
-    RemoteRepositoryManager remoteRepoManager;
 
     @Parameter(defaultValue = "${project.remoteProjectRepositories}", readonly = true, required = true)
     List<RemoteRepository> repos;
@@ -84,14 +80,74 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
     @Parameter(required = true, defaultValue = "${project.build.directory}/flattened-${project.artifactId}-${project.version}.pom")
     File outputFile;
 
+    /**
+     * @deprecated use {@link #invalidConstraintsRemedy} instead: {@code dont_validate} for
+     *             {@code filterInvalidConstraints=false} and {@code exclude} for {@code filterInvalidConstraints=true}
+     */
+    @Deprecated
     @Parameter(required = false, property = "filterInvalidConstraints")
-    boolean filterInvalidConstraints;
+    Boolean filterInvalidConstraints;
+
+    /**
+     * How invalid BOM entries should be handled. Possible values:
+     * <ul>
+     * <li>{@code dont_validate} - do not check the validity of the BOM entries at all, just pass them though to the resulting
+     * BOM
+     * <li>{@code exclude} - check the validity of the BOM entries, warn on the console if they are invalid and do not pass
+     * them though to the resulting BOM
+     * <li>{@code fail} - check the validity of the BOM entries, throw an exception on the first invalid entry
+     * Default is {@code dont_validate}
+     * <p>
+     * This is a replacement for {@link #filterInvalidConstraints}. The behavior of {@code dont_validate} and {@code exclude}
+     * values maps to {@code false} and {@code true} values of {@link #filterInvalidConstraints} respectively.
+     *
+     * @since 0.0.127
+     */
+    @Parameter(property = "invalidConstraintsRemedy")
+    FailureRemedy invalidConstraintsRemedy;
+
+    public enum FailureRemedy {
+        fail,
+        exclude,
+        dont_validate
+    }
 
     @Parameter(required = false, property = "excludeScopes")
     List<String> excludeScopes;
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
+
+        if (invalidConstraintsRemedy != null && filterInvalidConstraints != null) {
+            /* Fail if there is an inconsistency */
+            switch (invalidConstraintsRemedy) {
+                case dont_validate:
+                    if (filterInvalidConstraints.booleanValue() != false) {
+                        throw new IllegalStateException("Inconsistent parameter values invalidConstraintsRemedy = "
+                                + invalidConstraintsRemedy + " and filterInvalidConstraints = " + filterInvalidConstraints
+                                + "; use only invalidConstraintsRemedy");
+                    }
+                    break;
+                case exclude:
+                    if (filterInvalidConstraints.booleanValue() != true) {
+                        throw new IllegalStateException("Inconsistent parameter values invalidConstraintsRemedy = "
+                                + invalidConstraintsRemedy + " and filterInvalidConstraints = " + filterInvalidConstraints
+                                + "; use only invalidConstraintsRemedy");
+                    }
+                    break;
+                case fail:
+                    throw new IllegalStateException("Inconsistent parameter values invalidConstraintsRemedy = "
+                            + invalidConstraintsRemedy + " and filterInvalidConstraints = " + filterInvalidConstraints
+                            + "; use only invalidConstraintsRemedy");
+                default:
+                    throw new IllegalStateException("Unexpected invalidConstraintsRemedy value " + invalidConstraintsRemedy);
+            }
+        }
+        if (invalidConstraintsRemedy == null) {
+            invalidConstraintsRemedy = filterInvalidConstraints != null
+                    ? (filterInvalidConstraints.booleanValue() ? FailureRemedy.exclude : FailureRemedy.dont_validate)
+                    : FailureRemedy.dont_validate;
+        }
 
         final ArtifactDescriptorResult bomDescriptor = resolveBomDescriptor();
         initExcludePatterns();
@@ -101,6 +157,7 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
         final List<Dependency> managedDeps = bomDescriptor.getManagedDependencies();
         final Map<String, org.apache.maven.model.Dependency> modelDeps = alphabetically ? new HashMap<>(managedDeps.size())
                 : null;
+        StringBuilder invalidConstraintsErrorMessage = null;
         for (Dependency d : managedDeps) {
             if (!excludeScopes.isEmpty() && excludeScopes.contains(d.getScope())) {
                 if (getLog().isDebugEnabled()) {
@@ -121,9 +178,19 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
                 continue;
             }
 
-            if (filterInvalidConstraints && !exists(a)) {
-                getLog().warn(a + " could not be resolved and was removed from the BOM");
-                continue;
+            if (invalidConstraintsRemedy != FailureRemedy.dont_validate && !exists(a)) {
+                if (invalidConstraintsRemedy == FailureRemedy.exclude) {
+                    getLog().warn(a + " could not be resolved and was removed from the BOM");
+                    continue;
+                } else {
+                    /* Should be invalidConstraintsRemedy == FailureRemedy.fail */
+                    if (invalidConstraintsErrorMessage == null) {
+                        invalidConstraintsErrorMessage = new StringBuilder("Unresolvable dependencyManagement entries in ")
+                                .append(project.getArtifactId())
+                                .append("; you may want to remove them from the source pom.xml file or exclude it via excludeArtifactKeys or excludePatterns:");
+                    }
+                    invalidConstraintsErrorMessage.append("\n    - ").append(a);
+                }
             }
 
             if (modelDeps != null) {
@@ -138,7 +205,7 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
                 // Often in BOMs the classifier 'tests' is omitted for artifacts with type 'test-jar'
                 // in which case it will be filled in by the descriptor resolver.
                 // To not break the actual dependencies relying on what was exactly configured in the BOMs,
-                // we also include the 'test-jar' constraint but w/o the classifier, just in case 
+                // we also include the 'test-jar' constraint but w/o the classifier, just in case
                 org.apache.maven.model.Dependency noClassifier = modelDep.clone();
                 noClassifier.setClassifier(null);
                 if (modelDeps != null) {
@@ -147,6 +214,9 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
                     dm.addDependency(noClassifier);
                 }
             }
+        }
+        if (invalidConstraintsErrorMessage != null) {
+            throw new MojoFailureException(invalidConstraintsErrorMessage.toString());
         }
 
         if (modelDeps != null) {
