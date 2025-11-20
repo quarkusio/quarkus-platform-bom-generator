@@ -3,6 +3,7 @@ package io.quarkus.bom.decomposer.maven;
 import io.quarkus.bom.decomposer.PomUtils;
 import io.quarkus.bootstrap.BootstrapConstants;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
+import io.quarkus.domino.ArtifactSet;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactCoordsPattern;
 import io.quarkus.maven.dependency.ArtifactKey;
@@ -13,6 +14,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.model.DependencyManagement;
 import org.apache.maven.model.Model;
@@ -115,6 +118,36 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
     @Parameter(required = false, property = "excludeScopes")
     List<String> excludeScopes;
 
+    /**
+     * Additional remote repositories to use for validating the entries of this BOM.
+     * Each additional repository is used only for the validation of the artifacts selected by its {@code <includes>}
+     * and {@code <excludes>}.
+     * If some repository matches some artifact, then it is prepended to the list of remote repositories present in the
+     * current Maven session.
+     * The pattern format of {@code <includes>} and {@code <excludes>} is described in
+     * {@link io.quarkus.domino.ArtifactCoordsPattern#of(String)}.
+     * <p>
+     * Example:
+     * 
+     * <pre>
+     * {@code
+     * <additionalRepos>
+     *   <additionalRepo>
+     *     <includes>org.foo:*,org.bar:baz:1.2.3</includes>
+     *     <excludes>org.foo:foo-api</excludes>
+     *     <id>maven.foo.org</id>
+     *     <url>https://maven.foo.org/repo</url>
+     *   </additionalRepo>
+     * </additionalRepos>
+     * }
+     * </pre>
+     *
+     * @since 0.0.127
+     */
+    @Parameter
+    List<AdditionalRepoSpec> additionalRepos;
+    private List<AdditionalRepo> parsedAdditionalRepos;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
 
@@ -148,6 +181,8 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
                     ? (filterInvalidConstraints.booleanValue() ? FailureRemedy.exclude : FailureRemedy.dont_validate)
                     : FailureRemedy.dont_validate;
         }
+
+        parsedAdditionalRepos = additionalRepos();
 
         final ArtifactDescriptorResult bomDescriptor = resolveBomDescriptor();
         initExcludePatterns();
@@ -239,6 +274,15 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
         project.setPomFile(outputFile);
     }
 
+    private List<AdditionalRepo> additionalRepos() {
+        if (additionalRepos == null || additionalRepos.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return additionalRepos.stream()
+                .map(AdditionalRepoSpec::create)
+                .collect(Collectors.toUnmodifiableList());
+    }
+
     private boolean isExcluded(org.eclipse.aether.artifact.Artifact a) {
         if (excludePatterns.isEmpty()) {
             return false;
@@ -285,8 +329,20 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
 
     private boolean resolve(final org.eclipse.aether.artifact.Artifact a) {
         try {
+            final List<RemoteRepository> useRepos;
+            final Optional<AdditionalRepo> additionalRepo = parsedAdditionalRepos.stream()
+                    .filter(repo -> repo.contains(a))
+                    .findFirst();
+            if (additionalRepo.isPresent()) {
+                useRepos = new ArrayList<>(repos.size() + 1);
+                useRepos.add(additionalRepo.get().remoteRepository);
+                useRepos.addAll(repos);
+                getLog().warn("repos for " + a + ": " + useRepos);
+            } else {
+                useRepos = repos;
+            }
             return repoSystem.resolveArtifact(repoSession,
-                    new ArtifactRequest().setArtifact(a).setRepositories(repos))
+                    new ArtifactRequest().setArtifact(a).setRepositories(useRepos))
                     .isResolved();
         } catch (Exception e) {
             return false;
@@ -321,5 +377,48 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
         }
 
         return modelDep;
+    }
+
+    static class AdditionalRepo {
+        private final ArtifactSet artifactSet;
+        private final org.eclipse.aether.repository.RemoteRepository remoteRepository;
+
+        public AdditionalRepo(ArtifactSet artifactSet, RemoteRepository remoteRepository) {
+            super();
+            this.artifactSet = artifactSet;
+            this.remoteRepository = remoteRepository;
+        }
+
+        public boolean contains(org.eclipse.aether.artifact.Artifact a) {
+            return artifactSet.contains(a.getGroupId(), a.getArtifactId(), a.getExtension(), a.getClassifier(), a.getVersion());
+        }
+    }
+
+    public static class AdditionalRepoSpec {
+        final ArtifactSet.Builder artifactSet = ArtifactSet.builder();
+        String id;
+        String url;
+
+        public AdditionalRepo create() {
+            return new AdditionalRepo(
+                    artifactSet.build(),
+                    new RemoteRepository.Builder(id, "default", url).build());
+        }
+
+        public void setIncludes(String includes) {
+            artifactSet.includes(includes);
+        }
+
+        public void setExcludes(String excludes) {
+            artifactSet.excludes(excludes);
+        }
+
+        public void setId(String id) {
+            this.id = id;
+        }
+
+        public void setUrl(String url) {
+            this.url = url;
+        }
     }
 }
