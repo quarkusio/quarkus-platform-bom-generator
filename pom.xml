@@ -51,7 +51,7 @@
     <assertj.version>3.27.6</assertj.version>
     <commons-text.version>1.14.0</commons-text.version>
     <gradle-tooling.version>9.1.0</gradle-tooling.version>
-    <quarkus.version>3.27.0</quarkus.version>
+    <quarkus.version>3.27.1</quarkus.version>
     <quarkus-jgit.version>3.6.1</quarkus-jgit.version>
     <jgit.version>7.4.0.202509020913-r</jgit.version>
     <json-unit-assertj.version>3.2.7</json-unit-assertj.version>
