@@ -876,9 +876,19 @@ public class ProjectDependencyResolver {
         try {
             var descr = resolver.resolveDescriptor(toAetherArtifact(coords));
             final Map<ArtifactKey, Dependency> map = new LinkedHashMap<>();
+            Collection<Exclusion> rootExclusions = List.of();
             for (var d : managedDeps) {
                 var art = d.getArtifact();
                 map.put(ArtifactKey.of(art.getGroupId(), art.getArtifactId(), art.getClassifier(), art.getExtension()), d);
+                // here we capture exclusions applied to the root artifact
+                if (art.getArtifactId().equals(coords.getArtifactId())
+                        && art.getGroupId().equals(coords.getGroupId())
+                        && art.getVersion().equals(coords.getVersion())
+                        && art.getExtension().equals(coords.getType())
+                        && art.getClassifier().equals(coords.getClassifier())
+                        && !d.getExclusions().isEmpty()) {
+                    rootExclusions = d.getExclusions();
+                }
             }
             final List<Dependency> constraints;
             if (descr.getManagedDependencies().isEmpty()) {
@@ -909,11 +919,11 @@ public class ProjectDependencyResolver {
                 var constraint = map
                         .get(ArtifactKey.of(da.getGroupId(), da.getArtifactId(), da.getClassifier(), da.getExtension()));
                 if (constraint == null) {
-                    directDeps.add(d);
+                    directDeps.add(addExclusions(d, rootExclusions));
                 } else if (d.getExclusions().isEmpty()) {
-                    directDeps.add(constraint);
+                    directDeps.add(addExclusions(constraint, rootExclusions));
                 } else {
-                    directDeps.add(merge(constraint, d));
+                    directDeps.add(addExclusions(merge(constraint, d), rootExclusions));
                 }
             }
             var aggregatedRepos = resolver.aggregateRepositories(resolver.getRepositories(),
@@ -935,6 +945,21 @@ public class ProjectDependencyResolver {
             throw new RuntimeException("Failed to collect dependencies of " + coords.toCompactCoords(), e);
         }
         return root;
+    }
+
+    private static Dependency addExclusions(Dependency dep, Collection<Exclusion> exclusions) {
+        if (exclusions == null || exclusions.isEmpty()) {
+            return dep;
+        }
+        Collection<Exclusion> finalExclusions;
+        if (dep.getExclusions().isEmpty()) {
+            finalExclusions = exclusions;
+        } else {
+            finalExclusions = new ArrayList<>(exclusions.size() + dep.getExclusions().size());
+            finalExclusions.addAll(exclusions);
+            finalExclusions.addAll(dep.getExclusions());
+        }
+        return new Dependency(dep.getArtifact(), dep.getScope(), dep.isOptional(), finalExclusions);
     }
 
     private static Dependency merge(Dependency dominant, Dependency recessive) {
