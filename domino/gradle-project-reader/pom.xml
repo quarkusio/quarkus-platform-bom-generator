@@ -3,7 +3,7 @@
   <parent>
     <groupId>io.quarkus</groupId>
     <artifactId>quarkus-domino-parent</artifactId>
-    <version>999-SNAPSHOT</version>
+    <version>0.0.127</version>
   </parent>
 
   <artifactId>quarkus-domino-gradle-project-reader</artifactId>
