@@ -81,6 +81,7 @@ import java.util.Set;
 import java.util.StringJoiner;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import javax.xml.transform.Result;
 import javax.xml.transform.Source;
 import javax.xml.transform.Transformer;
@@ -1265,26 +1266,43 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         }
 
         // MOVE RESOURCES
-        try (var stream = Files.list(javaSources)) {
-            stream.forEach(p -> {
-                if (p.getFileName().toString().equals("io")) {
-                    return;
+        try {
+            Files.walkFileTree(javaSources, new SimpleFileVisitor<Path>() {
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                    if (!file.getFileName().toString().endsWith(".java")) {
+                        final Path targetFile = resourcesDir.resolve(javaSources.relativize(file));
+                        Files.createDirectories(targetFile.getParent());
+                        Files.move(file, targetFile, StandardCopyOption.REPLACE_EXISTING);
+                    }
+                    return FileVisitResult.CONTINUE;
                 }
-                try {
-                    IoUtils.copy(p, resourcesDir.resolve(p.getFileName()));
-                    IoUtils.recursiveDelete(p);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
+
+                @Override
+                public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                    if (isEmptyDirectory(dir)) {
+                        Files.delete(dir);
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                private boolean isEmptyDirectory(Path dir) {
+                    try (Stream<Path> childStream = Files.list(dir)) {
+                        return childStream.findAny().isEmpty();
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
                 }
             });
+
             Path metainfDir = resourcesDir.resolve("META-INF");
             final Path mavenDir = metainfDir.resolve("maven");
             IoUtils.copy(
                     mavenDir.resolve(originalCoords.getGroupId()).resolve(originalCoords.getArtifactId()).resolve(POM_XML),
                     baseDir.resolve(POM_XML));
             IoUtils.recursiveDelete(mavenDir);
-            IoUtils.recursiveDelete(metainfDir.resolve("INDEX.LIST"));
-            IoUtils.recursiveDelete(metainfDir.resolve("MANIFEST.MF"));
+            Files.deleteIfExists(metainfDir.resolve("INDEX.LIST"));
+            Files.deleteIfExists(metainfDir.resolve("MANIFEST.MF"));
         } catch (IOException e) {
             throw new MojoExecutionException("Failed to import original plugin sources", e);
         }
