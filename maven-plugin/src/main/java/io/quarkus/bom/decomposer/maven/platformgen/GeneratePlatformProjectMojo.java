@@ -372,14 +372,14 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             PlatformGenTaskScheduler scheduler) throws Exception {
         generateMemberModule(member, moduleName, parentPom);
         generateMemberBom(member);
-        if (member.config().hasTests()) {
-            generateMemberIntegrationTestsModule(member, scheduler);
-        }
         scheduler.schedule(() -> {
             generatePlatformDescriptorModule(member.descriptorCoords(), member.baseModel,
                     quarkusCore.getInputBom().equals(member.getInputBom()),
                     platformConfig.getAttachedMavenPlugin(), member);
             generatePlatformPropertiesModule(member, true);
+            if (member.config().hasTests()) {
+                generateMemberIntegrationTestsModule(member, scheduler);
+            }
         });
         scheduler.addFinializingTask(() -> persistPom(member.baseModel));
     }
