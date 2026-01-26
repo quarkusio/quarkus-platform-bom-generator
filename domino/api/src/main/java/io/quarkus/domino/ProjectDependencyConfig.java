@@ -8,6 +8,19 @@ import java.nio.file.Path;
 import java.util.Collection;
 import java.util.List;
 
+/**
+ * TODO: Explain mutual relationships between
+ * * {@link #getProjectDir()}
+ * * {@link #getProjectBom()}
+ * * {@link #getNonProjectBoms()}
+ * * {@link #getProjectArtifacts()}
+ * * {@link #getIncludeArtifacts()}
+ * * {@link #getIncludePatterns()} and {@link #getExcludePatterns()}
+ *
+ * For each of the above document what happens if it is not set.
+ *
+ * Mention some combinations that make sense to solve specific problems.
+ */
 public interface ProjectDependencyConfig {
 
     /**
@@ -19,15 +32,24 @@ public interface ProjectDependencyConfig {
     ProductInfo getProductInfo();
 
     /**
-     * Project directory
-     * 
-     * @return project directory
+     * The root directory of a source tree to analyze or {@code null} if analysis is to be done based on released
+     * artifacts.
+     * <p>
+     * See {@link ProjectDependencyConfig} for interactions with other configuration options.
+     *
+     * Does the source tree have to be built before running the analysis?
+     *
+     * @return the root directory of a source tree or {@code null}
      */
     Path getProjectDir();
 
     /**
      * Project BOM
-     * 
+     * TODO:
+     * * what it is good for
+     * * Where it is pulled from - does it have to be published in a remote repository or is local maven repo enough?
+     * * May I omit version if {@link #getProjectDir()} is set?
+     *
      * @return project BOM
      */
     ArtifactCoords getProjectBom();
@@ -35,7 +57,12 @@ public interface ProjectDependencyConfig {
     /**
      * BOMs that should be enforced when resolving dependencies
      * but should not be added as project artifacts.
-     * 
+     *
+     * TODO:
+     * * ensure that "but should not be added as project artifacts" is still true
+     * * If it is not true, add an option to make it configurable.
+     * * If there is any chance to rename it, additionalBoms would be a better name
+     *
      * @return BOMs that should be enforced when resolving dependencies
      *         but should not be added as project artifacts
      */
@@ -48,10 +75,22 @@ public interface ProjectDependencyConfig {
      */
     Collection<ArtifactCoords> getProjectArtifacts();
 
+    /**
+     * TODO:
+     * * The name is very confusing, because it invokes a relationship to {@link #getIncludePatterns()}
+     * However, this ones have no relationship to BOM. They are simply added as-is to the root set, regardless,
+     * whether they are managed or not.
+     * A typical use cases are: maven plugins, annotation processors and similar build time stuff.
+     * If there is any chance to rename, additionalRootArtifacts would be a better name.
+     * @return
+     */
     Collection<ArtifactCoords> getIncludeArtifacts();
 
     /**
      * Artifact coordinates patterns that should be included when walking dependency trees.
+     *
+     * TODO: really when walking? Not only when selecting the root set?
+     * traversalExcludes would kinda make sense, but traversalIncludes sound a bit strange - what would it be good for?
      *
      * @return artifact coordinates patterns that should be included when walking dependency trees
      */
@@ -61,6 +100,8 @@ public interface ProjectDependencyConfig {
      * Artifact coordinates patterns that should be skipped along with their dependencies when walking
      * dependency trees.
      *
+     * TODO: so these are perhaps both root and traversal excludes. Makes sense.
+     *
      * @return artifact coordinates patterns that should be skipped along with their dependencies when walking dependency trees
      */
     Collection<ArtifactCoords> getExcludePatterns();
@@ -68,38 +109,45 @@ public interface ProjectDependencyConfig {
     /**
      * Dependency scopes that should be excluded resolving dependencies of root artifact.
      * If not configured, provided and test scoped dependencies will be excluded by default.
-     * 
+     *
      * @return dependency scopes that should be excluded resolving dependencies of root artifact
      */
     Collection<String> getExcludeScopes();
 
     /**
-     * Whether to exclude dependencies (and their transitive dependencies) that aren't managed in the BOM. The default is true.
-     * 
+     * If {@code true} the dependencies that aren't managed in the BOM (and their transitive dependencies) will be included in the analysis;
+     * otherwise those won't be included.
+     * The default is {@code true}.
+     *
      * @return whether non-managed dependencies should be included
      */
     boolean isIncludeNonManaged();
 
     /**
      * Whether to exclude parent POMs from the list of artifacts to be built from source
-     * 
+     *
+     * TODO: default value?
+     *
      * @return whether to exclude parent POMs
      */
     boolean isExcludeParentPoms();
 
     /**
-     * Whether to exclude BOMs imported in the POMs of artifacts to be built from the list of artifacts to be built from source
-     * 
+     * Whether to exclude BOMs imported in the POMs of artifacts to be built from the list of artifacts to be built
+     * from source.
+     *
+     * TODO: default value?
+     *
      * @return whether to exclude BOM imports
      */
     boolean isExcludeBomImports();
 
     /**
-     * The depth level of a dependency tree of each supported Quarkus extension to capture.
-     * Setting the level to 0 will target the supported extension artifacts themselves.
-     * Setting the level to 1, will target the supported extension artifacts plus their direct dependencies.
-     * If the level is not specified, the default will be -1, which means all the levels.
-     * 
+     * The depth level of a dependency tree of each root artifact to capture.
+     * Setting the level to 0 will target the root artifacts themselves.
+     * Setting the level to 1, will target the root artifacts plus their direct dependencies.
+     * If the level is not specified, the default will be -1, which means unlimited levels.
+     *
      * @return dependency level
      */
     int getLevel();
@@ -108,13 +156,18 @@ public interface ProjectDependencyConfig {
      * Whether verbose dependency graphs should be enabled in the underlying dependency resolver.
      * This means exposing information about winning nodes during conflict resolution.
      *
+     * TODO: default value?
+     * TODO: in which situations should this be enabled?
+     *
      * @return whether verbose dependency graphs are enabled in the resolver
      */
     boolean isVerboseGraphs();
 
     /**
      * Whether to log the coordinates of the artifacts captured down to the depth specified. The default is true.
-     * 
+     *
+     * TODO: is this really just log, or rather capture? Should this not be activated through log topic/level?
+     *
      * @return whether to log complete artifacts coordinates
      */
     boolean isLogArtifactsToBuild();
@@ -123,63 +176,69 @@ public interface ProjectDependencyConfig {
      * Whether to log the module GAVs the artifacts to be built belongs to instead of all
      * the complete artifact coordinates to be built.
      * If this option is enabled, it overrides {@link #isLogArtifactsToBuild()}
-     * 
+     *
+     * TODO: what are module GAVs?
+     *
      * @return whether to log module coords as GAVs instead of complete artifact coordinates
      */
     boolean isLogModulesToBuild();
 
     /**
      * Whether to log the dependency trees walked down to the depth specified. The default is false.
-     * 
+     *
      * @return whether to log dependency trees
      */
     boolean isLogTrees();
 
     /**
      * Comma-separated list of artifacts to log dependency trees for.
-     * 
+     *
      * @return comma-separated list of artifacts to log dependency trees for
      */
     String getLogTreesFor();
 
     /**
      * Whether to log the coordinates of the artifacts below the depth specified. The default is false.
-     * 
+     *
      * @return whether to log remaining artifacts
      */
     boolean isLogRemaining();
 
     /**
      * Whether to log the summary at the end. The default is true.
-     * 
+     *
+     * TODO: what is in the summary? In which situations can it be useful?
+     *
      * @return whether to log summary
      */
     boolean isLogSummary();
 
     /**
      * Whether to log visited non-managed dependencies.
-     * 
+     *
      * @return whether to log visited non-managed dependencies
      */
     boolean isLogNonManagedVisitied();
 
     /**
      * Whether to log code repository info for the artifacts to be built from source
-     * 
+     *
      * @return whether to log code repositories
      */
     boolean isLogCodeRepos();
 
     /**
      * Whether to log code repository dependency tree.
-     * 
+     *
      * @return whetehr to log code repository dependency tree
      */
     boolean isLogCodeRepoTree();
 
     /**
      * A list of build recipe repository URLs
-     * 
+     *
+     * TODO: what is a recipe repository? Links pointing to some recipe repositories?
+     *
      * @return list of build recipe repository URLs
      */
     List<String> getRecipeRepos();
@@ -188,7 +247,7 @@ public interface ProjectDependencyConfig {
      * @deprecated this option isn't used anymore
      *
      *             Whether to validate the discovered code repo and tags that are included in the report
-     * 
+     *
      * @return whether to validate core repos and tags
      */
     @Deprecated(forRemoval = true)
@@ -196,9 +255,9 @@ public interface ProjectDependencyConfig {
 
     /**
      * @deprecated Deprecated in favor of the HACBS SCM locator that performs validation
-     * 
+     *
      *             Whether to use the legacy SCM detector.
-     * 
+     *
      * @return whether to use the legacy SCM detector
      */
     @Deprecated(since = "0.0.78")
@@ -206,7 +265,9 @@ public interface ProjectDependencyConfig {
 
     /**
      * Whether to warn about errors not being able to resolve top level artifacts or fail the process
-     * 
+     *
+     * TODO: default value?
+     *
      * @return whether to warn on artifact resolution errors
      */
     boolean isWarnOnResolutionErrors();
@@ -214,16 +275,22 @@ public interface ProjectDependencyConfig {
     /**
      * Whether to issue a warning in case the SCM location could not be determined or fail with
      * an error (the default behavior).
-     * 
+     *
+     * TODO: default value?
+     *
      * @return whether to fail in case the SCM location could not be determined
      */
     boolean isWarnOnMissingScm();
 
+    /**
+     * TODO
+     * @return
+     */
     boolean isIncludeAlreadyBuilt();
 
     /**
      * Whether to include optional dependencies of the root project artifacts
-     * 
+     *
      * @return whether to include optional dependencies of the root project artifacts
      */
     boolean isIncludeOptionalDeps();
@@ -233,6 +300,8 @@ public interface ProjectDependencyConfig {
      * This option is useful when dependencies of a specific artifact should be included in the report but not the artifact
      * itself.
      *
+     * TODO: what format? just GAV?
+     *
      * @return patterns of artifact coordinates that should be included in the dependency analysis but excluded from the report
      */
     Collection<String> getHideArtifacts();
@@ -240,14 +309,16 @@ public interface ProjectDependencyConfig {
     /**
      * Whether to use Java 8 to fetch dependency information from a Gradle project.
      * In case this method returns true, the value of JAVA8_HOME environment variable will be used as the Java 8 home directory.
-     * 
+     *
      * @return whether to use Java 8 to fetch dependency information from a Gradle project
      */
     boolean isGradleJava8();
 
     /**
      * Java home directory that should be used when fetching dependency information from a Gradle project.
-     * 
+     *
+     * TODO: default value?
+     *
      * @return Java home directory that should be used when fetching dependency information from a Gradle project.
      */
     String getGradleJavaHome();
