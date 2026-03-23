@@ -268,4 +268,5 @@ public class ValidateExtensionsJsonMojo extends AbstractMojo {
         throw new RuntimeException(
                 a + " includes Quarkus extension properties but not " + BootstrapConstants.EXTENSION_METADATA_PATH);
     }
+
 }
