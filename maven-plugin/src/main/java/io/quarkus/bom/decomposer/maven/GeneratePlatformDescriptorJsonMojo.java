@@ -384,7 +384,8 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
                     extension = processDependency(
                             repoSystem.resolveArtifact(repoSession,
                                     new ArtifactRequest().setRepositories(repos).setArtifact(artifact))
-                                    .getArtifact());
+                                    .getArtifact(),
+                            deps);
                 } catch (ArtifactResolutionException e) {
                     // there are some parent poms that appear as jars for some reason
                     debug("Failed to resolve dependency %s defined in %s", artifact, bomArtifact);
@@ -714,13 +715,14 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
         return value;
     }
 
-    private Extension.Mutable processDependency(Artifact artifact) throws IOException, MojoExecutionException {
+    private Extension.Mutable processDependency(Artifact artifact, List<Dependency> bomDependencies)
+            throws IOException, MojoExecutionException {
         final Path path = artifact.getFile().toPath();
         if (Files.isDirectory(path)) {
-            return processMetaInfDir(artifact, path.resolve(BootstrapConstants.META_INF));
+            return processMetaInfDir(artifact, path.resolve(BootstrapConstants.META_INF), bomDependencies);
         } else {
             try (FileSystem artifactFs = ZipUtils.newFileSystem(path)) {
-                return processMetaInfDir(artifact, artifactFs.getPath(BootstrapConstants.META_INF));
+                return processMetaInfDir(artifact, artifactFs.getPath(BootstrapConstants.META_INF), bomDependencies);
             }
         }
     }
@@ -734,7 +736,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
      * @throws IOException
      * @throws MojoExecutionException
      */
-    private Extension.Mutable processMetaInfDir(Artifact artifact, Path metaInfDir)
+    private Extension.Mutable processMetaInfDir(Artifact artifact, Path metaInfDir, List<Dependency> bomDependencies)
             throws IOException, MojoExecutionException {
 
         if (!Files.exists(metaInfDir)) {
@@ -743,7 +745,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
 
         Path yaml = metaInfDir.resolve(BootstrapConstants.QUARKUS_EXTENSION_FILE_NAME);
         if (Files.exists(yaml)) {
-            return processPlatformArtifact(artifact, yaml);
+            return processPlatformArtifact(artifact, yaml, bomDependencies);
         }
 
         Extension.Mutable e = null;
@@ -757,10 +759,12 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
         return e;
     }
 
-    private Extension.Mutable processPlatformArtifact(Artifact artifact, Path descriptor)
+    private Extension.Mutable processPlatformArtifact(Artifact artifact, Path descriptor, List<Dependency> bomDependencies)
             throws IOException, MojoExecutionException {
         final Extension.Mutable legacy = Extension.mutableFromFile(descriptor);
         final Extension.Mutable object = transformLegacyToNew(legacy);
+        // Resolve integrates versions from BOM
+        resolveIntegratesVersions(object, bomDependencies);
         if (object.getArtifact() == null) {
             throw new MojoExecutionException(descriptor + " of " + artifact
                     + " is missing the artifact coordinates, please make sure the extension metadata is complete");
@@ -836,6 +840,67 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
             metadata.remove("labels");
         }
         return extObject;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void resolveIntegratesVersions(Extension.Mutable extObject, List<Dependency> bomDependencies) {
+        if (bomDependencies == null) {
+            if (getLog().isDebugEnabled()) {
+                debug("bomDependencies is null, skipping integrates resolution");
+            }
+            return;
+        }
+
+        final Map<String, Object> metadata = extObject.getMetadata();
+        final Object integratesObj = metadata.get("integrates");
+        if (integratesObj == null) {
+            return;
+        }
+
+        if (!(integratesObj instanceof List)) {
+            if (getLog().isDebugEnabled()) {
+                debug("integrates is not a List, type is: %s", integratesObj.getClass().getName());
+            }
+            return;
+        }
+
+        if (getLog().isDebugEnabled()) {
+            debug("Processing integrates for extension: %s", extObject.getArtifact());
+        }
+        List<Map<String, String>> integratesList = (List<Map<String, String>>) integratesObj;
+        for (Map<String, String> integrates : integratesList) {
+
+            // Skip if version is already set
+            if (integrates.containsKey("version")) {
+                continue;
+            }
+
+            String resolveVersionFrom = integrates.get("resolveVersionFrom");
+            if (resolveVersionFrom != null && !resolveVersionFrom.isEmpty()) {
+                String[] parts = resolveVersionFrom.split(":");
+                if (parts.length == 2) {
+                    String groupId = parts[0];
+                    String artifactId = parts[1];
+
+                    boolean found = false;
+                    for (Dependency dep : bomDependencies) {
+                        if (dep.getArtifact().getGroupId().equals(groupId) &&
+                                dep.getArtifact().getArtifactId().equals(artifactId)) {
+                            integrates.put("version", dep.getArtifact().getVersion());
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        getLog().warn("Could not resolve version for integrates item: " + resolveVersionFrom +
+                                " in extension " + extObject.getArtifact());
+                    }
+                } else {
+                    getLog().warn("Could not resolve version for integrates item: " + resolveVersionFrom +
+                            " in extension " + extObject.getArtifact());
+                }
+            }
+        }
     }
 
     public OverrideInfo getOverrideInfo(File overridesFile) throws MojoExecutionException {

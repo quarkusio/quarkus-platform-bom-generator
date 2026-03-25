@@ -156,6 +156,8 @@ public class ValidateExtensionsJsonMojo extends AbstractMojo {
                     missingFromBom.add(deploymentCoords);
                 }
             }
+
+            validateIntegratesMetadata(ext);
         }
 
         if (bomExtensionArtifacts.isEmpty() && missingFromBom.isEmpty()) {
@@ -267,5 +269,47 @@ public class ValidateExtensionsJsonMojo extends AbstractMojo {
         }
         throw new RuntimeException(
                 a + " includes Quarkus extension properties but not " + BootstrapConstants.EXTENSION_METADATA_PATH);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void validateIntegratesMetadata(Extension ext) throws MojoExecutionException {
+        Map<String, Object> metadata = ext.getMetadata();
+        if (metadata == null) {
+            return;
+        }
+
+        Object integratesObj = metadata.get("integrates");
+        if (integratesObj == null) {
+            return;
+        }
+
+        if (!(integratesObj instanceof List)) {
+            getLog().warn(
+                    "Extension " + ext.getArtifact() + " has invalid 'integrates' metadata: expected a List but got "
+                            + integratesObj.getClass().getName());
+        }
+
+        List<Map<String, String>> integratesList = (List<Map<String, String>>) integratesObj;
+        for (Map<String, String> integrates : integratesList) {
+            String resolveVersionFrom = integrates.get("resolveVersionFrom");
+            String version = integrates.get("version");
+
+            // If resolveVersionFrom is specified but no version was resolved
+            if (resolveVersionFrom != null && !resolveVersionFrom.isEmpty()
+                    && (version == null || version.isEmpty())) {
+                getLog().warn(
+                        "Extension " + ext.getArtifact() + " has incomplete 'integrates' metadata: "
+                                + "resolveVersionFrom='" + resolveVersionFrom + "' but no version was resolved. "
+                                + "This likely means the artifact is not in the BOM.");
+            }
+
+            // If neither resolveVersionFrom nor version is set
+            if ((resolveVersionFrom == null || resolveVersionFrom.isEmpty())
+                    && (version == null || version.isEmpty())) {
+                getLog().warn(
+                        "Extension " + ext.getArtifact() + " has 'integrates' metadata without version or resolveVersionFrom: "
+                                + integrates);
+            }
+        }
     }
 }
