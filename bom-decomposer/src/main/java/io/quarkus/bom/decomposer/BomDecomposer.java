@@ -211,20 +211,52 @@ public class BomDecomposer {
             resolve(artifact);
         } else if (ArtifactCoords.TYPE_JAR.equals(artifact.getExtension())) {
             final Model model = revisionResolver.readPom(artifact);
-            if (ArtifactCoords.TYPE_POM.equals(model.getPackaging())) {
+            if (ArtifactCoords.TYPE_POM.equals(model.getPackaging()) || hasRelocation(model)) {
                 // if an artifact has type JAR but the packaging is POM then check whether the artifact is resolvable
                 try {
                     resolve(artifact);
                 } catch (ArtifactNotFoundException e) {
-                    final DistributionManagement distr = model.getDistributionManagement();
-                    if (distr == null || distr.getRelocation() == null) {
-                        // there is no relocation, so it can be removed
+                    throw e;
+                }
+                if (hasRelocation(model)) {
+                    // Some parent POM relocations may be missing <packaging>pom</packaging> and still resolve to an empty JAR,
+                    // although the relocated coordinates would fail to resolve the JAR artifact.
+                    // For example, io.quarkiverse.mcp:quarkus-mcp-server-sse-parent:jar:1.10.2 -> io.quarkiverse.mcp:quarkus-mcp-server-http-parent:jar:1.10.2
+                    var relocation = model.getDistributionManagement().getRelocation();
+                    var relocatedArtifact = new DefaultArtifact(
+                            getEffectiveValue(relocation.getGroupId(), artifact.getGroupId()),
+                            getEffectiveValue(relocation.getArtifactId(), artifact.getArtifactId()),
+                            artifact.getClassifier(),
+                            artifact.getExtension(),
+                            getEffectiveValue(relocation.getVersion(), artifact.getVersion()));
+                    logger().debug("Found relocation of %s to %s", artifact, relocatedArtifact);
+                    try {
+                        resolve(relocatedArtifact);
+                    } catch (ArtifactNotFoundException e) {
                         throw e;
                     }
-                    logger().debug("Found relocation for %s", artifact);
                 }
             }
         }
+    }
+
+    private static String getEffectiveValue(String configuredValue, String defaultValue) {
+        if (configuredValue == null) {
+            return defaultValue;
+        }
+        if (configuredValue.startsWith("${")) {
+            var propName = configuredValue.substring(2, configuredValue.length() - 1);
+            if (propName.startsWith("project.")) {
+                return defaultValue;
+            }
+            throw new RuntimeException("Missing effective value for property " + propName);
+        }
+        return configuredValue;
+    }
+
+    private static boolean hasRelocation(Model model) {
+        final DistributionManagement dm = model.getDistributionManagement();
+        return dm != null && dm.getRelocation() != null;
     }
 
     private List<Dependency> bomManagedDeps() {
