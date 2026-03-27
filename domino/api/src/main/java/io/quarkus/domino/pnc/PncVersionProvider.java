@@ -23,7 +23,7 @@ import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
 
 public class PncVersionProvider {
 
-    private static final String LATEST_VERSION_REQUEST_URL = "https://da.psi.redhat.com/da/rest/v-1/lookup/maven/latest";
+    private static final String LATEST_VERSION_REQUEST_URL = "https://da.pnc.engineering.redhat.com/da/rest/v-1/lookup/maven/latest";
 
     private static volatile ObjectMapper mapper;
 
