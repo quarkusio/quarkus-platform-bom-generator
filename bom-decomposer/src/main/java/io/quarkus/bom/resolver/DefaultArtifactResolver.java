@@ -16,10 +16,14 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import org.eclipse.aether.artifact.Artifact;
+import org.eclipse.aether.collection.CollectRequest;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.resolution.ArtifactDescriptorResult;
-import org.eclipse.aether.resolution.ArtifactResolutionException;
 import org.eclipse.aether.resolution.ArtifactResult;
+import org.eclipse.aether.resolution.DependencyRequest;
+import org.eclipse.aether.resolution.DependencyResolutionException;
+import org.eclipse.aether.resolution.DependencyResult;
+import org.eclipse.aether.util.artifact.JavaScopes;
 
 /**
  * This class wraps the underlying Maven artifact resolver and may keep an artifact info cache, e.g.
@@ -82,14 +86,33 @@ public class DefaultArtifactResolver implements ArtifactResolver {
         if (isRecordedAsNonExisting(coords)) {
             throw recordedAsNonExistingError(coords);
         }
+        DependencyResult depResult;
         try {
-            return resolver.resolve(a, repos);
-        } catch (BootstrapMavenException e) {
-            if (isArtifactNotFoundError(e)) {
-                persistNotFoundArtifacts(coords);
+            // this trick is done to capture relocations, i.e. when {@code a} was relocated to another artifact
+            var request = new DependencyRequest()
+                    .setCollectRequest(new CollectRequest()
+                            .setRootArtifact(a)
+                            .setDependencies(List.of(new org.eclipse.aether.graph.Dependency(a, JavaScopes.COMPILE, false,
+                                    List.of(new org.eclipse.aether.graph.Exclusion("*", "*", "*", "*")))))
+                            .setRepositories(resolver.getRepositories()));
+            depResult = resolver.getSystem().resolveDependencies(resolver.getSession(), request);
+        } catch (DependencyResolutionException e) {
+            List<ArtifactResult> artifactResults = e.getResult().getArtifactResults();
+            if (!artifactResults.isEmpty()) {
+                ArtifactResult result = artifactResults.get(0);
+                for (Exception error : result.getExceptions()) {
+                    if (isArtifactNotFoundError(error)) {
+                        persistNotFoundArtifacts(coords);
+                        throw new ArtifactNotFoundException("Failed to resolve " + a, error);
+                    }
+                }
             }
             throw new ArtifactNotFoundException("Failed to resolve " + a, e);
         }
+        if (depResult.getArtifactResults().size() != 1) {
+            throw new IllegalStateException("Expected a single dependency but got " + depResult.getArtifactResults());
+        }
+        return depResult.getArtifactResults().get(0);
     }
 
     @Override
@@ -165,12 +188,11 @@ public class DefaultArtifactResolver implements ArtifactResolver {
     }
 
     private static boolean isArtifactNotFoundError(Throwable t) {
-        t = t.getCause();
-        if (t instanceof ArtifactResolutionException) {
-            t = t.getCause();
+        while (t != null) {
             if (t instanceof org.eclipse.aether.transfer.ArtifactNotFoundException) {
                 return true;
             }
+            t = t.getCause();
         }
         return false;
     }
