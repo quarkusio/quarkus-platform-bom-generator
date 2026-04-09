@@ -19,7 +19,12 @@ public class ResolvingDependencyTreeBuilder extends DependencyTreeBuilder {
                     new DependencyRequest().setCollectRequest(createCollectRequest(root)))
                     .getRoot();
         } catch (DependencyResolutionException e) {
-            throw new RuntimeException("Failed to resolve dependencies of " + root.getArtifact(), e);
+            StringBuilder msg = new StringBuilder().append("Failed to resolve dependencies of ")
+                    .append(root.getArtifact());
+            if (e.getResult().getRequest().getCollectRequest().getRoot() == null) {
+                msg.append(" (as a direct dependency)");
+            }
+            throw new RuntimeException(msg.toString(), e);
         }
     }
 }

@@ -213,11 +213,7 @@ public class BomDecomposer {
             final Model model = revisionResolver.readPom(artifact);
             if (ArtifactCoords.TYPE_POM.equals(model.getPackaging()) || hasRelocation(model)) {
                 // if an artifact has type JAR but the packaging is POM then check whether the artifact is resolvable
-                try {
-                    resolve(artifact);
-                } catch (ArtifactNotFoundException e) {
-                    throw e;
-                }
+                resolve(artifact);
                 if (hasRelocation(model)) {
                     // Some parent POM relocations may be missing <packaging>pom</packaging> and still resolve to an empty JAR,
                     // although the relocated coordinates would fail to resolve the JAR artifact.
@@ -230,11 +226,7 @@ public class BomDecomposer {
                             artifact.getExtension(),
                             getEffectiveValue(relocation.getVersion(), artifact.getVersion()));
                     logger().debug("Found relocation of %s to %s", artifact, relocatedArtifact);
-                    try {
-                        resolve(relocatedArtifact);
-                    } catch (ArtifactNotFoundException e) {
-                        throw e;
-                    }
+                    resolve(relocatedArtifact);
                 }
             }
         }
