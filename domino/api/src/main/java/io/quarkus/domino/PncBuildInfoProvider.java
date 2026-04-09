@@ -37,7 +37,7 @@ public class PncBuildInfoProvider {
 
         final URL url;
         try {
-            url = new URL("https", "orch.psi.redhat.com", 443,
+            url = new URL("https", "orch.pnc.engineering.redhat.com", 443,
                     "/pnc-rest/v2/artifacts?q=identifier==%22"
                             + groupId + ":"
                             + artifactId + ":pom:"
