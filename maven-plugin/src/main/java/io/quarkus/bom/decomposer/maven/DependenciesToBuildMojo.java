@@ -228,11 +228,11 @@ public class DependenciesToBuildMojo extends AbstractMojo {
 
     /**
      * Extension metadata key glob patterns used when determining whether an extension should be selected for a rebuild
-     * from source. The default value is {@code *-support}.
+     * from source. For example {@code *-support}.
      */
-    @Parameter(property = "supportPatterns", defaultValue = "*-support")
-    List<String> supportPatterns;
-    private List<Pattern> compiledSupportPatterns;
+    @Parameter(property = "extensionMetadataSupportPatterns")
+    List<String> extensionMetadataSupportPatterns;
+    private List<Pattern> compiledMetadataSupportPatterns;
 
     /**
      * Whether to calculate hashes for manifested components
@@ -436,14 +436,14 @@ public class DependenciesToBuildMojo extends AbstractMojo {
     }
 
     private List<Pattern> getCompiledSupportPatters() {
-        if (compiledSupportPatterns == null) {
-            var result = new ArrayList<Pattern>(supportPatterns.size());
-            for (var pattern : supportPatterns) {
+        if (compiledMetadataSupportPatterns == null) {
+            var result = new ArrayList<Pattern>(extensionMetadataSupportPatterns.size());
+            for (var pattern : extensionMetadataSupportPatterns) {
                 result.add(Pattern.compile(GlobUtil.toRegexPattern(pattern)));
             }
-            compiledSupportPatterns = result;
+            compiledMetadataSupportPatterns = result;
         }
-        return compiledSupportPatterns;
+        return compiledMetadataSupportPatterns;
     }
 
     private static boolean isMatchesSupportPattern(Extension extension, List<Pattern> patterns) {
