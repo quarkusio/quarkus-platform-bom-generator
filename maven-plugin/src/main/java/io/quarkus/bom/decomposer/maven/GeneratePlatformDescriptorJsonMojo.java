@@ -384,7 +384,8 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
                     extension = processDependency(
                             repoSystem.resolveArtifact(repoSession,
                                     new ArtifactRequest().setRepositories(repos).setArtifact(artifact))
-                                    .getArtifact());
+                                    .getArtifact(),
+                            deps);
                 } catch (ArtifactResolutionException e) {
                     // there are some parent poms that appear as jars for some reason
                     debug("Failed to resolve dependency %s defined in %s", artifact, bomArtifact);
@@ -714,13 +715,14 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
         return value;
     }
 
-    private Extension.Mutable processDependency(Artifact artifact) throws IOException, MojoExecutionException {
+    private Extension.Mutable processDependency(Artifact artifact, List<Dependency> bomDependencies)
+            throws IOException, MojoExecutionException {
         final Path path = artifact.getFile().toPath();
         if (Files.isDirectory(path)) {
-            return processMetaInfDir(artifact, path.resolve(BootstrapConstants.META_INF));
+            return processMetaInfDir(artifact, path.resolve(BootstrapConstants.META_INF), bomDependencies);
         } else {
             try (FileSystem artifactFs = ZipUtils.newFileSystem(path)) {
-                return processMetaInfDir(artifact, artifactFs.getPath(BootstrapConstants.META_INF));
+                return processMetaInfDir(artifact, artifactFs.getPath(BootstrapConstants.META_INF), bomDependencies);
             }
         }
     }
@@ -734,7 +736,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
      * @throws IOException
      * @throws MojoExecutionException
      */
-    private Extension.Mutable processMetaInfDir(Artifact artifact, Path metaInfDir)
+    private Extension.Mutable processMetaInfDir(Artifact artifact, Path metaInfDir, List<Dependency> bomDependencies)
             throws IOException, MojoExecutionException {
 
         if (!Files.exists(metaInfDir)) {
@@ -743,7 +745,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
 
         Path yaml = metaInfDir.resolve(BootstrapConstants.QUARKUS_EXTENSION_FILE_NAME);
         if (Files.exists(yaml)) {
-            return processPlatformArtifact(artifact, yaml);
+            return processPlatformArtifact(artifact, yaml, bomDependencies);
         }
 
         Extension.Mutable e = null;
@@ -757,10 +759,12 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
         return e;
     }
 
-    private Extension.Mutable processPlatformArtifact(Artifact artifact, Path descriptor)
+    private Extension.Mutable processPlatformArtifact(Artifact artifact, Path descriptor, List<Dependency> bomDependencies)
             throws IOException, MojoExecutionException {
         final Extension.Mutable legacy = Extension.mutableFromFile(descriptor);
         final Extension.Mutable object = transformLegacyToNew(legacy);
+        // Resolve integrates versions from BOM
+        resolveIntegratesVersions(object, bomDependencies);
         if (object.getArtifact() == null) {
             throw new MojoExecutionException(descriptor + " of " + artifact
                     + " is missing the artifact coordinates, please make sure the extension metadata is complete");
@@ -836,6 +840,97 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
             metadata.remove("labels");
         }
         return extObject;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void resolveIntegratesVersions(Extension.Mutable extObject, List<Dependency> bomDependencies)
+            throws MojoExecutionException {
+        if (bomDependencies == null) {
+            if (getLog().isDebugEnabled()) {
+                debug("bomDependencies is null, skipping integrates resolution");
+            }
+            return;
+        }
+
+        final Map<String, Object> metadata = extObject.getMetadata();
+        final Object integratesObj = metadata.get("integrates");
+        if (integratesObj == null) {
+            return;
+        }
+
+        if (!(integratesObj instanceof List)) {
+            throw new MojoExecutionException("Extension " + extObject.getArtifact()
+                    + " has invalid 'integrates' metadata: expected a List but got "
+                    + integratesObj.getClass().getName());
+        }
+
+        if (getLog().isDebugEnabled()) {
+            debug("Processing integrates for extension: %s", extObject.getArtifact());
+            debug("BOM has %d managed dependencies", bomDependencies.size());
+            for (Dependency dep : bomDependencies) {
+                debug("  BOM dependency: %s:%s:%s",
+                        dep.getArtifact().getGroupId(),
+                        dep.getArtifact().getArtifactId(),
+                        dep.getArtifact().getVersion());
+            }
+        }
+
+        List<Map<String, String>> integratesList = (List<Map<String, String>>) integratesObj;
+        for (int i = 0; i < integratesList.size(); i++) {
+            Map<String, String> integrates = integratesList.get(i);
+
+            // Validate mandatory fields
+            String name = integrates.get("name");
+            String artifact = integrates.get("artifact");
+            String version = integrates.get("version");
+
+            if (name == null || name.isEmpty()) {
+                throw new MojoExecutionException("Extension " + extObject.getArtifact()
+                        + " has 'integrates' entry at index " + i + " missing mandatory 'name' field");
+            }
+            if (artifact == null || artifact.isEmpty()) {
+                throw new MojoExecutionException("Extension " + extObject.getArtifact()
+                        + " has 'integrates' entry at index " + i + " (name: '" + name
+                        + "') missing mandatory 'artifact' field");
+            }
+            if (version == null || version.isEmpty()) {
+                throw new MojoExecutionException("Extension " + extObject.getArtifact()
+                        + " has 'integrates' entry at index " + i + " (name: '" + name
+                        + "') missing mandatory 'version' field");
+            }
+
+            // Parse artifact coordinates (format: "groupId:artifactId")
+            String[] parts = artifact.split(":");
+            if (parts.length != 2) {
+                throw new MojoExecutionException("Extension " + extObject.getArtifact()
+                        + " has 'integrates' entry '" + name + "' with invalid artifact format: '" + artifact
+                        + "'. Expected format: 'groupId:artifactId'");
+            }
+
+            String groupId = parts[0];
+            String artifactId = parts[1];
+
+            // Look up artifact in BOM
+            String bomVersion = null;
+            for (Dependency dep : bomDependencies) {
+                if (dep.getArtifact().getGroupId().equals(groupId)
+                        && dep.getArtifact().getArtifactId().equals(artifactId)) {
+                    bomVersion = dep.getArtifact().getVersion();
+                    break;
+                }
+            }
+
+            // If found in BOM, validate and override version if different
+            if (bomVersion != null) {
+                if (!version.equals(bomVersion)) {
+                    getLog().info("Upgrading " + name + " " + version + " -> " + bomVersion + " in "
+                            + extObject.getArtifact() + "'s extension metadata to match the version of " + artifact
+                            + " in Platform BOMs");
+                    integrates.put("version", bomVersion);
+                }
+            }
+            // If not in BOM, keep the provided version as-is (no action needed)
+        }
     }
 
     public OverrideInfo getOverrideInfo(File overridesFile) throws MojoExecutionException {

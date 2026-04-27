@@ -154,6 +154,43 @@ public class MavenModuleGenerator {
         return addModule(moduleName).setPackaging(ArtifactCoords.TYPE_POM);
     }
 
+    /**
+     * Adds integrates metadata to a Quarkus extension's quarkus-extension.yaml file.
+     * This creates the YAML file with artifact, name, and integrates metadata.
+     *
+     * @param integrates List of integrates entries
+     * @return this module generator for chaining
+     */
+    public MavenModuleGenerator addExtensionIntegratesMetadata(List<ExtensionIntegrates> integrates) {
+        return addPostGenerateTask(moduleDir -> {
+            try {
+                var metaInf = Files.createDirectories(
+                        moduleDir.resolve("src").resolve("main").resolve("resources").resolve("META-INF"));
+                var yamlFile = metaInf.resolve(BootstrapConstants.QUARKUS_EXTENSION_FILE_NAME);
+
+                var content = new StringBuilder();
+                content.append("---\n");
+                content.append("artifact: \"").append(getGroupId()).append(':')
+                        .append(getArtifactId()).append(':').append(getVersion()).append("\"\n");
+                content.append("name: \"").append(getArtifactId()).append("\"\n");
+
+                if (integrates != null && !integrates.isEmpty()) {
+                    content.append("metadata:\n");
+                    content.append("  integrates:\n");
+                    for (var entry : integrates) {
+                        content.append("    - name: \"").append(entry.getName()).append("\"\n");
+                        content.append("      artifact: \"").append(entry.getArtifact()).append("\"\n");
+                        content.append("      version: \"").append(entry.getVersion()).append("\"\n");
+                    }
+                }
+
+                Files.writeString(yamlFile, content.toString());
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        });
+    }
+
     public MavenModuleGenerator addVersionConstraint(MavenModuleGenerator module) {
         return addVersionConstraint(module.getGroupId(), module.getArtifactId(), module.getVersion());
     }
