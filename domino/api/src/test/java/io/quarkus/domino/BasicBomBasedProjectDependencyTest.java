@@ -99,7 +99,7 @@ public class BasicBomBasedProjectDependencyTest {
         assertThat(rc.getReleases()).hasSize(4);
 
         var roots = toMap(rc.getRootReleaseRepos());
-        assertThat(roots).hasSize(2);
+        assertThat(roots).hasSize(1);
 
         var release = roots.get(ReleaseIdFactory.forScmAndTag("https://acme.org/lib", "1.0"));
         assertThat(release).isNotNull();
@@ -115,10 +115,9 @@ public class BasicBomBasedProjectDependencyTest {
         assertThat(release.getArtifacts()).hasSize(2);
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.pom("org.bar", "bar-parent", "1.0"));
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.bar", "bar-lib", "1.0"));
-        assertThat(release.getDependencies()).isEmpty();
+        assertThat(release.getDependencies()).hasSize(1);
 
-        release = roots.get(ReleaseIdFactory.forScmAndTag("https://foo.org/lib", "2.0"));
-        assertThat(release).isNotNull();
+        release = release.getDependencies().iterator().next();
         assertThat(release.getArtifacts()).hasSize(1);
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.foo", "foo-lib", "2.0"));
         assertThat(release.getDependencies()).hasSize(1);
@@ -147,7 +146,7 @@ public class BasicBomBasedProjectDependencyTest {
         assertThat(rc.getReleases()).hasSize(3);
 
         var roots = toMap(rc.getRootReleaseRepos());
-        assertThat(roots).hasSize(2);
+        assertThat(roots).hasSize(1);
         var release = roots.get(ReleaseIdFactory.forScmAndTag("https://acme.org/lib", "1.0"));
         assertThat(release).isNotNull();
         assertThat(release.getArtifacts()).hasSize(4);
@@ -162,9 +161,9 @@ public class BasicBomBasedProjectDependencyTest {
         assertThat(release.getArtifacts()).hasSize(2);
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.pom("org.bar", "bar-parent", "1.0"));
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.bar", "bar-lib", "1.0"));
-        assertThat(release.getDependencies()).isEmpty();
+        assertThat(release.getDependencies()).hasSize(1);
 
-        release = roots.get(ReleaseIdFactory.forScmAndTag("https://foo.org/lib", "2.0"));
+        release = release.getDependencies().iterator().next();
         assertThat(release).isNotNull();
         assertThat(release.getArtifacts()).hasSize(1);
         assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("org.foo", "foo-lib", "2.0"));
