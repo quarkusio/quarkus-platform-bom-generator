@@ -8,8 +8,6 @@ import io.quarkus.bootstrap.resolver.maven.MavenArtifactResolver;
 import io.quarkus.bootstrap.resolver.maven.workspace.LocalProject;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -32,10 +30,10 @@ public class BomDiff {
 
         private Artifact mainBom;
         private String mainSource;
-        private URL mainUrl;
+        private Path mainPath;
         private Artifact toBom;
         private String toSource;
-        private URL toUrl;
+        private Path toPath;
         private List<Dependency> mainDeps;
         private List<Dependency> toDeps;
 
@@ -54,7 +52,7 @@ public class BomDiff {
             final ArtifactDescriptorResult descr = resolver.describe(bomArtifact);
             mainBom = descr.getArtifact();
             mainSource = bomArtifact.toString();
-            mainUrl = toUrl(resolver.resolve(bomArtifact).getArtifact().getFile().toPath());
+            mainPath = resolver.resolve(bomArtifact).getArtifact().getFile().toPath();
             mainDeps = descr.getManagedDependencies();
             return this;
         }
@@ -63,7 +61,7 @@ public class BomDiff {
             final ArtifactDescriptorResult descr = descriptor(bomPath);
             mainBom = descr.getArtifact();
             mainSource = bomPath.toString();
-            mainUrl = toUrl(bomPath);
+            mainPath = bomPath;
             mainDeps = descr.getManagedDependencies();
             return this;
         }
@@ -77,7 +75,7 @@ public class BomDiff {
             final ArtifactDescriptorResult descr = resolver.describe(bomArtifact);
             toBom = descr.getArtifact();
             toSource = bomArtifact.toString();
-            toUrl = toUrl(resolver.resolve(bomArtifact).getArtifact().getFile().toPath());
+            toPath = resolver.resolve(bomArtifact).getArtifact().getFile().toPath();
             toDeps = descr.getManagedDependencies();
             return diff();
         }
@@ -86,7 +84,7 @@ public class BomDiff {
             final ArtifactDescriptorResult descr = descriptor(bomPath);
             toBom = descr.getArtifact();
             toSource = bomPath.toString();
-            toUrl = toUrl(bomPath);
+            toPath = bomPath;
             toDeps = descr.getManagedDependencies();
             return diff();
         }
@@ -121,14 +119,6 @@ public class BomDiff {
             return resolver == null ? resolver = ArtifactResolverProvider.get() : resolver;
         }
 
-        private URL toUrl(Path p) {
-            try {
-                return p.toUri().toURL();
-            } catch (MalformedURLException e) {
-                throw new RuntimeException("Failed to translate " + p + " to URL", e);
-            }
-        }
-
         private BomDiff diff() {
             return new BomDiff(this);
         }
@@ -160,10 +150,10 @@ public class BomDiff {
 
     private final Artifact mainBom;
     private final String mainSource;
-    private final URL mainUrl;
+    private final Path mainPath;
     private final Artifact toBom;
     private final String toSource;
-    private final URL toUrl;
+    private final Path toPath;
     private final int mainSize;
     private final int toSize;
     private final List<Dependency> missing;
@@ -175,10 +165,10 @@ public class BomDiff {
     private BomDiff(Config config) {
         mainBom = config.mainBom;
         mainSource = config.mainSource;
-        mainUrl = config.mainUrl;
+        mainPath = config.mainPath;
         toBom = config.toBom;
         toSource = config.toSource;
-        toUrl = config.toUrl;
+        toPath = config.toPath;
         mainSize = config.mainDeps.size();
         toSize = config.toDeps.size();
         final Map<ArtifactKey, Dependency> mainDeps = toMap(config.mainDeps);
@@ -231,8 +221,8 @@ public class BomDiff {
         return mainSource;
     }
 
-    public URL mainUrl() {
-        return mainUrl;
+    public Path mainPath() {
+        return mainPath;
     }
 
     public Artifact toBom() {
@@ -243,8 +233,8 @@ public class BomDiff {
         return toSource;
     }
 
-    public URL toUrl() {
-        return toUrl;
+    public Path toPath() {
+        return toPath;
     }
 
     public int mainBomSize() {
