@@ -493,13 +493,25 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
 
     private ProjectDependency getPreferredDependencyVersion(ProjectDependency dep,
             LinkedHashMap<String, ScmRevision> preferredVersions) {
+        Set<String> availableVersions = null;
+        int remaining = preferredVersions.size();
         for (Map.Entry<String, ScmRevision> preferredVersion : preferredVersions.entrySet()) {
+            --remaining;
             if (dep.artifact().getVersion().equals(preferredVersion.getKey())) {
                 return dep;
             }
             if (config.isDisableGroupAlignmentToPreferredVersions()
                     && versionConstraintComparator().isPreferredVersion(preferredVersion.getKey())) {
                 // we still want to re-align to a more recent upstream
+                continue;
+            }
+            if (availableVersions == null && remaining > 1) {
+                //availableVersions = new HashSet<>(resolver().getAvailableVersions(
+                //        dep.artifact().getGroupId(), dep.artifact().getArtifactId()));
+                availableVersions = Set.of();
+            }
+            if (availableVersions != null && !availableVersions.isEmpty()
+                    && !availableVersions.contains(preferredVersion.getKey())) {
                 continue;
             }
             final Artifact artifact = dep.artifact().setVersion(preferredVersion.getKey());
@@ -762,19 +774,7 @@ public class PlatformBomComposer implements DecomposedBomTransformer, Decomposed
         for (final ProjectDependency memberDep : release.dependencies()) {
             ProjectDependency currentPreference = memberDep;
             if (!preferredVersions.containsKey(memberDep.artifact().getVersion())) {
-                for (Map.Entry<String, ScmRevision> preferredVersion : preferredVersions.entrySet()) {
-                    if (config.isDisableGroupAlignmentToPreferredVersions()
-                            && versionConstraintComparator().isPreferredVersion(preferredVersion.getKey())) {
-                        // we still want to re-align to a more recent upstream
-                        continue;
-                    }
-                    final Artifact artifact = memberDep.artifact().setVersion(preferredVersion.getKey());
-                    if (resolver().resolveOrNull(artifact) != null) {
-                        currentPreference = ProjectDependency.create(preferredVersion.getValue(),
-                                memberDep.dependency().setArtifact(artifact));
-                        break;
-                    }
-                }
+                currentPreference = getPreferredDependencyVersion(memberDep, preferredVersions);
             }
             final ProjectDependency previousPreference = preferredDeps.putIfAbsent(currentPreference.key(), currentPreference);
             if (previousPreference != null) {
