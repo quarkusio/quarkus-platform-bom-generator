@@ -57,7 +57,6 @@ import io.quarkus.registry.catalog.ExtensionCatalog;
 import io.quarkus.registry.util.PlatformArtifacts;
 import io.quarkus.util.GlobUtil;
 import java.io.*;
-import java.net.MalformedURLException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -413,11 +412,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
         final Path releasesReport = reportsOutputDir.resolve("main").resolve("generated-releases.html");
         generateReleasesReport(universalGeneratedBom, releasesReport);
-        try {
-            index.universalBom(universalPlatformBomXml.toUri().toURL(), universalGeneratedBom, releasesReport);
-        } catch (MalformedURLException e) {
-            throw new MojoExecutionException(e);
-        }
+        index.universalBom(universalPlatformBomXml, universalGeneratedBom, releasesReport);
 
         var artifactResolver = ArtifactResolverProvider.get(getWorkspaceAwareMavenResolver());
         for (PlatformMemberImpl member : members.values()) {
@@ -1119,7 +1114,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         final Path originalReleasesFile = outputDir.resolve("original-releases.html");
         generateReleasesReport(originalBom, originalReleasesFile);
 
-        index.bomReport(bomDiff.mainUrl(), bomDiff.toUrl(), generatedBom, originalReleasesFile, generatedReleasesFile,
+        index.bomReport(bomDiff.mainPath(), bomDiff.toPath(), generatedBom, originalReleasesFile, generatedReleasesFile,
                 diffFile);
     }
 

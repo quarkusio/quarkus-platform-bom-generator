@@ -3,7 +3,6 @@ package io.quarkus.bom.platform;
 import io.quarkus.bom.decomposer.DecomposedBom;
 import io.quarkus.bom.decomposer.FileReportWriter;
 import java.io.IOException;
-import java.net.URL;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.concurrent.ConcurrentLinkedDeque;
@@ -13,7 +12,7 @@ public class ReportIndexPageGenerator extends FileReportWriter implements AutoCl
     private static final String[] listBackground = new String[] { "background-color:#EBF4FA",
             "background-color:#FFFFFF" };
 
-    private URL mainBomUrl;
+    private Path mainBomPath;
     private DecomposedBom mainBom;
     private Path mainBomReleasesHtml;
 
@@ -22,6 +21,10 @@ public class ReportIndexPageGenerator extends FileReportWriter implements AutoCl
     public ReportIndexPageGenerator(Path file) throws IOException {
         super(file);
         initHtmlBody();
+    }
+
+    private String relativize(Path target) {
+        return reportFile.getParent().relativize(target).toString();
     }
 
     private void completeHtmlBody() throws IOException {
@@ -54,13 +57,13 @@ public class ReportIndexPageGenerator extends FileReportWriter implements AutoCl
         writeTag("h2", "Platform BOM");
 
         int backgroundIndex = 1;
-        if (mainBomUrl != null) {
+        if (mainBomPath != null) {
             openTag("table");
             openTag("tr", listBackground[backgroundIndex]);
             writeTag("td", "text-align:left;font-weight:bold;color:gray", mainBom.bomArtifact());
-            writeTag("td", "text-align:left", generateAnchor(mainBomUrl.toExternalForm(), "generated"));
+            writeTag("td", "text-align:left", generateAnchor(relativize(mainBomPath), "generated"));
             writeTag("td", "text-align:left",
-                    generateAnchor(mainBomReleasesHtml.toUri().toURL().toExternalForm(), "decomposed"));
+                    generateAnchor(relativize(mainBomReleasesHtml), "decomposed"));
             closeTag("tr");
             closeTag("table");
         }
@@ -71,27 +74,27 @@ public class ReportIndexPageGenerator extends FileReportWriter implements AutoCl
         for (var member : memberData) {
             openTag("tr", listBackground[backgroundIndex ^= 1]);
             writeTag("td", "text-align:left;font-weight:bold;color:gray", member.toBom.bomArtifact());
-            writeTag("td", "text-align:left", generateAnchor(member.mainUrl.toExternalForm(), "original"));
+            writeTag("td", "text-align:left", generateAnchor(relativize(member.mainPath), "original"));
             writeTag("td", "text-align:left",
-                    generateAnchor(member.mainReleasesHtml.toUri().toURL().toExternalForm(), "decomposed"));
-            writeTag("td", "text-align:left", generateAnchor(member.toUrl.toExternalForm(), "generated"));
+                    generateAnchor(relativize(member.mainReleasesHtml), "decomposed"));
+            writeTag("td", "text-align:left", generateAnchor(relativize(member.toPath), "generated"));
             writeTag("td", "text-align:left",
-                    generateAnchor(member.toReleasesHtml.toUri().toURL().toExternalForm(), "decomposed"));
-            writeTag("td", "text-align:left", generateAnchor(member.diffHtml.toUri().toURL().toExternalForm(), "diff"));
+                    generateAnchor(relativize(member.toReleasesHtml), "decomposed"));
+            writeTag("td", "text-align:left", generateAnchor(relativize(member.diffHtml), "diff"));
             closeTag("tr");
         }
         closeTag("table");
     }
 
-    public void universalBom(URL mainUrl, DecomposedBom decomposed, Path releasesHtml) {
-        this.mainBomUrl = mainUrl;
+    public void universalBom(Path mainBomPath, DecomposedBom decomposed, Path releasesHtml) {
+        this.mainBomPath = mainBomPath;
         this.mainBom = decomposed;
         this.mainBomReleasesHtml = releasesHtml;
     }
 
-    public void bomReport(URL mainUrl, URL toUrl, DecomposedBom toBom, Path mainReleasesHtml, Path toReleasesHtml,
+    public void bomReport(Path mainPath, Path toPath, DecomposedBom toBom, Path mainReleasesHtml, Path toReleasesHtml,
             Path diffHtml) {
-        memberData.add(new MemberData(mainUrl, toUrl, toBom, mainReleasesHtml, toReleasesHtml, diffHtml));
+        memberData.add(new MemberData(mainPath, toPath, toBom, mainReleasesHtml, toReleasesHtml, diffHtml));
     }
 
     @Override
@@ -106,17 +109,17 @@ public class ReportIndexPageGenerator extends FileReportWriter implements AutoCl
     }
 
     private static class MemberData {
-        final URL mainUrl;
-        final URL toUrl;
+        final Path mainPath;
+        final Path toPath;
         final DecomposedBom toBom;
         final Path mainReleasesHtml;
         final Path toReleasesHtml;
         final Path diffHtml;
 
-        public MemberData(URL mainUrl, URL toUrl, DecomposedBom toBom, Path mainReleasesHtml, Path toReleasesHtml,
+        public MemberData(Path mainPath, Path toPath, DecomposedBom toBom, Path mainReleasesHtml, Path toReleasesHtml,
                 Path diffHtml) {
-            this.mainUrl = mainUrl;
-            this.toUrl = toUrl;
+            this.mainPath = mainPath;
+            this.toPath = toPath;
             this.toBom = toBom;
             this.mainReleasesHtml = mainReleasesHtml;
             this.toReleasesHtml = toReleasesHtml;
