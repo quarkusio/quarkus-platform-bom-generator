@@ -358,13 +358,25 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             parentPom.addModule(moduleName);
             scheduler.schedule(() -> generateMemberModule(parentPom, member, moduleName, scheduler));
         }
-        scheduler.schedule(() -> generateBomReports(scheduler));
         scheduler.waitForCompletion();
         if (scheduler.hasErrors()) {
             for (var e : scheduler.getErrors()) {
                 getLog().error(e);
             }
             throw new MojoExecutionException("Failed to generate platform project, please see the errors logged above");
+        }
+        generateMemberReports();
+    }
+
+    private void generateMemberReports() throws Exception {
+        final PlatformGenTaskScheduler reportScheduler = PlatformGenTaskScheduler.getInstance();
+        generateBomReports(reportScheduler);
+        reportScheduler.waitForCompletion();
+        if (reportScheduler.hasErrors()) {
+            for (var e : reportScheduler.getErrors()) {
+                getLog().error(e);
+            }
+            throw new MojoExecutionException("Failed to generate BOM reports, please see the errors logged above");
         }
     }
 
