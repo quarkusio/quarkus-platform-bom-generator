@@ -13,9 +13,13 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 import org.eclipse.aether.artifact.Artifact;
+import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.collection.CollectRequest;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.resolution.ArtifactDescriptorResult;
@@ -23,6 +27,8 @@ import org.eclipse.aether.resolution.ArtifactResult;
 import org.eclipse.aether.resolution.DependencyRequest;
 import org.eclipse.aether.resolution.DependencyResolutionException;
 import org.eclipse.aether.resolution.DependencyResult;
+import org.eclipse.aether.resolution.VersionRangeRequest;
+import org.eclipse.aether.resolution.VersionRangeResolutionException;
 import org.eclipse.aether.util.artifact.JavaScopes;
 
 /**
@@ -41,6 +47,7 @@ public class DefaultArtifactResolver implements ArtifactResolver {
     private final Path baseDir;
     private final Path notFoundArtifactsPath;
     private final Set<ArtifactCoords> notFoundArtifacts = new HashSet<>(0);
+    private final Map<String, List<String>> availableVersionsCache = new ConcurrentHashMap<>();
 
     private DefaultArtifactResolver(MavenArtifactResolver resolver, Path baseDir) {
         this.resolver = Objects.requireNonNull(resolver);
@@ -167,6 +174,23 @@ public class DefaultArtifactResolver implements ArtifactResolver {
                     a + " was found in neither the Maven local repository nor in the project's workspace");
         }
         return result;
+    }
+
+    @Override
+    public List<String> getAvailableVersions(String groupId, String artifactId) {
+        final String key = groupId + ":" + artifactId;
+        return availableVersionsCache.computeIfAbsent(key, k -> {
+            var artifact = new DefaultArtifact(groupId, artifactId, "jar", "[0,)");
+            var request = new VersionRangeRequest(artifact, resolver.getRepositories(), null);
+            try {
+                var result = resolver.getSystem().resolveVersionRange(resolver.getSession(), request);
+                return result.getVersions().stream()
+                        .map(Object::toString)
+                        .collect(Collectors.toUnmodifiableList());
+            } catch (VersionRangeResolutionException e) {
+                return List.of();
+            }
+        });
     }
 
     private void persistNotFoundArtifacts(ArtifactCoords coords) {

@@ -21,4 +21,11 @@ public interface ArtifactResolver {
     ArtifactResult resolveOrNull(Artifact a);
 
     ArtifactDescriptorResult describe(Artifact a);
+
+    /**
+     * Returns the versions available in remote repositories for a given groupId and artifactId,
+     * as reported by Maven metadata. Results are cached per GA coordinate.
+     * Returns an empty list if metadata resolution fails.
+     */
+    List<String> getAvailableVersions(String groupId, String artifactId);
 }
