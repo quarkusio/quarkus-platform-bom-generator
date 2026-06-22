@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -112,6 +113,10 @@ public class Quarkus implements Callable<Integer> {
     @CommandLine.Option(names = {
             "--log-not-matched" }, description = "Provide more details in combination with other options", defaultValue = "false")
     public boolean logNotMatched;
+
+    @CommandLine.Option(names = {
+            "--trace-verbose" }, description = "When tracing, show all top-level artifacts that have matched dependencies, including those that reach them through other top-level artifacts")
+    public boolean traceVerbose;
 
     @CommandLine.Option(names = {
             "--info" }, description = "Log basic Quarkus platform release information")
@@ -255,7 +260,7 @@ public class Quarkus implements Callable<Integer> {
 
         treeInspector.complete();
 
-        logMemberReports(memberReports);
+        logMemberReports(memberReports, rootsToMembers.keySet());
 
         if (allNodes != null) {
             log.info(String.format("%-32s: %s", "Number of root artifacts", inspectedRoots));
@@ -365,7 +370,24 @@ public class Quarkus implements Callable<Integer> {
         };
     }
 
-    private void logMemberReports(ArrayList<MemberReport> memberReports) {
+    private void logMemberReports(ArrayList<MemberReport> memberReports,
+            Set<ArtifactCoords> topLevelArtifacts) {
+        final Set<ArtifactCoords> sourceCoords;
+        if (!traceVerbose && !topLevelArtifacts.isEmpty()) {
+            sourceCoords = new LinkedHashSet<>();
+            for (var report : memberReports) {
+                if (report.enabled) {
+                    for (var root : report.tracedExtensionDeps) {
+                        if (isSourceRoot(root, topLevelArtifacts)) {
+                            sourceCoords.add(toCoords(root.artifact));
+                        }
+                    }
+                }
+            }
+        } else {
+            sourceCoords = Set.of();
+        }
+
         int membersWithTraces = 0;
         for (var report : memberReports) {
             if (report.enabled && report.hasTraces()) {
@@ -383,11 +405,52 @@ public class Quarkus implements Callable<Integer> {
                     }
                 }
                 if (!report.tracedExtensionDeps.isEmpty()) {
-                    log.info("");
-                    log.info(EXTENSIONS_HEADER_PREFIX + "Extension dependencies");
-                    for (var result : report.tracedExtensionDeps) {
+                    final List<TreeNode> sourceRoots;
+                    final List<TreeNode> dependentRoots;
+                    if (!sourceCoords.isEmpty()) {
+                        sourceRoots = new ArrayList<>();
+                        dependentRoots = new ArrayList<>();
+                        for (var root : report.tracedExtensionDeps) {
+                            if (sourceCoords.contains(toCoords(root.artifact))) {
+                                sourceRoots.add(root);
+                            } else {
+                                dependentRoots.add(root);
+                            }
+                        }
+                    } else {
+                        sourceRoots = report.tracedExtensionDeps;
+                        dependentRoots = List.of();
+                    }
+
+                    if (!sourceRoots.isEmpty()) {
                         log.info("");
-                        result.log(log, tree);
+                        log.info(EXTENSIONS_HEADER_PREFIX + "Extension dependencies");
+                        for (var result : sourceRoots) {
+                            log.info("");
+                            result.log(log, tree);
+                        }
+                    }
+
+                    if (!dependentRoots.isEmpty()) {
+                        log.info("");
+                        log.info(EXTENSIONS_HEADER_PREFIX
+                                + "Matched transitively through the above extensions");
+                        log.info("");
+                        for (var dep : dependentRoots) {
+                            var sources = getSourcesOnPath(dep, sourceCoords);
+                            var sb = new StringBuilder();
+                            dep.append(sb);
+                            if (!sources.isEmpty()) {
+                                sb.append(" (via ");
+                                var iter = sources.iterator();
+                                sb.append(iter.next().getArtifactId());
+                                while (iter.hasNext()) {
+                                    sb.append(", ").append(iter.next().getArtifactId());
+                                }
+                                sb.append(')');
+                            }
+                            log.info(sb.toString());
+                        }
                     }
                 }
             }
@@ -560,6 +623,51 @@ public class Quarkus implements Callable<Integer> {
         return sb.append(a.getVersion()).toString();
     }
 
+    static ArtifactCoords toCoords(Artifact a) {
+        return ArtifactCoords.of(a.getGroupId(), a.getArtifactId(),
+                a.getClassifier(), a.getExtension(), a.getVersion());
+    }
+
+    static boolean isSourceRoot(TreeNode root, Set<ArtifactCoords> topLevelArtifacts) {
+        return hasDirectMatch(root, topLevelArtifacts, true);
+    }
+
+    static boolean hasDirectMatch(TreeNode node, Set<ArtifactCoords> topLevelArtifacts, boolean isRoot) {
+        if (!isRoot && topLevelArtifacts.contains(toCoords(node.artifact))) {
+            return false;
+        }
+        if (node.matched) {
+            return true;
+        }
+        for (var child : node.tracedChildren) {
+            if (hasDirectMatch(child, topLevelArtifacts, false)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static Set<ArtifactCoords> getSourcesOnPath(TreeNode root,
+            Set<ArtifactCoords> sourceCoords) {
+        var result = new LinkedHashSet<ArtifactCoords>();
+        collectSourcesOnPath(root, sourceCoords, result, true);
+        return result;
+    }
+
+    static void collectSourcesOnPath(TreeNode node, Set<ArtifactCoords> sourceCoords,
+            Set<ArtifactCoords> result, boolean isRoot) {
+        if (!isRoot) {
+            var coords = toCoords(node.artifact);
+            if (sourceCoords.contains(coords)) {
+                result.add(coords);
+                return;
+            }
+        }
+        for (var child : node.tracedChildren) {
+            collectSourcesOnPath(child, sourceCoords, result, false);
+        }
+    }
+
     private static Artifact getAetherArtifact(ArtifactCoords coords) {
         return new DefaultArtifact(coords.getGroupId(), coords.getArtifactId(), coords.getClassifier(),
                 coords.getType(), coords.getVersion());
@@ -645,7 +753,7 @@ public class Quarkus implements Callable<Integer> {
         }
     }
 
-    private static class TreeNode {
+    static class TreeNode {
 
         private static final String ARROW = "↳";
         private static final String VERTICAL_LINE = "│  ";
@@ -657,17 +765,17 @@ public class Quarkus implements Callable<Integer> {
         final boolean matched;
         List<TreeNode> tracedChildren = List.of();
 
-        private TreeNode(Artifact a, boolean matched) {
+        TreeNode(Artifact a, boolean matched) {
             this(a, matched, null);
         }
 
-        private TreeNode(Artifact a, boolean matched, String enforcedBy) {
+        TreeNode(Artifact a, boolean matched, String enforcedBy) {
             this.artifact = a;
             this.enforcedBy = enforcedBy;
             this.matched = matched;
         }
 
-        private void addChild(TreeNode child) {
+        void addChild(TreeNode child) {
             if (tracedChildren.isEmpty()) {
                 tracedChildren = new ArrayList<>(2);
             }
