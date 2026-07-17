@@ -5,6 +5,7 @@ import io.quarkus.bom.decomposer.PomUtils;
 import io.quarkus.bom.decomposer.ProjectDependency;
 import io.quarkus.bom.decomposer.ProjectRelease;
 import io.quarkus.bootstrap.resolver.maven.workspace.ModelUtils;
+import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.registry.Constants;
 import io.quarkus.registry.catalog.ExtensionCatalog;
 import io.quarkus.registry.catalog.ExtensionOrigin;
@@ -12,7 +13,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -24,6 +25,18 @@ import org.apache.maven.model.Model;
 import org.eclipse.aether.artifact.Artifact;
 
 public class PlatformBomUtils {
+
+    /**
+     * Orders dependency management entries alphabetically by groupId, artifactId and classifier,
+     * except that among entries sharing the same groupId:artifactId, the no-classifier entry is
+     * always placed last (after all classified entries) instead of first. Gradle doesn't respect
+     * classifiers (it totally removes them), so the default needs to come last.
+     */
+    private static final Comparator<ArtifactKey> CONSTRAINT_ORDER = Comparator.comparing(ArtifactKey::getGroupId)
+            .thenComparing(ArtifactKey::getArtifactId)
+            .thenComparing(key -> key.getClassifier().isEmpty() ? 1 : 0)
+            .thenComparing(ArtifactKey::getClassifier)
+            .thenComparing(key -> key.getType() == null ? "" : key.getType());
 
     /**
      * Persists decomposed platform BOM to a pom.xml filling in developer, SCM and other info from the base model
@@ -56,7 +69,7 @@ public class PlatformBomUtils {
         final Map<String, PlatformInfo> platforms = new HashMap<>();
 
         PlatformInfo currentPlatformInfo = null;
-        final Map<String, Dependency> artifacts = new HashMap<>();
+        final Map<ArtifactKey, Dependency> artifacts = new HashMap<>();
         for (ProjectRelease release : decomposed.releases()) {
             for (ProjectDependency dep : release.dependencies()) {
                 final Artifact depArtifact = dep.artifact();
@@ -103,7 +116,7 @@ public class PlatformBomUtils {
                     }
                     platform.properties = dep;
                 } else {
-                    artifacts.put(dep.key().toString(), PomUtils.toModelDep(dep));
+                    artifacts.put(dep.key(), PomUtils.toModelDep(dep));
                 }
             }
         }
@@ -117,9 +130,9 @@ public class PlatformBomUtils {
             add(dm, root);
         }
 
-        final List<String> keys = new ArrayList<>(artifacts.keySet());
-        Collections.sort(keys);
-        for (String key : keys) {
+        final List<ArtifactKey> keys = new ArrayList<>(artifacts.keySet());
+        keys.sort(CONSTRAINT_ORDER);
+        for (ArtifactKey key : keys) {
             dm.addDependency(artifacts.get(key));
         }
 
