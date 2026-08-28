@@ -104,10 +104,11 @@ public class SbomConfig {
         private String stream;
         private String group;
         private String name;
-        private String type = "FRAMEWORK";
+        private String type;
         private String version;
         private String purl;
         private String cpe;
+        private String offering;
         private String description;
         private ReleaseNotes releaseNotes;
 
@@ -193,6 +194,14 @@ public class SbomConfig {
 
         public void setCpe(String cpe) {
             this.cpe = cpe;
+        }
+
+        public String getOffering() {
+            return offering;
+        }
+
+        public void setOffering(String offering) {
+            this.offering = offering;
         }
 
         /**

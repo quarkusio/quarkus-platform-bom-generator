@@ -4,9 +4,16 @@ import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.project.MavenModuleGenerator;
 import io.quarkus.maven.project.MavenPluginConfigBuilder;
 import io.quarkus.platform.generator.builder.MavenInvokerPlatformTestProjectBuilder;
+import io.quarkus.registry.catalog.Extension;
+import io.quarkus.registry.catalog.ExtensionCatalog;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public class PlatformTestProjectGenerator {
@@ -38,6 +45,8 @@ public class PlatformTestProjectGenerator {
         private ArtifactCoords inputBom;
         private ArtifactCoords generatedBom;
         private String cpe;
+        private String offering;
+        private final Map<ArtifactCoords, Map<String, Object>> extensionMetadata = new LinkedHashMap<>();
 
         private PlatformMemberGeneratorConfig(PlatformTestProjectGenerator platformGenerator) {
             this.platformGenerator = Objects.requireNonNull(platformGenerator);
@@ -50,6 +59,18 @@ public class PlatformTestProjectGenerator {
 
         public PlatformMemberGeneratorConfig setCpe(String cpe) {
             this.cpe = cpe;
+            return this;
+        }
+
+        public PlatformMemberGeneratorConfig setOffering(String offering) {
+            this.offering = offering;
+            return this;
+        }
+
+        public PlatformMemberGeneratorConfig addExtensionMetadata(ArtifactCoords extensionCoords, String metadataKey,
+                Object metadataValue) {
+            extensionMetadata.computeIfAbsent(extensionCoords, k -> new LinkedHashMap<>())
+                    .put(metadataKey, metadataValue);
             return this;
         }
 
@@ -175,6 +196,7 @@ public class PlatformTestProjectGenerator {
         configurePlatformGenerator(rootPom.addPomModule(PLATFORM_CONFIG_MODULE));
 
         rootPom.generate(projectDir);
+        generateMetadataOverrideCatalogs();
 
         return MavenInvokerPlatformTestProjectBuilder.getInstance()
                 .setUseDefaultLocalRepositoryAsRemote(true)
@@ -278,7 +300,46 @@ public class PlatformTestProjectGenerator {
         }
 
         if (memberConfig.cpe != null) {
-            member.configure("sbom").configure("productInfo").setParameter("cpe", memberConfig.cpe);
+            var productInfo = member.configure("sbom").configure("productInfo");
+            productInfo.setParameter("cpe", memberConfig.cpe);
+            if (memberConfig.name != null) {
+                productInfo.setParameter("name", memberConfig.name);
+            }
+            if (memberConfig.offering != null) {
+                productInfo.setParameter("offering", memberConfig.offering);
+            }
+        }
+
+        if (!memberConfig.extensionMetadata.isEmpty()) {
+            var catalogFileName = memberConfig.getName().toLowerCase() + "-metadata-overrides.json";
+            var metadataOverrideFiles = member.configure("metadataOverrideFiles");
+            metadataOverrideFiles.setParameter("metadataOverrideFile",
+                    "${project.basedir}/" + catalogFileName);
+        }
+    }
+
+    private void generateMetadataOverrideCatalogs() {
+        for (PlatformMemberGeneratorConfig memberConfig : memberConfigs) {
+            if (memberConfig.extensionMetadata.isEmpty()) {
+                continue;
+            }
+            var catalogFileName = memberConfig.getName().toLowerCase() + "-metadata-overrides.json";
+            var catalogFile = projectDir.resolve(PLATFORM_CONFIG_MODULE).resolve(catalogFileName);
+            var catalogBuilder = ExtensionCatalog.builder();
+            for (var entry : memberConfig.extensionMetadata.entrySet()) {
+                var extBuilder = Extension.builder()
+                        .setArtifact(entry.getKey());
+                for (var metaEntry : entry.getValue().entrySet()) {
+                    extBuilder.setMetadata(metaEntry.getKey(), metaEntry.getValue());
+                }
+                catalogBuilder.addExtension(extBuilder.build());
+            }
+            try {
+                Files.createDirectories(catalogFile.getParent());
+                catalogBuilder.build().persist(catalogFile);
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
         }
     }
 }
