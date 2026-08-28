@@ -3034,6 +3034,17 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                     buf.toString());
         }
 
+        // Expose the member product CPE (if configured) as a platform property keyed by the
+        // generated member BOM coordinates, so consumers (e.g. the SBOM generator) can resolve it.
+        final SbomConfig.ProductConfig productConfig = getProductConfig(member);
+        if (productConfig != null && productConfig.getCpe() != null) {
+            final var memberBom = member.getGeneratedPlatformBom();
+            props.setProperty(
+                    BootstrapConstants.PLATFORM_PROPERTY_PREFIX + memberBom.getGroupId() + "."
+                            + memberBom.getArtifactId() + ".cpe",
+                    productConfig.getCpe());
+        }
+
         if (member.config().isHidden()) {
             Utils.skipInstallAndDeploy(pom);
         }

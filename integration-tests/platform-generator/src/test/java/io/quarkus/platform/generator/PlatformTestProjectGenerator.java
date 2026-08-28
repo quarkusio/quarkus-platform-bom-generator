@@ -37,6 +37,7 @@ public class PlatformTestProjectGenerator {
         private String name;
         private ArtifactCoords inputBom;
         private ArtifactCoords generatedBom;
+        private String cpe;
 
         private PlatformMemberGeneratorConfig(PlatformTestProjectGenerator platformGenerator) {
             this.platformGenerator = Objects.requireNonNull(platformGenerator);
@@ -44,6 +45,11 @@ public class PlatformTestProjectGenerator {
 
         public PlatformMemberGeneratorConfig setName(String name) {
             this.name = name;
+            return this;
+        }
+
+        public PlatformMemberGeneratorConfig setCpe(String cpe) {
+            this.cpe = cpe;
             return this;
         }
 
@@ -111,6 +117,10 @@ public class PlatformTestProjectGenerator {
                 .setInputBom(inputBom);
         memberConfigs.add(member);
         return member;
+    }
+
+    public PlatformMemberGeneratorConfig configureMember(MavenModuleGenerator inputBom) {
+        return configureMember(ArtifactCoords.pom(inputBom.getGroupId(), inputBom.getArtifactId(), inputBom.getVersion()));
     }
 
     public PlatformTestProjectGenerator addMember(ArtifactCoords inputBom) {
@@ -265,6 +275,10 @@ public class PlatformTestProjectGenerator {
         } else {
             release.setParameter("next",
                     "${platform.groupId}:quarkus-" + memberConfig.inputBom.getArtifactId() + ":${platform.version}");
+        }
+
+        if (memberConfig.cpe != null) {
+            member.configure("sbom").configure("productInfo").setParameter("cpe", memberConfig.cpe);
         }
     }
 }
