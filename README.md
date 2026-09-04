@@ -200,6 +200,44 @@ Each directory currently contains:
 * original-releases.html - multi-module releases detected in the original version of the BOM.
 * generated-releases.html - multi-module releases detected in the generated version of the BOM.
 
+### Member CPE platform property
+
+If a platform member declares a product CPE (Common Platform Enumeration) in its SBOM product configuration, e.g.
+
+```
+                    <members>
+                        <member>
+                            <name>Camel</name>
+                            <bom>...</bom>
+                            <sbom>
+                                <productInfo>
+                                    <cpe>cpe:2.3:a:redhat:camel_quarkus:3.33:*:*:*:*:*:*:*</cpe>
+                                </productInfo>
+                            </sbom>
+                        </member>
+                    </members>
+```
+
+the generator writes it into that member's generated `platform-properties.properties` as a property keyed by the *generated* member BOM coordinates:
+
+```
+platform.<member-bom-groupId>.<member-bom-artifactId>.cpe=<cpe>
+```
+
+e.g. `platform.com.redhat.quarkus.platform.quarkus-camel-bom.cpe=cpe:2.3:a:redhat:camel_quarkus:3.33:*:*:*:*:*:*:*`.
+
+Each member's CPE is written only into that member's own properties file, so a consumer only ever sees the CPE for members whose BOM it actually imports. A consumer (e.g. the Quarkus SBOM generator) resolves a member's CPE by reading the aggregated platform properties (`ApplicationModel.getPlatformProperties()`) and, for each member BOM enumerated via `PlatformReleaseInfo.getBoms()`, looking up `platform.<groupId>.<artifactId>.cpe`. A missing key means the member has no CPE configured.
+
+### Member CPE artifacts property
+
+When a member declares both a CPE and an offering, the generator also writes a companion property that records, for each supported runtime extension artifact, the deployment dependency closure a consumer should attribute to the member's CPE:
+
+```
+platform.<member-bom-groupId>.<member-bom-artifactId>.cpe-artifacts=<base64>
+```
+
+The value is a lossless, Deflate-compressed and Base64-encoded encoding of the runtime-extension → deployment-closure map. Its format and how to decode it (including from other languages) are documented in [docs/cpe-artifacts-serialization.md](docs/cpe-artifacts-serialization.md).
+
 ## Release
 
 To release a new version, follow these steps:

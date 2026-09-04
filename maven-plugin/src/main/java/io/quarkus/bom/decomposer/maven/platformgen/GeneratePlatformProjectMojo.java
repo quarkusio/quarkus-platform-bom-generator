@@ -72,6 +72,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -247,6 +248,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     private final Map<String, String> pomPropsByValues = new HashMap<>();
 
     private List<Profile> generatedBomReleaseProfile;
+
+    private final Map<ArtifactKey, ResolvedExtensionInfo> resolvedExtensionInfoCache = new HashMap<>();
+    private final Map<PlatformMemberConfig, List<ExtensionCatalog>> memberMetadataCatalogsCache = new HashMap<>();
 
     private boolean isClean() {
         final List<String> goals;
@@ -530,41 +534,15 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
             Set<ArtifactKey> selectedKeys = Set.of();
             if (sbomConfig != null && sbomConfig.isSupportedExtensionsOnly()) {
-                List<Path> metadataOverrides = new ArrayList<>();
-                for (String s : member.config().getMetadataOverrideFiles()) {
-                    metadataOverrides.add(Path.of(s));
-                }
-                for (String s : member.config().getMetadataOverrideArtifacts()) {
-                    try {
-                        metadataOverrides
-                                .add(getNonWorkspaceResolver().resolve(toAetherArtifact(s)).getArtifact().getFile().toPath());
-                    } catch (BootstrapMavenException e) {
-                        throw new MojoExecutionException("Failed to resolve " + s, e);
-                    }
-                }
-                if (metadataOverrides.isEmpty()) {
+                var catalogs = loadMetadataOverrideCatalogs(member.config());
+                if (catalogs.isEmpty()) {
                     throw new IllegalStateException("The SBOM generator for member " + member.config().getName()
                             + " is configured to include only supported extensions but no support metadata override sources were provided");
                 }
                 if (extensionSupportPatterns == null) {
                     extensionSupportPatterns = compilePatterns(dominoBuildExtensionSupportPatterns);
                 }
-                selectedKeys = new HashSet<>(metadataOverrides.size());
-                for (Path p : metadataOverrides) {
-                    try {
-                        ExtensionCatalog c = ExtensionCatalog.fromFile(p);
-                        for (var e : c.getExtensions()) {
-                            if (isMatchesDominoBuildPattern(e, extensionSupportPatterns)) {
-                                var key = e.getArtifact().getKey();
-                                selectedKeys.add(key);
-                                selectedKeys.add(ArtifactKey.of(key.getGroupId(), key.getArtifactId() + "-deployment",
-                                        key.getClassifier(), key.getType()));
-                            }
-                        }
-                    } catch (IOException e) {
-                        throw new MojoExecutionException("Failed to deserialize " + p, e);
-                    }
-                }
+                selectedKeys = selectExtensionKeys(catalogs, extensionSupportPatterns);
             }
             for (ProjectRelease r : member.getAlignedDecomposedBom().releases()) {
                 for (ProjectDependency d : r.dependencies()) {
@@ -623,38 +601,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             final List<ArtifactCoordsPattern> excludePatterns = ArtifactCoordsPattern
                     .toPatterns(dominoConfig.getExcludePatterns());
 
-            List<Path> metadataOverrides = new ArrayList<>();
-            for (String s : member.config().getMetadataOverrideFiles()) {
-                metadataOverrides.add(Path.of(s));
-            }
-            for (String s : member.config().getMetadataOverrideArtifacts()) {
-                try {
-                    metadataOverrides
-                            .add(getNonWorkspaceResolver().resolve(toAetherArtifact(s)).getArtifact().getFile().toPath());
-                } catch (BootstrapMavenException e) {
-                    throw new MojoExecutionException("Failed to resolve " + s, e);
-                }
-            }
-            if (metadataOverrides.isEmpty()) {
+            var catalogs = loadMetadataOverrideCatalogs(member.config());
+            if (catalogs.isEmpty()) {
                 throw new IllegalStateException("The SBOM generator for member " + member.config().getName()
                         + " is configured to include only supported extensions but no support metadata override sources were provided");
             }
-            final Set<ArtifactKey> selectedKeys = new HashSet<>(metadataOverrides.size());
-            for (Path p : metadataOverrides) {
-                try {
-                    ExtensionCatalog c = ExtensionCatalog.fromFile(p);
-                    for (var e : c.getExtensions()) {
-                        if (isMatchesDominoBuildPattern(e, supportPatterns)) {
-                            var key = e.getArtifact().getKey();
-                            selectedKeys.add(key);
-                            selectedKeys.add(ArtifactKey.of(key.getGroupId(), key.getArtifactId() + "-deployment",
-                                    key.getClassifier(), key.getType()));
-                        }
-                    }
-                } catch (IOException e) {
-                    throw new MojoExecutionException("Failed to deserialize " + p, e);
-                }
-            }
+            final Set<ArtifactKey> selectedKeys = selectExtensionKeys(catalogs, supportPatterns);
 
             for (ProjectRelease r : member.getAlignedDecomposedBom().releases()) {
                 for (ProjectDependency d : r.dependencies()) {
@@ -687,57 +639,22 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private void addExtensionArtifacts(Artifact a, ProjectDependencyConfig.Mutable dominoConfig) {
-        final Artifact resolved;
-        final boolean relocated;
-        if (a.getFile() == null) {
-            var resolver = getNonWorkspaceResolver();
-            // this trick is done to capture relocations, i.e. when {@code a} was relocated to another artifact
-            var request = new DependencyRequest()
-                    .setCollectRequest(new CollectRequest()
-                            .setRootArtifact(a)
-                            .setDependencies(List.of(new org.eclipse.aether.graph.Dependency(a, JavaScopes.COMPILE, false,
-                                    List.of(new org.eclipse.aether.graph.Exclusion("*", "*", "*", "*")))))
-                            .setRepositories(resolver.getRepositories()));
-            List<DependencyNode> resolvedDeps;
-            try {
-                resolvedDeps = resolver.getSystem().resolveDependencies(resolver.getSession(), request).getRoot().getChildren();
-            } catch (DependencyResolutionException e) {
-                throw new RuntimeException("Failed to resolve " + a, e);
-            }
-            if (resolvedDeps.size() != 1) {
-                throw new IllegalStateException("Expected a single dependency but got " + resolvedDeps);
-            }
-            var node = resolvedDeps.get(0);
-            resolved = node.getArtifact();
-            relocated = !node.getRelocations().isEmpty();
-        } else {
-            resolved = a;
-            relocated = false;
+        var info = resolveExtension(a);
+        if (!info.isExtension) {
+            return;
         }
-        PathTree.ofArchive(resolved.getFile().toPath()).accept(BootstrapConstants.DESCRIPTOR_PATH, visit -> {
-            if (visit != null) {
-                var props = new Properties();
-                try (BufferedReader reader = Files.newBufferedReader(visit.getPath())) {
-                    props.load(reader);
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-                if (relocated) {
-                    dominoConfig.addProjectArtifacts(ArtifactCoords.of(a.getGroupId(),
-                            a.getArtifactId(), a.getClassifier(), a.getExtension(), a.getVersion()));
-                }
-                dominoConfig.addProjectArtifacts(ArtifactCoords.of(resolved.getGroupId(),
-                        resolved.getArtifactId(), resolved.getClassifier(),
-                        resolved.getExtension(), resolved.getVersion()));
-                var deploymentArtifact = props.getProperty(BootstrapConstants.PROP_DEPLOYMENT_ARTIFACT);
-                if (deploymentArtifact == null) {
-                    getLog().warn("Failed to identify the deployment artifact for " + resolved + " in "
-                            + visit.getUrl());
-                } else {
-                    dominoConfig.addProjectArtifacts(ArtifactCoords.fromString(deploymentArtifact));
-                }
-            }
-        });
+        if (info.relocated) {
+            dominoConfig.addProjectArtifacts(ArtifactCoords.of(a.getGroupId(),
+                    a.getArtifactId(), a.getClassifier(), a.getExtension(), a.getVersion()));
+        }
+        dominoConfig.addProjectArtifacts(ArtifactCoords.of(info.resolved.getGroupId(),
+                info.resolved.getArtifactId(), info.resolved.getClassifier(),
+                info.resolved.getExtension(), info.resolved.getVersion()));
+        if (info.deploymentArtifactCoords == null) {
+            getLog().warn("Failed to identify the deployment artifact for " + info.resolved);
+        } else {
+            dominoConfig.addProjectArtifacts(ArtifactCoords.fromString(info.deploymentArtifactCoords));
+        }
     }
 
     private static boolean isExtensionCandidate(Artifact a, Collection<String> extensionGroupIds,
@@ -756,6 +673,101 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             }
         }
         return true;
+    }
+
+    private ResolvedExtensionInfo resolveExtension(Artifact a) {
+        var key = ArtifactKey.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension());
+        var cached = resolvedExtensionInfoCache.get(key);
+        if (cached != null) {
+            return cached;
+        }
+        final Artifact resolved;
+        final boolean relocated;
+        if (a.getFile() == null) {
+            var resolver = getNonWorkspaceResolver();
+            var request = new DependencyRequest()
+                    .setCollectRequest(new CollectRequest()
+                            .setRootArtifact(a)
+                            .setDependencies(List.of(new org.eclipse.aether.graph.Dependency(a, JavaScopes.COMPILE, false,
+                                    List.of(new org.eclipse.aether.graph.Exclusion("*", "*", "*", "*")))))
+                            .setRepositories(resolver.getRepositories()));
+            List<DependencyNode> resolvedDeps;
+            try {
+                resolvedDeps = resolver.getSystem().resolveDependencies(resolver.getSession(), request).getRoot()
+                        .getChildren();
+            } catch (DependencyResolutionException e) {
+                throw new RuntimeException("Failed to resolve " + a, e);
+            }
+            if (resolvedDeps.size() != 1) {
+                throw new IllegalStateException("Expected a single dependency but got " + resolvedDeps);
+            }
+            var node = resolvedDeps.get(0);
+            resolved = node.getArtifact();
+            relocated = !node.getRelocations().isEmpty();
+        } else {
+            resolved = a;
+            relocated = false;
+        }
+        final String[] deploymentCoords = { null };
+        final boolean[] hasDescriptor = { false };
+        PathTree.ofArchive(resolved.getFile().toPath()).accept(BootstrapConstants.DESCRIPTOR_PATH, visit -> {
+            if (visit != null) {
+                hasDescriptor[0] = true;
+                var props = new Properties();
+                try (BufferedReader reader = Files.newBufferedReader(visit.getPath())) {
+                    props.load(reader);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+                deploymentCoords[0] = props.getProperty(BootstrapConstants.PROP_DEPLOYMENT_ARTIFACT);
+            }
+        });
+        var info = new ResolvedExtensionInfo(resolved, relocated, hasDescriptor[0], deploymentCoords[0]);
+        resolvedExtensionInfoCache.put(key, info);
+        return info;
+    }
+
+    private List<ExtensionCatalog> loadMetadataOverrideCatalogs(PlatformMemberConfig memberConfig)
+            throws MojoExecutionException {
+        var cached = memberMetadataCatalogsCache.get(memberConfig);
+        if (cached != null) {
+            return cached;
+        }
+        List<ExtensionCatalog> catalogs = new ArrayList<>();
+        for (String s : memberConfig.getMetadataOverrideFiles()) {
+            try {
+                catalogs.add(ExtensionCatalog.fromFile(Path.of(s)));
+            } catch (IOException e) {
+                throw new MojoExecutionException("Failed to deserialize " + s, e);
+            }
+        }
+        for (String s : memberConfig.getMetadataOverrideArtifacts()) {
+            try {
+                var path = getNonWorkspaceResolver().resolve(toAetherArtifact(s)).getArtifact().getFile().toPath();
+                catalogs.add(ExtensionCatalog.fromFile(path));
+            } catch (BootstrapMavenException e) {
+                throw new MojoExecutionException("Failed to resolve " + s, e);
+            } catch (IOException e) {
+                throw new MojoExecutionException("Failed to deserialize " + s, e);
+            }
+        }
+        memberMetadataCatalogsCache.put(memberConfig, catalogs);
+        return catalogs;
+    }
+
+    private static Set<ArtifactKey> selectExtensionKeys(List<ExtensionCatalog> catalogs, List<Pattern> patterns) {
+        final Set<ArtifactKey> selectedKeys = new HashSet<>();
+        for (ExtensionCatalog c : catalogs) {
+            for (var e : c.getExtensions()) {
+                if (isMatchesDominoBuildPattern(e, patterns)) {
+                    var key = e.getArtifact().getKey();
+                    selectedKeys.add(key);
+                    selectedKeys.add(ArtifactKey.of(key.getGroupId(), key.getArtifactId() + "-deployment",
+                            key.getClassifier(), key.getType()));
+                }
+            }
+        }
+        return selectedKeys;
     }
 
     private void generateExtensionChangesModule(Model parentPom) throws MojoExecutionException {
@@ -923,7 +935,9 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                     if (productConfig.getStream() != null) {
                         productInfoDom.addChild(textDomElement("stream", productConfig.getStream()));
                     }
-                    productInfoDom.addChild(textDomElement("type", productConfig.getType().toUpperCase()));
+                    if (productConfig.getType() != null) {
+                        productInfoDom.addChild(textDomElement("type", productConfig.getType().toUpperCase()));
+                    }
                     productInfoDom.addChild(textDomElement("group", productConfig.getGroup()));
                     productInfoDom.addChild(textDomElement("name", productConfig.getName()));
                     productInfoDom.addChild(textDomElement("version", productConfig.getVersion()));
@@ -1043,6 +1057,124 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             productConfig.setVersion(member.getGeneratedPlatformBom().getVersion());
         }
         return productConfig;
+    }
+
+    /**
+     * Collects the artifacts that should be attributed to a platform member's CPE, keyed by the member's
+     * supported runtime extension artifacts.
+     * <p>
+     * For every extension of the member that is flagged as supported for the given offering, the extension's
+     * deployment dependency closure is resolved with the platform-aligned constraints enforced (the core
+     * constraints for the core member, the core plus the member's own constraints otherwise). The resulting
+     * map is keyed by the runtime extension artifact and its value holds the deployment artifact together
+     * with its resolved transitive dependencies, so a consumer can attribute those to the member's CPE by
+     * looking up the runtime artifacts it finds in the {@code ApplicationModel}.
+     *
+     * @param member the platform member whose CPE artifacts are collected
+     * @param offering the offering the extensions must be supported for
+     * @return a map from each supported runtime extension artifact to its deployment closure
+     */
+    private Map<ArtifactCoords, List<ArtifactCoords>> collectCpeArtifacts(PlatformMemberImpl member, String offering)
+            throws MojoExecutionException {
+        final Map<ArtifactCoords, List<ArtifactCoords>> result = new LinkedHashMap<>();
+
+        final List<ExtensionCatalog> catalogs = loadMetadataOverrideCatalogs(member.config());
+        if (catalogs.isEmpty()) {
+            getLog().warn("No metadata override catalogs found for member " + member.config().getName()
+                    + ", skipping CPE artifacts collection");
+            return result;
+        }
+        final Set<ArtifactKey> offeringKeys = selectExtensionKeys(catalogs,
+                compilePatterns(List.of(offering + "-support")));
+        if (offeringKeys.isEmpty()) {
+            return result;
+        }
+
+        final var resolver = getNonWorkspaceResolver();
+        final List<org.eclipse.aether.graph.Dependency> enforcedConstraints = getEnforcedConstraints(member);
+        for (ProjectRelease r : member.getAlignedDecomposedBom().releases()) {
+            for (ProjectDependency d : r.dependencies()) {
+                final Artifact a = d.artifact();
+                if (!offeringKeys.contains(d.key())
+                        || !isExtensionCandidate(a, member.config().getExtensionGroupIds(), List.of())) {
+                    continue;
+                }
+                var info = resolveExtension(a);
+                if (!info.isExtension || info.deploymentArtifactCoords == null) {
+                    continue;
+                }
+                // key the map by the runtime extension artifact so the consumer can look it up directly
+                // against the runtime artifacts flagged in the ApplicationModel, without having to map
+                // runtime artifacts to their deployment counterparts itself
+                final Artifact runtime = info.resolved;
+                final ArtifactCoords runtimeCoords = ArtifactCoords.of(runtime.getGroupId(), runtime.getArtifactId(),
+                        runtime.getClassifier(), runtime.getExtension(), runtime.getVersion());
+                var deploymentCoords = ArtifactCoords.fromString(info.deploymentArtifactCoords);
+                try {
+                    var aetherArtifact = new DefaultArtifact(deploymentCoords.getGroupId(),
+                            deploymentCoords.getArtifactId(), deploymentCoords.getClassifier(),
+                            deploymentCoords.getType(), deploymentCoords.getVersion());
+                    // Add the deployment artifact as a direct dependency rather than the root so that
+                    // its own dependencies are scope-filtered by the session's ScopeDependencySelector
+                    // (which does not filter the root's direct dependencies).
+                    var collectRequest = new CollectRequest()
+                            .setDependencies(List.of(
+                                    new org.eclipse.aether.graph.Dependency(aetherArtifact, JavaScopes.COMPILE)))
+                            .setManagedDependencies(enforcedConstraints)
+                            .setRepositories(resolver.getRepositories());
+                    var collectResult = resolver.getSystem().collectDependencies(resolver.getSession(), collectRequest);
+
+                    // the value is the deployment artifact itself plus its transitive closure
+                    final DependencyNode deploymentNode = collectResult.getRoot().getChildren().get(0);
+                    Set<ArtifactCoords> deps = new LinkedHashSet<>();
+                    deps.add(deploymentCoords);
+                    collectCpeTransitiveDeps(deploymentNode, deps);
+                    result.put(runtimeCoords, new ArrayList<>(deps));
+                } catch (DependencyCollectionException e) {
+                    throw new MojoExecutionException(
+                            "Failed to collect the dependencies of the supported extension deployment artifact "
+                                    + deploymentCoords,
+                            e);
+                }
+            }
+        }
+        return result;
+    }
+
+    private static void collectCpeTransitiveDeps(DependencyNode node, Set<ArtifactCoords> deps) {
+        for (DependencyNode child : node.getChildren()) {
+            var a = child.getArtifact();
+            var coords = ArtifactCoords.of(a.getGroupId(), a.getArtifactId(),
+                    a.getClassifier(), a.getExtension(), a.getVersion());
+            // skip nodes already visited to avoid duplicates and re-walking shared subtrees
+            if (deps.add(coords)) {
+                collectCpeTransitiveDeps(child, deps);
+            }
+        }
+    }
+
+    /**
+     * Returns the managed dependencies (aligned to the versions the platform ships) that should be
+     * enforced when resolving a member's deployment dependency closures. For the core member only the
+     * core constraints are enforced; for every other member the core constraints plus the member's own
+     * constraints are enforced.
+     */
+    private List<org.eclipse.aether.graph.Dependency> getEnforcedConstraints(PlatformMemberImpl member) {
+        final List<org.eclipse.aether.graph.Dependency> managed = new ArrayList<>();
+        addAlignedConstraints(quarkusCore, managed);
+        if (member != quarkusCore) {
+            addAlignedConstraints(member, managed);
+        }
+        return managed;
+    }
+
+    private static void addAlignedConstraints(PlatformMemberImpl member,
+            List<org.eclipse.aether.graph.Dependency> managed) {
+        for (ProjectRelease r : member.getAlignedDecomposedBom().releases()) {
+            for (ProjectDependency d : r.dependencies()) {
+                managed.add(d.dependency());
+            }
+        }
     }
 
     private ProjectDependencyFilterConfig effectiveMemberDepsToBuildConfig(PlatformMemberConfig member) {
@@ -3034,6 +3166,36 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                     buf.toString());
         }
 
+        // Expose the member product CPE (if configured) as a platform property keyed by the
+        // generated member BOM coordinates, so consumers (e.g. the SBOM generator) can resolve it.
+        final SbomConfig.ProductConfig productConfig = getProductConfig(member);
+        if (productConfig != null && productConfig.getCpe() != null) {
+            final var memberBom = member.getGeneratedPlatformBom();
+            final String memberKeyPrefix = BootstrapConstants.PLATFORM_PROPERTY_PREFIX
+                    + memberBom.getGroupId() + "." + memberBom.getArtifactId() + ".";
+            props.setProperty(memberKeyPrefix + "cpe", productConfig.getCpe());
+            if (!memberBom.getArtifactId().equals(productConfig.getName())) {
+                setIfNotBlank(props, memberKeyPrefix + "product-name", productConfig.getName());
+            }
+            if (!memberBom.getVersion().equals(productConfig.getVersion())) {
+                setIfNotBlank(props, memberKeyPrefix + "product-version", productConfig.getVersion());
+            }
+            if (!"framework".equalsIgnoreCase(productConfig.getType())) {
+                setIfNotBlank(props, memberKeyPrefix + "product-type", productConfig.getType());
+            }
+            setIfNotBlank(props, memberKeyPrefix + "product-purl", productConfig.getPurl());
+            setIfNotBlank(props, memberKeyPrefix + "product-description", productConfig.getDescription());
+
+            if (productConfig.getOffering() != null) {
+                final Map<ArtifactCoords, List<ArtifactCoords>> deploymentDeps = collectCpeArtifacts(member,
+                        productConfig.getOffering());
+                if (!deploymentDeps.isEmpty()) {
+                    props.setProperty(memberKeyPrefix + "cpe-artifacts",
+                            CpeArtifactsEncoder.encode(deploymentDeps));
+                }
+            }
+        }
+
         if (member.config().isHidden()) {
             Utils.skipInstallAndDeploy(pom);
         }
@@ -3231,6 +3393,21 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             platformReleaseConfig = tmp;
         }
         return platformReleaseConfig;
+    }
+
+    private static class ResolvedExtensionInfo {
+        final Artifact resolved;
+        final boolean relocated;
+        final boolean isExtension;
+        final String deploymentArtifactCoords;
+
+        ResolvedExtensionInfo(Artifact resolved, boolean relocated, boolean isExtension,
+                String deploymentArtifactCoords) {
+            this.resolved = resolved;
+            this.relocated = relocated;
+            this.isExtension = isExtension;
+            this.deploymentArtifactCoords = deploymentArtifactCoords;
+        }
     }
 
     private class PlatformMemberImpl implements PlatformMember {
@@ -3536,6 +3713,12 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
     private static boolean isBlank(String s) {
         return s == null || s.isBlank();
+    }
+
+    private static void setIfNotBlank(OrderedProperties props, String key, String value) {
+        if (!isBlank(value)) {
+            props.setProperty(key, value);
+        }
     }
 
     private static Path deleteAndCreateDir(Path dir) throws MojoExecutionException {
