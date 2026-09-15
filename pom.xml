@@ -46,7 +46,7 @@
     <maven-jar-plugin.version>3.4.2</maven-jar-plugin.version>
     <maven-javadoc-plugin.version>3.6.3</maven-javadoc-plugin.version>
     <maven-source-plugin.version>3.3.0</maven-source-plugin.version>
-    <surefire-plugin.version>3.5.4</surefire-plugin.version>
+    <surefire-plugin.version>3.6.0</surefire-plugin.version>
 
     <assertj.version>3.27.6</assertj.version>
     <commons-text.version>1.14.0</commons-text.version>
