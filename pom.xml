@@ -49,7 +49,7 @@
     <surefire-plugin.version>3.5.4</surefire-plugin.version>
 
     <assertj.version>3.27.6</assertj.version>
-    <commons-text.version>1.14.0</commons-text.version>
+    <commons-text.version>1.15.0</commons-text.version>
     <gradle-tooling.version>9.1.0</gradle-tooling.version>
     <quarkus.version>3.39.3</quarkus.version>
     <quarkus-jgit.version>3.7.0</quarkus-jgit.version>
