@@ -41,7 +41,7 @@ jobs:
           # refresh cache every month to avoid unlimited growth
           key: maven-repo-jdk-${{ matrix.java }}-${{ steps.get-date.outputs.date }}
       - name: Install JDK ${{ matrix.java }}
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: ${{ matrix.java }}
