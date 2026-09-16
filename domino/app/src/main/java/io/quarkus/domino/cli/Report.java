@@ -54,7 +54,7 @@ public class Report extends BaseDepsToBuildCommand {
         if (manifest || flatManifest) {
             return (projectDir == null ? Path.of(DominoInfo.CONFIG_DIR_NAME)
                     : projectDir.toPath().resolve(DominoInfo.CONFIG_DIR_NAME))
-                            .resolve("manifest");
+                    .resolve("manifest");
         }
         return null;
     }

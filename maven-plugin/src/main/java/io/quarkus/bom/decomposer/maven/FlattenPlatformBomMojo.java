@@ -128,7 +128,7 @@ public class FlattenPlatformBomMojo extends AbstractMojo {
      * {@link io.quarkus.domino.ArtifactCoordsPattern#of(String)}.
      * <p>
      * Example:
-     * 
+     *
      * <pre>
      * {@code
      * <additionalRepos>

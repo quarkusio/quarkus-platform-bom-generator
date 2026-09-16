@@ -182,7 +182,7 @@ public class PlatformMemberConfig {
     /**
      * Whether a member should be participating in the alignment but not be
      * installed and deployed.
-     * 
+     *
      * @return true if the member should not be installed and deployed
      */
     public boolean isHidden() {
@@ -193,7 +193,7 @@ public class PlatformMemberConfig {
      * By default, only conflicting dependency constraints coming from
      * different members are aligned. This option allows to trigger alignment
      * of member own constraints.
-     * 
+     *
      * @return true if the member should not be installed and deployed
      */
     public boolean isAlignOwnConstraints() {
@@ -206,7 +206,7 @@ public class PlatformMemberConfig {
      * for all the members or each member may keep their own exclusions for those common
      * dependencies.
      * The default value for this option is true.
-     * 
+     *
      * @return true if the member chose to keep its exclusions for common dependencies
      */
     public boolean isKeepThirdpartyExclusions() {
@@ -219,7 +219,7 @@ public class PlatformMemberConfig {
 
     /**
      * Paths to JSON files containing extension catalog overrides.
-     * 
+     *
      * @return paths to JSON files containing extension catalog overrides
      */
     public List<String> getMetadataOverrideFiles() {
@@ -234,7 +234,7 @@ public class PlatformMemberConfig {
      * JSON Maven artifacts containing extension catalog overrides.
      * If both the artifacts and the {@link #metadataOverrideFiles} are configured,
      * the artifacts will be applied before the {@link #metadataOverrideFiles}.
-     * 
+     *
      * @return JSON Maven artifacts containing extension catalog overrides
      */
     public List<String> getMetadataOverrideArtifacts() {
@@ -244,7 +244,7 @@ public class PlatformMemberConfig {
     /**
      * A list of artifact groupIds of the member extensions which should be
      * included in the generated member descriptor.
-     * 
+     *
      * @return list of extension artifact groupIds
      */
     public List<String> getExtensionGroupIds() {
@@ -257,7 +257,7 @@ public class PlatformMemberConfig {
 
     /**
      * A list of artifact groupIds other members are not allowed to override
-     * 
+     *
      * @return list of artifact groupIds other members are not allowed to override
      */
     public Collection<String> getOwnGroupIds() {

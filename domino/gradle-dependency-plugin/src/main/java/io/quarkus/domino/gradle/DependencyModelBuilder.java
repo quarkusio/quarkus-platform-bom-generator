@@ -95,7 +95,7 @@ public class DependencyModelBuilder implements ParameterizedToolingModelBuilder<
         final String group = a.getModuleVersion().getId().getGroup();
         final String version = a.getModuleVersion().getId().getVersion();
         if (moduleIds.contains(new ModuleId(group, a.getName(), version))) {
-            // we may need to replace some dependencies with general GAVs of modules producing those artifacts 
+            // we may need to replace some dependencies with general GAVs of modules producing those artifacts
             return DependencyNode.of(group, a.getName(), "", "jar", version);
         }
         return DependencyNode.of(group, a.getName(), a.getClassifier(), a.getType(),
