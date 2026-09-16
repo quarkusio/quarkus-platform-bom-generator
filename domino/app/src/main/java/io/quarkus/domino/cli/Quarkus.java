@@ -17,6 +17,7 @@ import io.quarkus.domino.inspect.quarkus.QuarkusPlatformInfoReader;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
 import io.quarkus.paths.PathTree;
+import io.quarkus.registry.catalog.ExtensionCatalog;
 import io.quarkus.util.GlobUtil;
 import java.io.BufferedReader;
 import java.io.File;
@@ -27,11 +28,14 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -121,6 +125,10 @@ public class Quarkus implements Callable<Integer> {
     @CommandLine.Option(names = {
             "--info" }, description = "Log basic Quarkus platform release information")
     public boolean info;
+
+    @CommandLine.Option(names = {
+            "--support" }, description = "Group trace findings by support offering present in extension platform metadata")
+    public boolean support;
 
     protected MessageWriter log = MessageWriter.info();
 
@@ -260,7 +268,11 @@ public class Quarkus implements Callable<Integer> {
 
         treeInspector.complete();
 
-        logMemberReports(memberReports, rootsToMembers.keySet());
+        if (support) {
+            logSupportReport(memberReports, rootsToMembers, resolver);
+        } else {
+            logMemberReports(memberReports, rootsToMembers.keySet());
+        }
 
         if (allNodes != null) {
             log.info(String.format("%-32s: %s", "Number of root artifacts", inspectedRoots));
@@ -370,6 +382,198 @@ public class Quarkus implements Callable<Integer> {
         };
     }
 
+    private void logSupportReport(ArrayList<MemberReport> memberReports,
+            Map<ArtifactCoords, List<MemberReport>> rootsToMembers,
+            MavenArtifactResolver resolver) {
+
+        // Load ExtensionCatalog per member and build a map from extension artifact coords to its metadata
+        final Map<ArtifactCoords, Map<String, Object>> extMetadata = new HashMap<>();
+        for (var report : memberReports) {
+            if (!report.enabled) {
+                continue;
+            }
+            var bom = report.metadata.getBom();
+            var descriptorArtifact = new DefaultArtifact(bom.getGroupId(),
+                    bom.getArtifactId() + "-quarkus-platform-descriptor",
+                    bom.getVersion(), "json", bom.getVersion());
+            try {
+                var catalogFile = resolver.resolve(descriptorArtifact).getArtifact().getFile().toPath();
+                var catalog = ExtensionCatalog.fromFile(catalogFile);
+                for (var ext : catalog.getExtensions()) {
+                    var meta = ext.getMetadata();
+                    if (meta != null && !meta.isEmpty()) {
+                        extMetadata.put(ext.getArtifact(), meta);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to load extension catalog for " + bom.toCompactCoords() + ": " + e.getMessage());
+            }
+        }
+
+        // Build a map from extension coords -> (TreeNode, member label) across all enabled members.
+        final Map<ArtifactCoords, OfferingEntry> coordsToEntry = new LinkedHashMap<>();
+        for (var report : memberReports) {
+            if (!report.enabled) {
+                continue;
+            }
+            for (var root : report.tracedExtensionDeps) {
+                var coords = toCoords(root.artifact);
+                coordsToEntry.computeIfAbsent(coords, k -> {
+                    var membersList = rootsToMembers.get(k);
+                    var memberLabel = "";
+                    if (membersList != null && !membersList.isEmpty()) {
+                        var sb = new StringBuilder();
+                        for (var r : membersList) {
+                            if (sb.length() > 0) {
+                                sb.append(", ");
+                            }
+                            sb.append(r.metadata.getBom().getArtifactId());
+                        }
+                        memberLabel = " [" + sb + "]";
+                    }
+                    return new OfferingEntry(coords, root, memberLabel);
+                });
+            }
+        }
+
+        // Assign each extension entry to its offering(s).
+        // Extensions with no *-support metadata go to UPSTREAM.
+        // Rule: if offering X is a strict prefix of offering Y (e.g. REDHAT / REDHAT-CAMEL),
+        // entries already present in X are omitted from Y.
+        final Map<String, List<OfferingEntry>> offeringToEntries = new TreeMap<>();
+        for (var oe : coordsToEntry.values()) {
+            var meta = extMetadata.get(oe.coords);
+            boolean hasSupport = false;
+            if (meta != null) {
+                for (var key : meta.keySet()) {
+                    if (key.endsWith("-support")) {
+                        hasSupport = true;
+                        var offering = key.substring(0, key.length() - "-support".length()).toUpperCase();
+                        offeringToEntries.computeIfAbsent(offering, k -> new ArrayList<>()).add(oe);
+                    }
+                }
+            }
+            if (!hasSupport) {
+                offeringToEntries.computeIfAbsent("UPSTREAM", k -> new ArrayList<>()).add(oe);
+            }
+        }
+
+        // Deduplicate sub-offerings: for each offering Y, remove entries whose coords are already
+        // present in a parent offering X where X is a strict prefix of Y.
+        final var offeringNames = new ArrayList<>(offeringToEntries.keySet());
+        for (var offering : offeringNames) {
+            var entries = offeringToEntries.get(offering);
+            for (var other : offeringNames) {
+                if (other.equals(offering) || !offering.startsWith(other + "-")) {
+                    continue;
+                }
+                var parentEntries = offeringToEntries.get(other);
+                if (parentEntries == null) {
+                    continue;
+                }
+                var parentCoords = new HashSet<ArtifactCoords>(parentEntries.size());
+                for (var pe : parentEntries) {
+                    parentCoords.add(pe.coords);
+                }
+                entries.removeIf(oe -> parentCoords.contains(oe.coords));
+            }
+        }
+
+        // Collect all matched artifact coords once — BOM constraint hits plus dependency tree hits.
+        // These are offering-independent so printed once before the offering sections.
+        var extensionNodes = new ArrayList<TreeNode>(coordsToEntry.size());
+        for (var oe : coordsToEntry.values()) {
+            extensionNodes.add(oe.node);
+        }
+        logMatchedArtifacts(buildMatchedArtifacts(memberReports, extensionNodes));
+
+        // Log the report
+        int offeringsWithTraces = 0;
+        for (var entry : offeringToEntries.entrySet()) {
+            var offeringName = entry.getKey();
+            var entries = entry.getValue();
+            if (entries.isEmpty()) {
+                continue;
+            }
+            ++offeringsWithTraces;
+            log.info("");
+            log.info(MEMBER_HEADER_PREFIX + offeringName);
+            for (var oe : entries) {
+                log.info("");
+                oe.node.log(log, tree, oe.memberLabel, false);
+            }
+        }
+        log.info("");
+
+        logNoTracesFound(offeringsWithTraces);
+    }
+
+    private void logNoTracesFound(int sectionsWithTraces) {
+        if (trace != null && !trace.isEmpty() && sectionsWithTraces == 0) {
+            var sb = new StringBuilder().append("No traces of ");
+            var i = trace.iterator();
+            sb.append(i.next());
+            if (i.hasNext()) {
+                var next = i.next();
+                while (i.hasNext()) {
+                    sb.append(", ").append(next);
+                    next = i.next();
+                }
+                sb.append(" and ").append(next);
+            }
+            log.info(sb.append(" found").toString());
+        }
+    }
+
+    private Map<ArtifactCoords, Set<String>> buildMatchedArtifacts(ArrayList<MemberReport> memberReports,
+            List<TreeNode> extensionNodes) {
+        final Map<ArtifactCoords, Set<String>> matched = new LinkedHashMap<>();
+        for (var report : memberReports) {
+            if (!report.enabled) {
+                continue;
+            }
+            for (var d : report.tracedBomConstraints) {
+                var a = d.getArtifact();
+                matched.computeIfAbsent(
+                        ArtifactCoords.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(),
+                                a.getExtension(), a.getVersion()),
+                        k -> new LinkedHashSet<>())
+                        .add(report.metadata.getBom().getArtifactId());
+            }
+        }
+        for (var node : extensionNodes) {
+            // walk every node in the traced subtree; for matched ones record managing BOMs
+            var queue = new ArrayList<TreeNode>();
+            queue.add(node);
+            for (int i = 0; i < queue.size(); i++) {
+                var n = queue.get(i);
+                if (n.matched) {
+                    var coords = toCoords(n.artifact);
+                    var managers = matched.computeIfAbsent(coords, k -> new LinkedHashSet<>());
+                    for (var report : memberReports) {
+                        if (report.enabled && report.bomConstraints.containsKey(coords)) {
+                            managers.add(report.metadata.getBom().getArtifactId());
+                        }
+                    }
+                }
+                queue.addAll(n.tracedChildren);
+            }
+        }
+        return matched;
+    }
+
+    private static class OfferingEntry {
+        final ArtifactCoords coords;
+        final TreeNode node;
+        final String memberLabel;
+
+        OfferingEntry(ArtifactCoords coords, TreeNode node, String memberLabel) {
+            this.coords = coords;
+            this.node = node;
+            this.memberLabel = memberLabel;
+        }
+    }
+
     private void logMemberReports(ArrayList<MemberReport> memberReports,
             Set<ArtifactCoords> topLevelArtifacts) {
         final Set<ArtifactCoords> sourceCoords;
@@ -396,14 +600,9 @@ public class Quarkus implements Callable<Integer> {
                 log.info(MEMBER_HEADER_PREFIX + report.metadata.getBom().getGroupId().toUpperCase()
                         + ":" + report.metadata.getBom().getArtifactId().toUpperCase()
                         + ":" + report.metadata.getBom().getVersion().toUpperCase());
-                if (!report.tracedBomConstraints.isEmpty()) {
-                    log.info("");
-                    log.info(BOM_ENTRY_HEADER_PREFIX + "BOM entries");
-                    log.info("");
-                    for (var v : report.tracedBomConstraints) {
-                        log.info(toCompactCoords(v.getArtifact()));
-                    }
-                }
+
+                logMatchedArtifacts(buildMatchedArtifacts(memberReports, report.tracedExtensionDeps));
+
                 if (!report.tracedExtensionDeps.isEmpty()) {
                     final List<TreeNode> sourceRoots;
                     final List<TreeNode> dependentRoots;
@@ -427,7 +626,7 @@ public class Quarkus implements Callable<Integer> {
                         log.info(EXTENSIONS_HEADER_PREFIX + "Extension dependencies");
                         for (var result : sourceRoots) {
                             log.info("");
-                            result.log(log, tree);
+                            result.log(log, tree, "", false);
                         }
                     }
 
@@ -439,7 +638,7 @@ public class Quarkus implements Callable<Integer> {
                         for (var dep : dependentRoots) {
                             var sources = getSourcesOnPath(dep, sourceCoords);
                             var sb = new StringBuilder();
-                            dep.append(sb);
+                            dep.append(sb, false);
                             if (!sources.isEmpty()) {
                                 sb.append(" (via ");
                                 var iter = sources.iterator();
@@ -457,20 +656,28 @@ public class Quarkus implements Callable<Integer> {
         }
         log.info("");
 
-        if (trace != null && !trace.isEmpty() && membersWithTraces == 0) {
-            var sb = new StringBuilder()
-                    .append("No traces of ");
-            var i = trace.iterator();
-            sb.append(i.next());
-            if (i.hasNext()) {
-                var next = i.next();
-                while (i.hasNext()) {
-                    sb.append(", ").append(next);
-                    next = i.next();
+        logNoTracesFound(membersWithTraces);
+    }
+
+    private void logMatchedArtifacts(Map<ArtifactCoords, Set<String>> matchedArtifacts) {
+        if (matchedArtifacts.isEmpty()) {
+            return;
+        }
+        log.info("");
+        log.info("Matched artifacts:");
+        for (var me : matchedArtifacts.entrySet()) {
+            var sb = new StringBuilder("  ").append(me.getKey().toCompactCoords());
+            var managers = me.getValue();
+            if (!managers.isEmpty()) {
+                sb.append(" (managed by: ");
+                var it = managers.iterator();
+                sb.append(it.next());
+                while (it.hasNext()) {
+                    sb.append(", ").append(it.next());
                 }
-                sb.append(" and ").append(next);
+                sb.append(")");
             }
-            log.info(sb.append(" found").toString());
+            log.info(sb.toString());
         }
     }
 
@@ -783,8 +990,12 @@ public class Quarkus implements Callable<Integer> {
         }
 
         private void log(MessageWriter log, boolean fullChain) {
+            log(log, fullChain, "", true);
+        }
+
+        private void log(MessageWriter log, boolean fullChain, String rootSuffix, boolean showEnforcedBy) {
             if (fullChain) {
-                log(new ArrayList<>(), log);
+                log(new ArrayList<>(), log, rootSuffix, showEnforcedBy);
             } else {
                 var queue = new ArrayList<>(tracedChildren);
                 var result = new ArrayList<TreeNode>();
@@ -797,19 +1008,24 @@ public class Quarkus implements Callable<Integer> {
                 }
 
                 var sb = new StringBuilder();
-                append(sb);
+                append(sb, true);
+                sb.append(rootSuffix);
                 log.info(sb.toString());
 
                 for (var child : result) {
                     sb = new StringBuilder();
                     sb.append(ARROW).append(' ');
-                    child.append(sb);
+                    child.append(sb, showEnforcedBy);
                     log.info(sb.toString());
                 }
             }
         }
 
         private void log(List<Boolean> depth, MessageWriter log) {
+            log(depth, log, "", true);
+        }
+
+        private void log(List<Boolean> depth, MessageWriter log, String rootSuffix, boolean showEnforcedBy) {
             var sb = new StringBuilder();
             if (!depth.isEmpty()) {
                 for (int i = 0; i < depth.size() - 1; ++i) {
@@ -825,19 +1041,22 @@ public class Quarkus implements Callable<Integer> {
                     sb.append(LAST_LINK);
                 }
             }
-            append(sb);
+            append(sb, showEnforcedBy);
+            if (depth.isEmpty()) {
+                sb.append(rootSuffix);
+            }
             log.info(sb.toString());
 
             final int childrenTotal = tracedChildren.size();
             if (childrenTotal > 0) {
                 if (childrenTotal == 1) {
                     depth.add(false);
-                    tracedChildren.get(0).log(depth, log);
+                    tracedChildren.get(0).log(depth, log, "", showEnforcedBy);
                 } else {
                     depth.add(true);
                     int i = 0;
                     while (i < childrenTotal) {
-                        tracedChildren.get(i++).log(depth, log);
+                        tracedChildren.get(i++).log(depth, log, "", showEnforcedBy);
                         if (i == childrenTotal - 1) {
                             depth.set(depth.size() - 1, false);
                         }
@@ -847,7 +1066,7 @@ public class Quarkus implements Callable<Integer> {
             }
         }
 
-        private void append(StringBuilder out) {
+        private void append(StringBuilder out, boolean showEnforcedBy) {
             out.append(artifact.getGroupId()).append(':').append(artifact.getArtifactId()).append(':');
             if (!artifact.getClassifier().isEmpty()) {
                 out.append(artifact.getClassifier()).append(':');
@@ -859,7 +1078,7 @@ public class Quarkus implements Callable<Integer> {
                 out.append(artifact.getExtension()).append(':');
             }
             out.append(artifact.getVersion());
-            if (enforcedBy != null) {
+            if (showEnforcedBy && enforcedBy != null) {
                 out.append(enforcedBy);
             }
         }

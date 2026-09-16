@@ -2489,7 +2489,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     /**
      * Returns either a property expression that should be used in place of the actual artifact version
      * or the actual artifact version, in case no property was found that could represent the version
-     * 
+     *
      * @param artifactGroupId test artifact groupId
      * @param version test artifact version
      * @return property expression or the actual version
