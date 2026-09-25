@@ -2525,18 +2525,49 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
                     continue;
                 }
                 for (var groupId : groupIds) {
-                    pomPropsByValues.put(groupId + COLON + value, name);
+                    pomPropsByValues.put(interpolate(groupId) + COLON + value, name);
                 }
                 if (previous.isEmpty()) {
                     continue;
                 }
                 groupIds = getArtifactGroupIdsForVersionProperty(previous);
                 for (var groupId : groupIds) {
-                    pomPropsByValues.put(groupId + COLON + value, previous);
+                    pomPropsByValues.put(interpolate(groupId) + COLON + value, previous);
                 }
                 pomPropsByValues.put(value, "");
             }
         }
+    }
+
+    private String interpolate(String value) {
+        if (value == null || !value.contains("${")) {
+            return value;
+        }
+        final Properties effectiveProperties = project.getProperties();
+        final StringBuilder sb = new StringBuilder();
+        int i = 0;
+        while (i < value.length()) {
+            int start = value.indexOf("${", i);
+            if (start < 0) {
+                sb.append(value, i, value.length());
+                break;
+            }
+            sb.append(value, i, start);
+            int end = value.indexOf('}', start);
+            if (end < 0) {
+                sb.append(value, start, value.length());
+                break;
+            }
+            final String propName = value.substring(start + 2, end);
+            final String propValue = effectiveProperties.getProperty(propName);
+            if (propValue != null) {
+                sb.append(propValue);
+            } else {
+                sb.append(value, start, end + 1);
+            }
+            i = end + 1;
+        }
+        return sb.toString();
     }
 
     private Collection<String> getArtifactGroupIdsForVersionProperty(final String versionProperty) {
