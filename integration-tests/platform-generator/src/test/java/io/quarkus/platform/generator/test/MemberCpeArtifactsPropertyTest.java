@@ -69,8 +69,8 @@ public class MemberCpeArtifactsPropertyTest {
         // the value should contain the corresponding deployment artifact
         assertThat(decoded.get(runtimeKey).stream()
                 .anyMatch(coords -> coords.getArtifactId().equals("camel-atom-deployment")))
-                        .as("The runtime artifact should map to the camel-atom-deployment artifact")
-                        .isTrue();
+                .as("The runtime artifact should map to the camel-atom-deployment artifact")
+                .isTrue();
     }
 
     @Test

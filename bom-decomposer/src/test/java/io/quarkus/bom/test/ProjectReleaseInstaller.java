@@ -50,7 +50,7 @@ public class ProjectReleaseInstaller {
 
     /**
      * Associates a release with a tag. Either tag or {@code #version(String)} has to be set.
-     * 
+     *
      * @param tag tag
      * @return this builder
      */
@@ -62,7 +62,7 @@ public class ProjectReleaseInstaller {
 
     /**
      * Associates a release with a given version. Either tag or {@code #version(String)} has to be set.
-     * 
+     *
      * @param version
      * @return
      */

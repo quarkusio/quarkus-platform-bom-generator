@@ -86,7 +86,7 @@ public class ReleaseCollection implements Iterable<ReleaseRepo> {
 
     /**
      * Returns a new collection of releases sorted according to their dependencies.
-     * 
+     *
      * @return new collection of releases sorted according to their dependencies
      */
     public ReleaseCollection sort() {
@@ -95,7 +95,7 @@ public class ReleaseCollection implements Iterable<ReleaseRepo> {
 
     /**
      * Detects and returns circular release dependencies, if any found.
-     * 
+     *
      * @return circular release dependencies, if any found
      */
     public Collection<CircularReleaseDependency> getCircularDependencies() {

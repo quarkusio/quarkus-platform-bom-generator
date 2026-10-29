@@ -69,7 +69,7 @@ public class PlatformBomUtils {
 
     /**
      * Persists decomposed platform BOM to a pom.xml filling in developer, SCM and other info from the base model
-     * 
+     *
      * @param decomposed decomposed platform BOM
      * @param file target file
      * @param baseModel base model info
@@ -86,7 +86,7 @@ public class PlatformBomUtils {
     /**
      * Converts decomposed BOM to a platform POM Model copying developer info, SCM, etc
      * from the base Model
-     * 
+     *
      * @param decomposed decomposed BOM
      * @param baseModel base Model info
      * @return POM Model

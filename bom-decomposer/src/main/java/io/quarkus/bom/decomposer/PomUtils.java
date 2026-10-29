@@ -25,7 +25,7 @@ public class PomUtils {
 
     /**
      * Converts decomposed BOM to a POM Model
-     * 
+     *
      * @param decomposed decomposed BOM
      * @return POM Model
      */
@@ -36,7 +36,7 @@ public class PomUtils {
     /**
      * Converts decomposed BOM to a POM Model copying developer info, SCM, etc
      * from the base Model
-     * 
+     *
      * @param decomposed decomposed BOM
      * @param baseModel base Model info
      * @return POM Model
@@ -67,7 +67,7 @@ public class PomUtils {
 
     /**
      * Creates a new POM model initializing its base elements from the argument.
-     * 
+     *
      * @param baseModel base model
      * @return new model initialized from the base model
      */
@@ -92,7 +92,7 @@ public class PomUtils {
 
     /**
      * Creates a managed dependency that can be added to a BOM for a project dependency
-     * 
+     *
      * @param dep project dependency
      * @return managed dependency
      */
@@ -134,7 +134,7 @@ public class PomUtils {
 
     /**
      * Persists decomposed BOM to a pom.xml file
-     * 
+     *
      * @param decomposed decomposed BOM
      * @param file target file
      * @throws IOException in case of a failure
@@ -145,7 +145,7 @@ public class PomUtils {
 
     /**
      * Persists decomposed BOM to a pom.xml filling in developer, SCM and other info from the base model
-     * 
+     *
      * @param decomposed decomposed BOM
      * @param file target file
      * @param baseModel base model info

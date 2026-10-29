@@ -56,7 +56,7 @@
     <jgit.version>7.8.0.202609011348-r</jgit.version>
     <json-unit-assertj.version>3.2.7</json-unit-assertj.version>
     <junit.jupiter.version>5.10.2</junit.jupiter.version>
-    <smallrye-beanbag.version>1.5.3</smallrye-beanbag.version>
+    <smallrye-beanbag.version>1.6.1</smallrye-beanbag.version>
     <xom.version>1.4.6</xom.version>
   </properties>
   <modules>
@@ -231,7 +231,7 @@
         <plugin>
           <groupId>net.revelc.code</groupId>
           <artifactId>impsort-maven-plugin</artifactId>
-          <version>1.8.0</version>
+          <version>1.13.0</version>
           <configuration>
             <removeUnused>true</removeUnused>
             <skip>${format.skip}</skip>

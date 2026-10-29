@@ -348,7 +348,7 @@ public class Build extends BaseDepsToBuildCommand {
                     BootstrapMavenContext.config()
                             .setCurrentProject(projectDir.toString())
                             .setEffectiveModelBuilder(true))
-                                    .getCurrentProject();
+                    .getCurrentProject();
         } catch (BootstrapMavenException e) {
             ctx.failure(e);
             throw new RuntimeException("Failed to initialize Maven context for " + projectDir, e);

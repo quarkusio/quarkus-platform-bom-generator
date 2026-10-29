@@ -8,14 +8,14 @@ public interface GradlePublishedModule {
 
     /**
      * Group under which a module is published
-     * 
+     *
      * @return group under which a module is published
      */
     String getGroup();
 
     /**
      * Name under which a module is published. Could be different from the original module name.
-     * 
+     *
      * @return name under which a module is published
      */
     String getName();
