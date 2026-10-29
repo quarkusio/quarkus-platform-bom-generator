@@ -161,6 +161,8 @@ public class Quarkus implements Callable<Integer> {
 
         final ArtifactSet tracePattern = initTracePattern();
         final Map<ArtifactCoords, List<MemberReport>> rootsToMembers = tracePattern == null ? Map.of() : new HashMap<>();
+        // deployment artifact coords -> corresponding runtime extension coords, used to look up support metadata
+        final Map<ArtifactCoords, ArtifactCoords> deploymentToRuntime = support ? new HashMap<>() : Map.of();
         final Map<ArtifactCoords, ArtifactCoords> allNodes = redhatVersionRate ? new ConcurrentHashMap<>() : null;
         final AtomicInteger inspectedRoots = new AtomicInteger();
         final AtomicInteger redhatVersions = new AtomicInteger();
@@ -250,6 +252,9 @@ public class Quarkus implements Callable<Integer> {
                             if (tracePattern != null) {
                                 rootsToMembers.computeIfAbsent(deployment, k -> new ArrayList<>(1)).add(m);
                             }
+                            if (support) {
+                                deploymentToRuntime.put(deployment, e);
+                            }
                         }
                     }
                 }
@@ -269,7 +274,7 @@ public class Quarkus implements Callable<Integer> {
         treeInspector.complete();
 
         if (support) {
-            logSupportReport(memberReports, rootsToMembers, resolver);
+            logSupportReport(memberReports, rootsToMembers, deploymentToRuntime, resolver);
         } else {
             logMemberReports(memberReports, rootsToMembers.keySet());
         }
@@ -384,6 +389,7 @@ public class Quarkus implements Callable<Integer> {
 
     private void logSupportReport(ArrayList<MemberReport> memberReports,
             Map<ArtifactCoords, List<MemberReport>> rootsToMembers,
+            Map<ArtifactCoords, ArtifactCoords> deploymentToRuntime,
             MavenArtifactResolver resolver) {
 
         // Load ExtensionCatalog per member and build a map from extension artifact coords to its metadata
@@ -438,11 +444,12 @@ public class Quarkus implements Callable<Integer> {
 
         // Assign each extension entry to its offering(s).
         // Extensions with no *-support metadata go to UPSTREAM.
+        // Deployment artifacts aren't included in the catalog, so they inherit the metadata of their runtime artifacts.
         // Rule: if offering X is a strict prefix of offering Y (e.g. REDHAT / REDHAT-CAMEL),
         // entries already present in X are omitted from Y.
         final Map<String, List<OfferingEntry>> offeringToEntries = new TreeMap<>();
         for (var oe : coordsToEntry.values()) {
-            var meta = extMetadata.get(oe.coords);
+            var meta = extMetadata.get(deploymentToRuntime.getOrDefault(oe.coords, oe.coords));
             boolean hasSupport = false;
             if (meta != null) {
                 for (var key : meta.keySet()) {
