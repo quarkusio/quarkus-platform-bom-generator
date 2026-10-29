@@ -26,3 +26,26 @@ jobs:
     secrets: inherit
     with:
       version: ${{github.event.inputs.tag || github.ref_name}}
+
+  upload-domino-jar:
+    name: Upload domino.jar to the GitHub release
+    needs: perform-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_VERSION: ${{github.event.inputs.tag || github.ref_name}}
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: artifact
+      - name: Extract domino.jar
+        run: |
+          JAR_PATH=./io/quarkus/quarkus-domino/${RELEASE_VERSION}/quarkus-domino-${RELEASE_VERSION}.jar
+          tar -xzf ${{ github.event.repository.name }}-${RELEASE_VERSION}.tar.gz ${JAR_PATH}
+          mv ${JAR_PATH} domino.jar
+      - name: Upload domino.jar
+        run: gh release upload ${RELEASE_VERSION} domino.jar --clobber -R ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
