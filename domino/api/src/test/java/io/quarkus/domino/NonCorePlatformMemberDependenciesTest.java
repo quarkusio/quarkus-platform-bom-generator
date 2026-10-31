@@ -37,10 +37,16 @@ public class NonCorePlatformMemberDependenciesTest {
                 .setTag("1.0");
         var byteUtilsLib = byteUtilsProject.createMainModule("byte-utils");
 
-        var commonsIoProject = TestProject.of("org.commons.io", "1.0")
+        var commonsIoProject10 = TestProject.of("org.commons.io", "1.0")
                 .setRepoUrl("https://commons.org/code/io")
                 .setTag("1.0");
-        var commonsIoLib = commonsIoProject.createMainModule("commons-io")
+        var commonsIoLib10 = commonsIoProject10.createMainModule("commons-io")
+                .addDependency(byteUtilsLib);
+
+        var commonsIoProject09 = TestProject.of("org.commons.io", "0.9")
+                .setRepoUrl("https://commons.org/code/io")
+                .setTag("0.9");
+        var commonsIoLib09 = commonsIoProject09.createMainModule("commons-io")
                 .addDependency(byteUtilsLib);
 
         var quarkusProject = TestProject.of("io.quarkus", "1.0")
@@ -52,7 +58,7 @@ public class NonCorePlatformMemberDependenciesTest {
         var quarkusBuildParent = quarkusParent.addPomModule("quarkus-build-parent")
                 .importBom(quarkusBom);
         var quarkusCore = quarkusBuildParent.addModule("quarkus-core")
-                .addDependency(commonsIoLib);
+                .addDependency(commonsIoLib09);
 
         var filesLibProject = TestProject.of("org.files", "1.0")
                 .setRepoUrl("https://files.org/code")
@@ -73,7 +79,7 @@ public class NonCorePlatformMemberDependenciesTest {
                 .addVersionConstraint("camel-core")
                 .addVersionConstraint("camel-xml-lib")
                 .addVersionConstraint(xmlLib)
-                .addVersionConstraint(commonsIoLib);
+                .addVersionConstraint(commonsIoLib10);
         var camelBuildParent = camelParent.addPomModule("camel-build-parent")
                 .importBom(camelBom);
         var camelCore = camelBuildParent.addModule("camel-core")
@@ -86,7 +92,8 @@ public class NonCorePlatformMemberDependenciesTest {
                 .install(camelProject)
                 .install(filesLibProject)
                 .install(xmlLibProject)
-                .install(commonsIoProject)
+                .install(commonsIoProject10)
+                .install(commonsIoProject09)
                 .install(byteUtilsProject);
 
         releaseAssertions = Map.<ScmRevision, Consumer<ReleaseRepo>> of(
@@ -101,6 +108,8 @@ public class NonCorePlatformMemberDependenciesTest {
                             .containsKey(ArtifactCoords.pom("io.quarkus", "quarkus-build-parent", "1.0"));
                     assertThat(release.getArtifacts()).containsKey(ArtifactCoords.jar("io.quarkus", "quarkus-core", "1.0"));
                     assertThat(release.getDependencies()).hasSize(1);
+                    assertThat(release.getDependencies().iterator().next().artifacts)
+                            .containsKey(ArtifactCoords.jar("org.commons.io", "commons-io", "1.0"));
                 },
                 ReleaseIdFactory.forScmAndTag("https://camel.org/code", "1.0"),
                 release -> {
