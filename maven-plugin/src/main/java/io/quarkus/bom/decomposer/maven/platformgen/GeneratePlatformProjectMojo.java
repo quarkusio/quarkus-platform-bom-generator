@@ -2510,6 +2510,11 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             if (versionProp == null) {
                 return version;
             }
+        } else {
+            final Collection<String> propertyGroupIds = getArtifactGroupIdsForVersionProperty(versionProp);
+            if (!propertyGroupIds.isEmpty() && !propertyGroupIds.contains(artifactGroupId)) {
+                return version;
+            }
         }
         return "${" + versionProp + "}";
     }
