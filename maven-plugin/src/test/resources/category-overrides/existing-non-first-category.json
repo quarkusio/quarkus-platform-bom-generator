@@ -1,0 +1,14 @@
+{
+  "categories": [
+    {
+      "id": "automation",
+      "name": "Automation",
+      "description": "Platform description",
+      "metadata": {
+        "pinned": [
+          "io.quarkus:quarkus-foo"
+        ]
+      }
+    }
+  ]
+}
