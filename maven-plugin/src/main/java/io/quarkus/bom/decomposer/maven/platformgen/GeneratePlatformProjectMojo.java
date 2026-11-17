@@ -244,8 +244,11 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
 
     private TransformerFactory transformerFactory;
 
-    // POM property names by values
-    private final Map<String, String> pomPropsByValues = new HashMap<>();
+    // version properties the POM uses for the artifacts configured for this platform
+    private List<ConfigArtifactVersionProp> configVersionProps;
+    // POM property names by their values, not including values shared by more than one property,
+    // since in that case the value alone does not identify a property
+    private Map<String, String> pomPropsByValues;
 
     private List<Profile> generatedBomReleaseProfile;
 
@@ -1546,7 +1549,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
             for (Map.Entry<?, ?> originalProp : originalProps.entrySet()) {
                 final String propName = originalProp.getKey().toString();
                 // if it's not a version property, we add it
-                if (propName.startsWith("maven.") || getArtifactGroupIdsForVersionProperty(propName).isEmpty()) {
+                if (propName.startsWith("maven.") || !isConfigArtifactVersionProperty(propName)) {
                     pom.getProperties().setProperty(propName, originalProp.getValue().toString());
                 }
             }
@@ -2055,7 +2058,7 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
     }
 
     private String toPropertyOrSelf(String version) {
-        var prop = pomPropsByValues.get(version);
+        var prop = pomPropsByValues().get(version);
         return prop == null ? version : "${" + prop + "}";
     }
 
@@ -2495,46 +2498,99 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
      * @return property expression or the actual version
      */
     private String getTestArtifactVersion(String artifactGroupId, String version) {
-        if (pomPropsByValues.isEmpty()) {
-            mapProjectProperties(project.getOriginalModel().getProperties());
-            for (Profile p : project.getActiveProfiles()) {
-                mapProjectProperties(p.getProperties());
+        // The property that holds the version is the best match there is. The property a configured
+        // artifact is expressed with may well be an alias of it, e.g. quarkus-bom.version set to
+        // ${quarkus.version}, in which case the one holding the version is the more meaningful of the two.
+        final String versionProp = pomPropsByValues().get(version);
+        if (versionProp != null) {
+            // Only the artifacts configured for this platform can be attributed to a version property.
+            // A property that isn't used as the version of any of them may still be the version of this
+            // artifact, but one that is used as the version of unrelated groupIds is not meant for it.
+            return isVersionPropertyOfOtherGroupIds(versionProp, artifactGroupId) ? version
+                    : "${" + versionProp + "}";
+        }
+        // The value is shared by multiple properties or by none. If the POM expresses the version of
+        // this very artifact with a property, that property identifies it.
+        for (ConfigArtifactVersionProp p : configVersionProps()) {
+            if (p.version.equals(version) && p.groupId.equals(artifactGroupId)) {
+                return "${" + p.name + "}";
             }
         }
-        String versionProp = pomPropsByValues.get(version);
-        if (versionProp == null) {
-            return version;
-        }
-        if (versionProp.isEmpty()) {
-            versionProp = pomPropsByValues.get(artifactGroupId + COLON + version);
-            if (versionProp == null) {
-                return version;
-            }
-        }
-        return "${" + versionProp + "}";
+        return version;
     }
 
-    private void mapProjectProperties(Properties props) {
+    /**
+     * Checks whether a version property is used as the version of configured artifacts whose groupIds are
+     * unrelated to the given artifact groupId. groupIds of the same project, such as {@code io.quarkus}
+     * and {@code io.quarkus.arc}, are typically released at the same version and share a version property,
+     * while only one of them tends to appear in the platform configuration.
+     *
+     * @param versionProperty version property name
+     * @param artifactGroupId artifact groupId
+     * @return true, if the property is the version of at least one configured artifact and none of those
+     *         artifacts has a groupId related to the given one
+     */
+    private boolean isVersionPropertyOfOtherGroupIds(String versionProperty, String artifactGroupId) {
+        boolean usedForOtherGroupIds = false;
+        for (ConfigArtifactVersionProp p : configVersionProps()) {
+            if (p.name.equals(versionProperty)) {
+                if (isSameOrSubGroupId(p.groupId, artifactGroupId)) {
+                    return false;
+                }
+                usedForOtherGroupIds = true;
+            }
+        }
+        return usedForOtherGroupIds;
+    }
+
+    /**
+     * Checks whether two groupIds are equal or one of them is a sub-group of the other, e.g.
+     * {@code io.quarkus} and {@code io.quarkus.arc}. The comparison is done on the dot-separated
+     * group name boundaries, so that {@code io.quarkus} and {@code io.quarkusiverse} do not match.
+     */
+    private static boolean isSameOrSubGroupId(String groupId, String otherGroupId) {
+        if (groupId.equals(otherGroupId)) {
+            return true;
+        }
+        final String shorter, longer;
+        if (groupId.length() < otherGroupId.length()) {
+            shorter = groupId;
+            longer = otherGroupId;
+        } else {
+            shorter = otherGroupId;
+            longer = groupId;
+        }
+        return longer.length() > shorter.length() + 1
+                && longer.charAt(shorter.length()) == '.'
+                && longer.startsWith(shorter);
+    }
+
+    private Map<String, String> pomPropsByValues() {
+        if (pomPropsByValues != null) {
+            return pomPropsByValues;
+        }
+        final Map<String, String> result = new HashMap<>();
+        // a value shared by more than one property does not identify a property
+        final Set<String> sharedValues = new HashSet<>(0);
+        mapProjectProperties(project.getOriginalModel().getProperties(), result, sharedValues);
+        for (Profile p : project.getActiveProfiles()) {
+            mapProjectProperties(p.getProperties(), result, sharedValues);
+        }
+        return pomPropsByValues = result;
+    }
+
+    private static void mapProjectProperties(Properties props, Map<String, String> propsByValues,
+            Set<String> sharedValues) {
         for (Map.Entry<?, ?> prop : props.entrySet()) {
             final String name = prop.getKey().toString();
             final String value = prop.getValue().toString();
-            final String previous = pomPropsByValues.putIfAbsent(value, name);
-            if (previous != null) {
-                Collection<String> groupIds = getArtifactGroupIdsForVersionProperty(name);
-                if (groupIds.isEmpty()) {
-                    continue;
-                }
-                for (var groupId : groupIds) {
-                    pomPropsByValues.put(interpolate(groupId) + COLON + value, name);
-                }
-                if (previous.isEmpty()) {
-                    continue;
-                }
-                groupIds = getArtifactGroupIdsForVersionProperty(previous);
-                for (var groupId : groupIds) {
-                    pomPropsByValues.put(interpolate(groupId) + COLON + value, previous);
-                }
-                pomPropsByValues.put(value, "");
+            if (sharedValues.contains(value)) {
+                continue;
+            }
+            final String previous = propsByValues.putIfAbsent(value, name);
+            if (previous != null && !previous.equals(name)) {
+                propsByValues.remove(value);
+                sharedValues.add(value);
             }
         }
     }
@@ -2570,34 +2626,123 @@ public class GeneratePlatformProjectMojo extends AbstractMojo {
         return sb.toString();
     }
 
-    private Collection<String> getArtifactGroupIdsForVersionProperty(final String versionProperty) {
-        var propExpr = "${" + versionProperty + "}";
-        Set<String> result = null;
-        for (String s : pomLines()) {
-            int coordsEnd = s.indexOf(propExpr);
-            // looking for <p>propExpr</p>, min length will be propExpr.length() + 3 + 4
-            if (coordsEnd < 0
-                    || s.length() < propExpr.length() + 7) {
-                continue;
-            }
-            coordsEnd = s.indexOf("</", coordsEnd);
-            if (coordsEnd < 0) {
-                continue;
-            }
-            int coordsStart = s.indexOf(">");
-            if (coordsStart < 0) {
-                continue;
-            }
-            var coords = s.substring(coordsStart + 1, coordsEnd);
-            var arr = coords.split(COLON);
-            if (arr.length > 2 && arr.length < 6) {
-                if (result == null) {
-                    result = new HashSet<>(2);
-                }
-                result.add(arr[0]);
+    /**
+     * A version property the POM uses for an artifact configured for this platform.
+     */
+    private static class ConfigArtifactVersionProp {
+        final String groupId;
+        final String version;
+        final String name;
+
+        private ConfigArtifactVersionProp(String groupId, String version, String name) {
+            this.groupId = groupId;
+            this.version = version;
+            this.name = name;
+        }
+    }
+
+    private boolean isConfigArtifactVersionProperty(String propertyName) {
+        for (ConfigArtifactVersionProp p : configVersionProps()) {
+            if (p.name.equals(propertyName)) {
+                return true;
             }
         }
-        return result == null ? Set.of() : result;
+        return false;
+    }
+
+    /**
+     * Maven interpolates the plugin configuration before injecting it, so the artifact coordinates
+     * configured for this platform are resolved, while the POM spells some of their versions out as
+     * property expressions. This looks for the coordinates in the POM and collects the properties
+     * their versions are expressed with.
+     * <p>
+     * A line is recognized as the coordinates of a configured artifact only if interpolating it
+     * results in exactly those coordinates, which also takes care of groupIds that are property
+     * expressions themselves.
+     *
+     * @return version properties the POM uses for the artifacts configured for this platform
+     */
+    private List<ConfigArtifactVersionProp> configVersionProps() {
+        if (configVersionProps != null) {
+            return configVersionProps;
+        }
+        final Map<String, ArtifactCoords> configCoords = new HashMap<>();
+        for (String coords : getConfiguredArtifactCoords()) {
+            try {
+                configCoords.put(coords, ArtifactCoords.fromString(coords));
+            } catch (RuntimeException e) {
+                // not something we could attribute a version property to
+            }
+        }
+        final List<ConfigArtifactVersionProp> result = new ArrayList<>(configCoords.size());
+        if (configCoords.isEmpty()) {
+            return configVersionProps = result;
+        }
+        for (String line : pomLines()) {
+            final int propStart = line.indexOf("${");
+            if (propStart < 0) {
+                continue;
+            }
+            // looking for <element>coords</element> around the property expression
+            final int coordsStart = line.lastIndexOf('>', propStart);
+            final int coordsEnd = line.indexOf("</", propStart);
+            if (coordsStart < 0 || coordsEnd < 0) {
+                continue;
+            }
+            final String rawCoords = line.substring(coordsStart + 1, coordsEnd);
+            final ArtifactCoords coords = configCoords.get(interpolate(rawCoords));
+            if (coords == null) {
+                continue;
+            }
+            // the version is the last segment of the coordinates
+            final String rawVersion = rawCoords.substring(rawCoords.lastIndexOf(COLON) + 1);
+            if (rawVersion.startsWith("${") && rawVersion.endsWith("}")) {
+                result.add(new ConfigArtifactVersionProp(coords.getGroupId(), coords.getVersion(),
+                        rawVersion.substring(2, rawVersion.length() - 1)));
+            }
+        }
+        return configVersionProps = result;
+    }
+
+    /**
+     * @return artifact coordinates configured for this platform, as they were configured
+     */
+    private List<String> getConfiguredArtifactCoords() {
+        final List<String> result = new ArrayList<>();
+        if (platformConfig.getUniversal() != null) {
+            addIfNotNull(result, platformConfig.getUniversal().getBom());
+        }
+        addMemberArtifactCoords(platformConfig.getCore(), result);
+        for (PlatformMemberConfig member : platformConfig.getMembers()) {
+            addMemberArtifactCoords(member, result);
+        }
+        final AttachedMavenPluginConfig pluginConfig = platformConfig.getAttachedMavenPlugin();
+        if (pluginConfig != null) {
+            addIfNotNull(result, pluginConfig.getOriginalPluginCoords());
+            addIfNotNull(result, pluginConfig.getTargetPluginCoords());
+            if (pluginConfig.getTest() != null) {
+                addIfNotNull(result, pluginConfig.getTest().getArtifact());
+            }
+        }
+        return result;
+    }
+
+    private static void addMemberArtifactCoords(PlatformMemberConfig member, List<String> result) {
+        if (member == null) {
+            return;
+        }
+        addIfNotNull(result, member.getBom());
+        addIfNotNull(result, member.getTestCatalogArtifact());
+        result.addAll(member.getMetadataOverrideArtifacts());
+        for (PlatformMemberTestConfig test : member.getTests()) {
+            addIfNotNull(result, test.getArtifact());
+        }
+    }
+
+    private static void addIfNotNull(List<String> list, String value) {
+        if (value != null) {
+            list.add(value);
+        }
     }
 
     private void addDependencies(final Model pom, List<String> dependencies, boolean test) {
