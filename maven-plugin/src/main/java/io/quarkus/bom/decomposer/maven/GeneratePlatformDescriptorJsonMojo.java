@@ -440,38 +440,7 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
 
         for (OverrideInfo info : allOverrides) {
             if (info.getTheRest() != null) {
-                if (!info.getTheRest().getCategories().isEmpty()) {
-                    if (platformJson.getCategories().isEmpty()) {
-                        platformJson.setCategories(info.getTheRest().getCategories());
-                    } else {
-                        info.getTheRest().getCategories().stream().forEach(c -> {
-                            boolean found = false;
-                            for (Category platformC : platformJson.getCategories()) {
-                                if (platformC.getId().equals(c.getId())) {
-                                    found = true;
-                                    Category.Mutable jsonC = (Category.Mutable) platformC;
-                                    if (c.getDescription() != null) {
-                                        jsonC.setDescription(c.getDescription());
-                                    }
-                                    if (!c.getMetadata().isEmpty()) {
-                                        if (jsonC.getMetadata().isEmpty()) {
-                                            jsonC.setMetadata(c.getMetadata());
-                                        } else {
-                                            jsonC.getMetadata().putAll(c.getMetadata());
-                                        }
-                                    }
-                                    if (c.getName() != null) {
-                                        jsonC.setName(c.getName());
-                                    }
-                                }
-                                break;
-                            }
-                            if (!found) {
-                                platformJson.getCategories().add(c);
-                            }
-                        });
-                    }
-                }
+                applyCategoryOverrides(platformJson, info.getTheRest().getCategories());
             }
             if (!info.getTheRest().getMetadata().isEmpty()) {
                 if (platformJson.getMetadata().isEmpty()) {
@@ -558,6 +527,44 @@ public class GeneratePlatformDescriptorJsonMojo extends AbstractMojo {
                     "Parameter generateReleaseInfo can't be set to true when platformRelease is configured explicitly");
         }
         platformJson.getMetadata().put("platform-release", platformRelease);
+    }
+
+    static void applyCategoryOverrides(ExtensionCatalog.Mutable platformJson, List<Category> overrides) {
+        if (overrides.isEmpty()) {
+            return;
+        }
+        final List<Category> categories = new ArrayList<>(platformJson.getCategories());
+        for (Category c : overrides) {
+            final int i = indexOfCategory(categories, c.getId());
+            if (i < 0) {
+                categories.add(c.mutable());
+                continue;
+            }
+            final Category.Mutable jsonC = categories.get(i).mutable();
+            if (c.getDescription() != null) {
+                jsonC.setDescription(c.getDescription());
+            }
+            if (!c.getMetadata().isEmpty()) {
+                // the existing metadata map may be unmodifiable
+                final Map<String, Object> metadata = new HashMap<>(jsonC.getMetadata());
+                metadata.putAll(c.getMetadata());
+                jsonC.setMetadata(metadata);
+            }
+            if (c.getName() != null) {
+                jsonC.setName(c.getName());
+            }
+            categories.set(i, jsonC);
+        }
+        platformJson.setCategories(categories);
+    }
+
+    private static int indexOfCategory(List<Category> categories, String id) {
+        for (int i = 0; i < categories.size(); ++i) {
+            if (categories.get(i).getId().equals(id)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private void validateCategories(ExtensionCatalog.Mutable platformJson, Set<String> referencedCategories)
