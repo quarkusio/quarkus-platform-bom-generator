@@ -20,6 +20,7 @@ import io.quarkus.domino.scm.ScmRevision;
 import io.quarkus.domino.scm.ScmRevisionResolver;
 import io.quarkus.maven.dependency.ArtifactCoords;
 import io.quarkus.maven.dependency.ArtifactKey;
+import io.quarkus.maven.dependency.GACT;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
@@ -286,6 +287,7 @@ public class ProjectDependencyResolver {
 
     private Function<ArtifactCoords, List<Dependency>> artifactConstraintsProvider;
     private Set<ArtifactCoords> allConstraints;
+    private Map<GACT, ArtifactCoords> allConstraintsByGa;
     private Set<ArtifactCoords> projectBomConstraints;
     private final Map<ArtifactCoords, ResolvedDependency> allDepsToBuild = new HashMap<>();
     private final Set<ArtifactCoords> nonManagedVisited = new HashSet<>();
@@ -382,6 +384,7 @@ public class ProjectDependencyResolver {
 
     public void log() {
         try {
+            resolveDependenciesInternal();
             logInternal();
         } finally {
             close();
@@ -389,8 +392,6 @@ public class ProjectDependencyResolver {
     }
 
     void logInternal() {
-
-        resolveDependenciesInternal();
         int codeReposTotal = 0;
         int reportedArtifactsTotal = 0;
         if ((config.isLogArtifactsToBuild()
@@ -625,7 +626,7 @@ public class ProjectDependencyResolver {
         for (var d : deps) {
             result.add(toCoords(d.getArtifact()));
         }
-        return result;
+        return Collections.unmodifiableSet(result);
     }
 
     public void resolveDependencies() {
@@ -643,6 +644,17 @@ public class ProjectDependencyResolver {
             enforcedConstraints.addAll(getBomConstraints(bomCoords));
         }
         allConstraints = toArtifactCoords(enforcedConstraints);
+        allConstraintsByGa = Collections.unmodifiableMap(
+                allConstraints.stream()
+                        .collect(
+                                HashMap::new,
+                                (m, gav) -> m.put(new GACT(
+                                        gav.getGroupId(),
+                                        gav.getArtifactId(),
+                                        gav.getClassifier(),
+                                        gav.getType()),
+                                        gav),
+                                (m1, m2) -> m1.putAll(m2)));
         if (artifactConstraintsProvider == null) {
             artifactConstraintsProvider = t -> enforcedConstraints;
         }
@@ -1022,8 +1034,7 @@ public class ProjectDependencyResolver {
             }
             for (Dependency directDep : descriptor.getDependencies()) {
                 final Artifact a = directDep.getArtifact();
-                final ArtifactDependency dirArt = artifactDeps.get(ArtifactCoords.of(a.getGroupId(), a.getArtifactId(),
-                        a.getClassifier(), a.getExtension(), a.getVersion()));
+                final ArtifactDependency dirArt = artifactDeps.get(toManagedCoords(a));
                 if (dirArt != null) {
                     d.addDependency(dirArt);
                 }
@@ -1037,6 +1048,16 @@ public class ProjectDependencyResolver {
                 repo.addRepoDependency(getRepo(c.resolved.getRevision()));
             }
         }
+    }
+
+    private ArtifactCoords toManagedCoords(Artifact a) {
+        final ArtifactCoords managed = allConstraintsByGa.get(new GACT(a.getGroupId(), a.getArtifactId(),
+                a.getClassifier(), a.getExtension()));
+        if (managed != null) {
+            return managed;
+        }
+        return ArtifactCoords.of(a.getGroupId(), a.getArtifactId(),
+                a.getClassifier(), a.getExtension(), a.getVersion());
     }
 
     private ScmRevision getRevision(ArtifactCoords coords, List<RemoteRepository> repos) {
@@ -1737,4 +1758,5 @@ public class ProjectDependencyResolver {
     private static ArtifactCoords toCoords(Artifact a) {
         return ArtifactCoords.of(a.getGroupId(), a.getArtifactId(), a.getClassifier(), a.getExtension(), a.getVersion());
     }
+
 }
